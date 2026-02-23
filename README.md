@@ -29,7 +29,9 @@ Production-ready modular monolith backend for an online guitar school.
   - `redis` (shared auth rate-limiter state),
   - `app` (FastAPI API),
   - `outbox-worker` (notifications outbox consumer loop),
-  - `prometheus` (metrics scraping backend, port `9090`).
+  - `prometheus` (metrics scraping backend, port `9090`),
+  - `alertmanager` (alert routing backend, port `9093`),
+  - `grafana` (dashboards UI, port `3000`).
 - Apply migrations after deploy:
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
 
@@ -55,7 +57,7 @@ Production-ready modular monolith backend for an online guitar school.
   - `AUTH_RATE_LIMIT_LOGIN_REQUESTS`
   - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`
   - `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS` (comma-separated proxy IPs allowed to supply `X-Forwarded-For`)
-  - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` (must be `true` in prod until shared limiter is added)
+  - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` (required only when `AUTH_RATE_LIMIT_BACKEND=memory` in production)
 
 ## Workers
 
@@ -74,9 +76,18 @@ Production-ready modular monolith backend for an online guitar school.
 
 - API exposes Prometheus-compatible metrics endpoint:
   - `GET /metrics`
-- Production compose includes Prometheus scraping `app:8000/metrics`.
-- Open Prometheus UI at:
+- Production compose includes:
+  - Prometheus scraping `app:8000/metrics`,
+  - Alertmanager for alert routing,
+  - Grafana with pre-provisioned dashboard: `GuitarOnline API Overview`.
+- Open UIs:
   - `http://localhost:9090`
+  - `http://localhost:9093`
+  - `http://localhost:3000` (default credentials from `.env`: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`)
+- Prometheus alert rules baseline:
+  - API down for 2m,
+  - 5xx ratio > 5% for 5m,
+  - p95 latency > 1s for 10m.
 
 ## Admin Operations
 

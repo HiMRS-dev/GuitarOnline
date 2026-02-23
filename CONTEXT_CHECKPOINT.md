@@ -79,8 +79,8 @@
     `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`,
   - `X-Forwarded-For` is trusted only from configured proxies (`AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`).
 - Monitoring stack remains lightweight:
-  - Prometheus backend is wired in production compose baseline,
-  - dashboards/alert routing are not configured yet (no Grafana/Alertmanager baseline).
+  - Prometheus + Alertmanager + Grafana baseline is wired in production compose,
+  - external on-call receivers (Slack/PagerDuty/email) are not configured yet.
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -352,7 +352,9 @@ Status: completed (2026-02-23).
     - `redis`,
     - `app`,
     - `outbox-worker`,
-    - `prometheus`.
+    - `prometheus`,
+    - `alertmanager`,
+    - `grafana`.
   - updated `README.md` with production compose bring-up and migration command.
   - latest local suite status: `48 passed`.
 - Repo-wide style baseline completed:
@@ -361,7 +363,7 @@ Status: completed (2026-02-23).
 - Structural hardening follow-up completed:
   - production secret guard now rejects placeholder patterns `change-me*` (not only exact `change-me`).
   - production startup now requires explicit acknowledgement of process-local limiter:
-    - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`.
+    - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true` (for memory backend in prod).
   - identity IP resolution now trusts `X-Forwarded-For` only for configured proxy sources:
     - `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`.
   - integration suite setup was stabilized against auth-rate-limiter collisions:
@@ -385,4 +387,18 @@ Status: completed (2026-02-23).
     - `ops/prometheus/prometheus.yml`,
     - `docker-compose.prod.yml` (`prometheus` on `9090`).
   - `README.md` updated with metrics/Prometheus usage.
+  - latest local suite status: `53 passed, 5 skipped` (`tests/test_booking_billing_integration.py` skipped because local integration stack was unavailable).
+- Monitoring dashboards and alert-routing follow-up completed:
+  - added Prometheus alert rules baseline:
+    - `ops/prometheus/alerts.yml` (`API down`, `high 5xx ratio`, `high p95 latency`).
+  - added Alertmanager baseline config:
+    - `ops/alertmanager/alertmanager.yml`.
+  - added Grafana provisioning and dashboard baseline:
+    - `ops/grafana/provisioning/datasources/prometheus.yml`,
+    - `ops/grafana/provisioning/dashboards/dashboards.yml`,
+    - `ops/grafana/dashboards/guitaronline-api-overview.json`.
+  - updated production compose and env/docs:
+    - `docker-compose.prod.yml` now runs `alertmanager` (`9093`) and `grafana` (`3000`),
+    - `.env.example` includes `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`,
+    - `README.md` includes monitoring stack usage and endpoints.
   - latest local suite status: `53 passed, 5 skipped` (`tests/test_booking_billing_integration.py` skipped because local integration stack was unavailable).

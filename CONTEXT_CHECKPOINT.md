@@ -466,3 +466,109 @@ Status: completed (2026-02-23).
     - my packages for student role (`/api/v1/billing/packages/students/{id}`).
   - root landing and Go Live helper now include direct link to `/portal`.
   - covered by `tests/test_portal_page.py` and updated `tests/test_landing_page.py`.
+
+## 12) Continuation Queue To Project Completion (Strict Order)
+
+Execution rule:
+- Start each next step only after previous step is fully completed and committed.
+
+### Queue 1: Frontend MVP functional completion (Pending)
+Goal:
+- Finish core user flow directly in `/portal` UI.
+
+Tasks:
+1. Add booking actions in portal for student flow:
+   - hold booking,
+   - confirm held booking,
+   - cancel booking,
+   - reschedule booking.
+2. Add role-aware sections:
+   - student (bookings/packages),
+   - admin (package expiration + holds expiration action triggers),
+   - teacher (my lessons view preparation via API already available).
+3. Add robust API error rendering (validation/errors from backend) with Russian messages in UI.
+
+Acceptance:
+- End-to-end manual scenario from portal:
+  registration/login -> hold -> confirm -> cancel/reschedule works.
+- No console JS errors in browser during basic flow.
+
+### Queue 2: Frontend security/session hardening (Pending)
+Goal:
+- Make portal session behavior reliable and safe.
+
+Tasks:
+1. Add token-expiration handling UX:
+   - auto refresh attempt once,
+   - clear session + redirect to auth state on terminal auth failure.
+2. Add minimal request concurrency guard for repeated clicks (double-submit protection).
+3. Add logout-all-local-state cleanup and consistent status notifications.
+
+Acceptance:
+- Forced expired access token recovers via refresh or cleanly logs out without broken UI state.
+
+### Queue 3: Portal integration test coverage (Pending)
+Goal:
+- Prevent regressions in new `/portal` entrypoint and static delivery.
+
+Tasks:
+1. Add backend tests for static assets routing:
+   - `/portal/static/styles.css`,
+   - `/portal/static/app.js`.
+2. Add auth flow API integration tests focused on portal-used endpoints sequence.
+3. Keep existing suite runtime bounded for local runs.
+
+Acceptance:
+- New portal-related tests pass in CI.
+- Existing tests remain green.
+
+### Queue 4: Single-site runtime profile (Pending)
+Goal:
+- Provide clean deployment topology where users open one base URL.
+
+Tasks:
+1. Add optional reverse-proxy profile (Nginx/Caddy) for:
+   - `/` and `/portal` -> app,
+   - `/api` passthrough to app API prefix.
+2. Document canonical external URLs and health checks behind proxy.
+3. Add compose validation for this profile.
+
+Acceptance:
+- Local/prod profile starts with one public entrypoint and working API/docs/portal routes.
+
+### Queue 5: Demo data bootstrap (Pending)
+Goal:
+- Make project demonstrable in a fresh environment quickly.
+
+Tasks:
+1. Add seed script for demo users/roles/teacher profile/slots/packages.
+2. Add idempotent behavior and safe rerun semantics.
+3. Document seed runbook and default demo credentials (non-production only).
+
+Acceptance:
+- Fresh DB + seed -> portal can be shown without manual data creation.
+
+### Queue 6: External alert receivers onboarding (Blocked by secrets)
+Goal:
+- Close monitoring stack gap with real incident channels.
+
+Tasks:
+1. Configure real Alertmanager receivers (Slack/PagerDuty/SMTP) using environment secrets.
+2. Add severity-based routing (`warning` vs `critical`).
+3. Validate routing with synthetic alert firing.
+
+Acceptance:
+- Test alert is delivered to at least one real target channel.
+
+### Queue 7: Release hardening and MVP closure (Pending)
+Goal:
+- Finish project with release-grade baseline and handoff.
+
+Tasks:
+1. Final pass on README/runbooks to remove ambiguity and stale notes.
+2. Add explicit release checklist (deploy, migrate, smoke tests, rollback).
+3. Tag first stable release and snapshot final checkpoint.
+
+Acceptance:
+- Release checklist executed successfully on target environment.
+- Checkpoint status switched to MVP closed.

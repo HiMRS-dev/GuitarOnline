@@ -30,3 +30,9 @@ Production-ready modular monolith backend for an online guitar school.
 - Admin API endpoint for delivery metrics:
   - `GET /api/v1/notifications/delivery/metrics?max_retries=5`
 - Metrics include notification status totals and outbox queue/dead-letter counts.
+
+## Admin Operations
+
+- Admin KPI overview endpoint:
+  - `GET /api/v1/admin/kpi/overview`
+- Response provides aggregated KPIs for users, bookings, lessons, payments, and packages.

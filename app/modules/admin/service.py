@@ -9,7 +9,7 @@ from app.core.database import get_db_session
 from app.core.enums import RoleEnum
 from app.modules.admin.models import AdminAction
 from app.modules.admin.repository import AdminRepository
-from app.modules.admin.schemas import AdminActionCreate
+from app.modules.admin.schemas import AdminActionCreate, AdminKpiOverviewRead
 from app.modules.identity.models import User
 from app.shared.exceptions import UnauthorizedException
 
@@ -33,11 +33,31 @@ class AdminService:
             payload=payload.payload,
         )
 
-    async def list_actions(self, actor: User, limit: int, offset: int) -> tuple[list[AdminAction], int]:
+    async def list_actions(
+        self,
+        actor: User,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[AdminAction], int]:
         """List admin actions."""
         if actor.role.name != RoleEnum.ADMIN:
             raise UnauthorizedException("Only admin can list admin actions")
         return await self.repository.list_actions(limit=limit, offset=offset)
+
+    async def get_kpi_overview(self, actor: User) -> AdminKpiOverviewRead:
+        """Return aggregated admin KPI snapshot."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can view KPI overview")
+
+        snapshot = await self.repository.get_kpi_overview()
+        await self.repository.create_action(
+            admin_id=actor.id,
+            action="admin.kpi.view",
+            target_type="kpi_overview",
+            target_id=None,
+            payload={"generated_at": snapshot["generated_at"].isoformat()},
+        )
+        return AdminKpiOverviewRead(**snapshot)
 
 
 async def get_admin_service(session: AsyncSession = Depends(get_db_session)) -> AdminService:

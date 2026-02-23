@@ -17,8 +17,12 @@
 - Migration state:
   - `alembic/versions/20260219_0001_initial_schema.py` exists and is applied.
 - Tests currently in repo:
-  - `tests/test_booking_rules.py` (unit tests for booking/billing rules + idempotency).
-  - `tests/test_booking_billing_integration.py` (5 HTTP+DB integration scenarios).
+  - `tests/test_booking_rules.py` (unit tests for booking rules + idempotency).
+  - `tests/test_billing_payment_rules.py` (billing reconciliation and edge-case hardening).
+  - `tests/test_outbox_notifications_worker.py` (outbox worker behavior and retries).
+  - `tests/test_notifications_delivery_metrics.py` (delivery observability metrics).
+  - `tests/test_admin_kpi_overview.py` (admin KPI read model + traceability).
+  - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
 - Fixed settings/env parsing crash:
@@ -153,8 +157,9 @@ Status: completed (2026-02-23).
 - Delivery status observability. (completed)
 
 ### Phase 4: Admin and operations
-- Admin read models for bookings/payments/lessons KPIs.
-- Auditable admin actions with traceability.
+- Status: in progress (started 2026-02-23).
+- Admin read models for bookings/payments/lessons KPIs. (partially completed)
+- Auditable admin actions with traceability. (partially completed)
 - Operational endpoints and runbooks.
 
 ### Phase 5: Production readiness
@@ -248,3 +253,15 @@ Status: in progress (started 2026-02-23).
     - expired package checks emit `billing.package.expired`,
     - payment creation against inactive package has no side effects.
   - latest local suite status: `34 passed`.
+- Phase 4 admin KPI read model (partial):
+  - added endpoint `GET /api/v1/admin/kpi/overview` (admin-only).
+  - KPI snapshot includes aggregated counters for:
+    - users (by role),
+    - bookings (by lifecycle status),
+    - lessons (by status),
+    - payments (by status + succeeded/refunded/net amounts),
+    - lesson packages (by status).
+  - traceability:
+    - each KPI view writes `admin.kpi.view` action into `admin_actions`.
+  - covered by `tests/test_admin_kpi_overview.py`.
+  - latest local suite status: `36 passed`.

@@ -16,7 +16,11 @@ class AdminAction(BaseModelMixin, Base):
 
     __tablename__ = "admin_actions"
 
-    admin_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    admin_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     action: Mapped[str] = mapped_column(String(128), nullable=False)
     target_type: Mapped[str] = mapped_column(String(128), nullable=False)
     target_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

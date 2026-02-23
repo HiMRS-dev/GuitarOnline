@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,3 +31,39 @@ class AdminActionRead(BaseModel):
     payload: dict
     created_at: datetime
     updated_at: datetime
+
+
+class AdminKpiOverviewRead(BaseModel):
+    """Admin KPI snapshot across core domains."""
+
+    generated_at: datetime
+
+    users_total: int
+    users_students: int
+    users_teachers: int
+    users_admins: int
+
+    bookings_total: int
+    bookings_hold: int
+    bookings_confirmed: int
+    bookings_canceled: int
+    bookings_expired: int
+
+    lessons_total: int
+    lessons_scheduled: int
+    lessons_completed: int
+    lessons_canceled: int
+
+    payments_total: int
+    payments_pending: int
+    payments_succeeded: int
+    payments_failed: int
+    payments_refunded: int
+    payments_succeeded_amount: Decimal
+    payments_refunded_amount: Decimal
+    payments_net_amount: Decimal
+
+    packages_total: int
+    packages_active: int
+    packages_expired: int
+    packages_canceled: int

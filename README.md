@@ -6,6 +6,7 @@ Production-ready modular monolith backend for an online guitar school.
 
 1. Copy env file:
    - `cp .env.example .env`
+   - in production, set a non-default `SECRET_KEY` (startup rejects `change-me`)
 2. Run containers:
    - `docker compose up --build`
 3. Open docs:

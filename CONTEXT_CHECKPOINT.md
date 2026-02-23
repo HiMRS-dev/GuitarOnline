@@ -23,6 +23,7 @@
   - `tests/test_notifications_delivery_metrics.py` (delivery observability metrics).
   - `tests/test_admin_kpi_overview.py` (admin KPI read model + traceability).
   - `tests/test_admin_operations_overview.py` (admin operational read model + traceability).
+  - `tests/test_config_security.py` (environment secret-key guardrails).
   - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
@@ -166,7 +167,7 @@ Status: completed (2026-02-23).
 ### Phase 5: Production readiness
 Status: in progress (started 2026-02-23).
 - CI (lint + unit + integration + migration checks). (partially completed)
-- Security hardening (auth policies, secret handling, rate limits).
+- Security hardening (auth policies, secret handling, rate limits). (partially completed)
 - Deployment baseline, monitoring, backup/restore strategy.
 
 ## 10) Definition of Done for "Platform MVP"
@@ -292,3 +293,8 @@ Status: in progress (started 2026-02-23).
     - operations overview check,
     - hold/package remediation actions,
     - dead-letter handling guidance.
+- Phase 5 security hardening (partial):
+  - added production guard for default secret:
+    - `Settings` now rejects `SECRET_KEY=change-me` when `APP_ENV` is `production`/`prod`.
+  - covered by `tests/test_config_security.py`.
+  - latest local suite status: `41 passed`.

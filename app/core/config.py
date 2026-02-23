@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     booking_refund_window_hours: int = 24
 
     redis_url: str | None = None
+
+    @model_validator(mode="after")
+    def validate_secret_key_for_environment(self) -> "Settings":
+        """Block default secret key in production-like environments."""
+        env_name = self.app_env.strip().lower()
+        if env_name in {"production", "prod"} and self.secret_key == "change-me":
+            raise ValueError("SECRET_KEY must not use the default value in production environment")
+        return self
 
 
 @lru_cache

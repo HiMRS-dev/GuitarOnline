@@ -1,8 +1,9 @@
 """Application settings loaded from environment."""
 
+from collections.abc import Sequence
 from functools import lru_cache
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,13 +39,41 @@ class Settings(BaseSettings):
     auth_rate_limit_register_requests: int = 5
     auth_rate_limit_login_requests: int = 10
     auth_rate_limit_refresh_requests: int = 20
+    auth_rate_limit_trusted_proxy_ips: tuple[str, ...] = ("127.0.0.1", "::1")
+    auth_rate_limit_allow_in_memory_in_production: bool = False
+
+    @field_validator("auth_rate_limit_trusted_proxy_ips", mode="before")
+    @classmethod
+    def parse_trusted_proxy_ips(cls, value: object) -> tuple[str, ...]:
+        """Parse trusted proxy IPs from comma-separated env value."""
+        if value is None:
+            return ()
+        if isinstance(value, str):
+            return tuple(item.strip() for item in value.split(",") if item.strip())
+        if isinstance(value, Sequence):
+            return tuple(str(item).strip() for item in value if str(item).strip())
+        raise TypeError(
+            "AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS must be a comma-separated string or list",
+        )
 
     @model_validator(mode="after")
-    def validate_secret_key_for_environment(self) -> "Settings":
-        """Block default secret key in production-like environments."""
+    def validate_security_for_environment(self) -> "Settings":
+        """Block unsafe defaults in production-like environments."""
         env_name = self.app_env.strip().lower()
-        if env_name in {"production", "prod"} and self.secret_key == "change-me":
-            raise ValueError("SECRET_KEY must not use the default value in production environment")
+        if env_name not in {"production", "prod"}:
+            return self
+
+        secret_value = self.secret_key.strip().lower()
+        if secret_value.startswith("change-me"):
+            raise ValueError(
+                "SECRET_KEY must not use placeholder values (change-me*) in production environment",
+            )
+
+        if not self.auth_rate_limit_allow_in_memory_in_production:
+            raise ValueError(
+                "AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION must be true in production "
+                "when using in-memory auth rate limiting",
+            )
         return self
 
 

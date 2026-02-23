@@ -18,11 +18,10 @@ if (-not (Test-Path $InputFile)) {
 }
 
 $restoreCommand = 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-$sql = Get-Content -Path $InputFile -Raw
 
 Push-Location $repoRoot
 try {
-    $sql | docker compose exec -T db sh -c $restoreCommand
+    Get-Content -Path $InputFile | docker compose exec -T db sh -c $restoreCommand
     if ($LASTEXITCODE -ne 0) {
         throw "Restore command failed with exit code $LASTEXITCODE"
     }

@@ -71,8 +71,10 @@
 ## 6) Known Risks / Open Technical Debt
 - Docker Hub connectivity is still flaky in this environment:
   - mitigated by `mirror.gcr.io`, but still an external dependency.
-- Identity rate limiting is process-local in current implementation:
-  - in-memory limiter protects single instance only; distributed/shared limiter (Redis) is not wired yet.
+- Identity rate limiting remains process-local in current implementation:
+  - distributed/shared limiter (Redis) is still not wired,
+  - production now requires explicit acknowledgement via `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`,
+  - `X-Forwarded-For` is trusted only from configured proxies (`AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`).
 - Monitoring stack remains lightweight:
   - observability is currently API/read-model based (no external metrics backend configured).
 
@@ -296,7 +298,11 @@ Status: completed (2026-02-23).
     - dead-letter handling guidance.
 - Phase 5 security hardening (partial):
   - added production guard for default secret:
-    - `Settings` now rejects `SECRET_KEY=change-me` when `APP_ENV` is `production`/`prod`.
+    - `Settings` now rejects placeholder `SECRET_KEY` values matching `change-me*`
+      when `APP_ENV` is `production`/`prod`.
+  - added production guard for process-local auth limiter:
+    - startup requires `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`
+      in `production`/`prod` until shared limiter is wired.
   - covered by `tests/test_config_security.py`.
   - latest local suite status: `41 passed`.
 - Phase 5 auth rate limiting hardening (partial):
@@ -309,7 +315,10 @@ Status: completed (2026-02-23).
     - `AUTH_RATE_LIMIT_WINDOW_SECONDS`,
     - `AUTH_RATE_LIMIT_REGISTER_REQUESTS`,
     - `AUTH_RATE_LIMIT_LOGIN_REQUESTS`,
-    - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`.
+    - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`,
+    - `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`.
+  - `X-Forwarded-For` is trusted only when direct client IP is in
+    `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`.
   - rate-limit violations return unified app error:
     - code: `rate_limited`, HTTP: `429`.
   - covered by:
@@ -336,3 +345,14 @@ Status: completed (2026-02-23).
 - Repo-wide style baseline completed:
   - `ruff check app tests` is now green locally.
   - CI lint job switched from scoped files to full `app/tests` check.
+- Structural hardening follow-up completed:
+  - production secret guard now rejects placeholder patterns `change-me*` (not only exact `change-me`).
+  - production startup now requires explicit acknowledgement of process-local limiter:
+    - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`.
+  - identity IP resolution now trusts `X-Forwarded-For` only for configured proxy sources:
+    - `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`.
+  - integration suite setup was stabilized against auth-rate-limiter collisions:
+    - shared cached auth users are created once per run in `tests/test_booking_billing_integration.py`.
+  - CI integration job now sets `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS=127.0.0.1,::1` when starting API.
+  - `scripts/db_restore.ps1` now streams backup content to `psql` instead of loading full SQL dump in memory.
+  - latest local suite status: `51 passed`.

@@ -25,6 +25,16 @@ class AuthUser:
     access_token: str
 
 
+@dataclass(slots=True)
+class AuthUsers:
+    admin: AuthUser
+    teacher: AuthUser
+    student: AuthUser
+
+
+_CACHED_AUTH_USERS: AuthUsers | None = None
+
+
 def _assert_status(response: httpx.Response, expected_status: int) -> None:
     assert response.status_code == expected_status, (
         f"{response.request.method} {response.request.url} -> "
@@ -42,20 +52,12 @@ def _future_range(hours_from_now: int, duration_minutes: int = 60) -> tuple[str,
     return start_at.isoformat(), end_at.isoformat()
 
 
-def _random_test_ip() -> str:
-    value = uuid4().int
-    octets = [10, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF]
-    return ".".join(str(octet) for octet in octets)
-
-
 async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
     email = f"{role}-{uuid4().hex}@guitaronline.dev"
     password = "StrongPass123!"
-    headers = {"X-Forwarded-For": _random_test_ip()}
 
     register_response = await client.post(
         "/identity/auth/register",
-        headers=headers,
         json={
             "email": email,
             "password": password,
@@ -68,7 +70,6 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
 
     login_response = await client.post(
         "/identity/auth/login",
-        headers=headers,
         json={"email": email, "password": password},
     )
     _assert_status(login_response, 200)
@@ -223,13 +224,28 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
         yield client
 
 
+@pytest_asyncio.fixture()
+async def auth_users(api_client: httpx.AsyncClient) -> AuthUsers:
+    global _CACHED_AUTH_USERS  # noqa: PLW0603 - intentional cache for rate-limit-safe integration setup
+
+    if _CACHED_AUTH_USERS is None:
+        _CACHED_AUTH_USERS = AuthUsers(
+            admin=await _register_and_login(api_client, role="admin"),
+            teacher=await _register_and_login(api_client, role="teacher"),
+            student=await _register_and_login(api_client, role="student"),
+        )
+
+    return _CACHED_AUTH_USERS
+
+
 @pytest.mark.asyncio
 async def test_student_hold_confirm_decrements_package_lessons(
     api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
 ) -> None:
-    admin = await _register_and_login(api_client, role="admin")
-    teacher = await _register_and_login(api_client, role="teacher")
-    student = await _register_and_login(api_client, role="student")
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
 
     package = await _create_package(api_client, admin, student, lessons_total=5)
     slot = await _create_slot(api_client, admin, teacher, hours_from_now=48)
@@ -247,10 +263,13 @@ async def test_student_hold_confirm_decrements_package_lessons(
 
 
 @pytest.mark.asyncio
-async def test_cancel_more_than_24h_returns_lesson(api_client: httpx.AsyncClient) -> None:
-    admin = await _register_and_login(api_client, role="admin")
-    teacher = await _register_and_login(api_client, role="teacher")
-    student = await _register_and_login(api_client, role="student")
+async def test_cancel_more_than_24h_returns_lesson(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
 
     package = await _create_package(api_client, admin, student, lessons_total=5)
     slot = await _create_slot(api_client, admin, teacher, hours_from_now=30)
@@ -276,10 +295,13 @@ async def test_cancel_more_than_24h_returns_lesson(api_client: httpx.AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_cancel_less_than_24h_does_not_return_lesson(api_client: httpx.AsyncClient) -> None:
-    admin = await _register_and_login(api_client, role="admin")
-    teacher = await _register_and_login(api_client, role="teacher")
-    student = await _register_and_login(api_client, role="student")
+async def test_cancel_less_than_24h_does_not_return_lesson(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
 
     package = await _create_package(api_client, admin, student, lessons_total=5)
     slot = await _create_slot(api_client, admin, teacher, hours_from_now=12)
@@ -305,10 +327,13 @@ async def test_cancel_less_than_24h_does_not_return_lesson(api_client: httpx.Asy
 
 
 @pytest.mark.asyncio
-async def test_reschedule_keeps_balance_and_links_bookings(api_client: httpx.AsyncClient) -> None:
-    admin = await _register_and_login(api_client, role="admin")
-    teacher = await _register_and_login(api_client, role="teacher")
-    student = await _register_and_login(api_client, role="student")
+async def test_reschedule_keeps_balance_and_links_bookings(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
 
     package = await _create_package(api_client, admin, student, lessons_total=5)
     old_slot = await _create_slot(api_client, admin, teacher, hours_from_now=48)
@@ -344,10 +369,11 @@ async def test_reschedule_keeps_balance_and_links_bookings(api_client: httpx.Asy
 @pytest.mark.asyncio
 async def test_expire_holds_releases_slot_and_marks_booking_expired(
     api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
 ) -> None:
-    admin = await _register_and_login(api_client, role="admin")
-    teacher = await _register_and_login(api_client, role="teacher")
-    student = await _register_and_login(api_client, role="student")
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
 
     package = await _create_package(api_client, admin, student, lessons_total=5)
     slot = await _create_slot(api_client, admin, teacher, hours_from_now=48)

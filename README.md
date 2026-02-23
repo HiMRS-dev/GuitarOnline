@@ -6,7 +6,9 @@ Production-ready modular monolith backend for an online guitar school.
 
 1. Copy env file:
    - `cp .env.example .env`
-   - in production, set a non-default `SECRET_KEY` (startup rejects `change-me`)
+   - in production, set a non-placeholder `SECRET_KEY` (startup rejects `change-me*`)
+   - in production, explicitly acknowledge process-local limiter if Redis is not wired:
+     `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`
 2. Run containers:
    - `docker compose up --build`
 3. Open docs:
@@ -44,6 +46,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `AUTH_RATE_LIMIT_REGISTER_REQUESTS`
   - `AUTH_RATE_LIMIT_LOGIN_REQUESTS`
   - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`
+  - `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS` (comma-separated proxy IPs allowed to supply `X-Forwarded-For`)
+  - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` (must be `true` in prod until shared limiter is added)
 
 ## Workers
 

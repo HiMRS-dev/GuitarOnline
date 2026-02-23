@@ -92,7 +92,8 @@ class BillingService:
             raise UnauthorizedException("Package does not belong to current student")
 
         if package.expires_at <= utc_now():
-            package.status = PackageStatusEnum.EXPIRED
+            if package.status != PackageStatusEnum.EXPIRED:
+                await self.repository.set_package_status(package, PackageStatusEnum.EXPIRED)
             raise BusinessRuleException("Package is expired")
 
         if package.status != PackageStatusEnum.ACTIVE:
@@ -114,6 +115,36 @@ class BillingService:
         if package.lessons_left >= package.lessons_total:
             return
         await self.repository.return_package_lesson(package)
+
+    async def expire_packages(self, actor: User) -> int:
+        """Expire all active packages that are past expiration timestamp."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can expire packages")
+
+        now = utc_now()
+        packages = await self.repository.find_packages_to_expire(now)
+        for package in packages:
+            await self.repository.set_package_status(package, PackageStatusEnum.EXPIRED)
+            await self.audit_repository.create_audit_log(
+                actor_id=actor.id,
+                action="billing.package.expire",
+                entity_type="lesson_package",
+                entity_id=str(package.id),
+                payload={
+                    "student_id": str(package.student_id),
+                    "expired_at": now.isoformat(),
+                },
+            )
+            await self.audit_repository.create_outbox_event(
+                aggregate_type="billing",
+                aggregate_id=str(package.id),
+                event_type="billing.package.expired",
+                payload={
+                    "package_id": str(package.id),
+                    "student_id": str(package.student_id),
+                },
+            )
+        return len(packages)
 
     async def create_payment(self, payload: PaymentCreate, actor: User) -> Payment:
         """Create payment record."""

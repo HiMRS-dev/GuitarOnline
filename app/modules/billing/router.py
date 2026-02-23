@@ -70,3 +70,12 @@ async def update_payment_status(
     """Update payment status (admin)."""
     payment = await service.update_payment_status(payment_id, payload.status, current_user)
     return PaymentRead.model_validate(payment)
+
+
+@router.post("/packages/expire", response_model=int)
+async def expire_packages(
+    service: BillingService = Depends(get_billing_service),
+    current_user=Depends(get_current_user),
+) -> int:
+    """Expire outdated active lesson packages (admin)."""
+    return await service.expire_packages(current_user)

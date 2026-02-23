@@ -19,7 +19,12 @@ class BillingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def create_package(self, student_id: UUID, lessons_total: int, expires_at: datetime) -> LessonPackage:
+    async def create_package(
+        self,
+        student_id: UUID,
+        lessons_total: int,
+        expires_at: datetime,
+    ) -> LessonPackage:
         package = LessonPackage(
             student_id=student_id,
             lessons_total=lessons_total,
@@ -35,8 +40,15 @@ class BillingRepository:
         stmt = select(LessonPackage).where(LessonPackage.id == package_id)
         return await self.session.scalar(stmt)
 
-    async def list_packages_by_student(self, student_id: UUID, limit: int, offset: int) -> tuple[list[LessonPackage], int]:
-        base_stmt: Select[tuple[LessonPackage]] = select(LessonPackage).where(LessonPackage.student_id == student_id)
+    async def list_packages_by_student(
+        self,
+        student_id: UUID,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[LessonPackage], int]:
+        base_stmt: Select[tuple[LessonPackage]] = select(LessonPackage).where(
+            LessonPackage.student_id == student_id,
+        )
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
         total = int((await self.session.scalar(count_stmt)) or 0)
 
@@ -66,7 +78,12 @@ class BillingRepository:
         stmt = select(Payment).where(Payment.id == payment_id)
         return await self.session.scalar(stmt)
 
-    async def set_payment_status(self, payment: Payment, status: PaymentStatusEnum, paid_at: datetime | None) -> Payment:
+    async def set_payment_status(
+        self,
+        payment: Payment,
+        status: PaymentStatusEnum,
+        paid_at: datetime | None,
+    ) -> Payment:
         payment.status = status
         payment.paid_at = paid_at
         await self.session.flush()
@@ -79,3 +96,19 @@ class BillingRepository:
     async def return_package_lesson(self, package: LessonPackage) -> None:
         package.lessons_left += 1
         await self.session.flush()
+
+    async def find_packages_to_expire(self, now: datetime) -> list[LessonPackage]:
+        stmt = select(LessonPackage).where(
+            LessonPackage.status == PackageStatusEnum.ACTIVE,
+            LessonPackage.expires_at <= now,
+        )
+        return (await self.session.scalars(stmt)).all()
+
+    async def set_package_status(
+        self,
+        package: LessonPackage,
+        status: PackageStatusEnum,
+    ) -> LessonPackage:
+        package.status = status
+        await self.session.flush()
+        return package

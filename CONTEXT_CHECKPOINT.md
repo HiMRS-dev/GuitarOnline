@@ -141,7 +141,7 @@ Status: completed (2026-02-23).
 ### Phase 2: Billing hardening
 Status: in progress (started 2026-02-23).
 - Payment status workflows + reconciliation paths. (partially completed)
-- Package expiration job/logic and edge-case handling.
+- Package expiration job/logic and edge-case handling. (partially completed)
 - Better audit coverage for financial actions. (partially completed)
 
 ### Phase 3: Notifications pipeline
@@ -205,3 +205,7 @@ Status: in progress (started 2026-02-23).
     - package creation,
     - payment creation,
     - payment status updates.
+- Phase 2 package expiration handling (partial):
+  - added admin endpoint `POST /api/v1/billing/packages/expire` to expire overdue active packages.
+  - `BillingService.get_active_package` now persists `EXPIRED` status when an active package is already past `expires_at`.
+  - covered by additional billing unit tests.

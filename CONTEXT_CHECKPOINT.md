@@ -142,7 +142,7 @@ Status: completed (2026-02-23).
 Status: in progress (started 2026-02-23).
 - Payment status workflows + reconciliation paths. (partially completed)
 - Package expiration job/logic and edge-case handling.
-- Better audit coverage for financial actions.
+- Better audit coverage for financial actions. (partially completed)
 
 ### Phase 3: Notifications pipeline
 - Outbox consumer/worker for notification dispatch.
@@ -200,3 +200,8 @@ Status: in progress (started 2026-02-23).
   - status update is idempotent when target status equals current status.
   - `paid_at` is set on first success and preserved on refund.
   - covered by `tests/test_billing_payment_rules.py` (6 tests).
+- Phase 2 financial audit/outbox coverage (partial):
+  - billing service now writes audit logs and outbox events for:
+    - package creation,
+    - payment creation,
+    - payment status updates.

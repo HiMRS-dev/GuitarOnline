@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.enums import PackageStatusEnum, PaymentStatusEnum, RoleEnum
+from app.modules.audit.repository import AuditRepository
 from app.modules.billing.models import LessonPackage, Payment
 from app.modules.billing.repository import BillingRepository
 from app.modules.billing.schemas import PackageCreate, PaymentCreate
@@ -21,8 +22,13 @@ from app.shared.utils import ensure_utc, utc_now
 class BillingService:
     """Billing domain service."""
 
-    def __init__(self, repository: BillingRepository) -> None:
+    def __init__(
+        self,
+        repository: BillingRepository,
+        audit_repository: AuditRepository,
+    ) -> None:
         self.repository = repository
+        self.audit_repository = audit_repository
 
     async def create_package(self, payload: PackageCreate, actor: User) -> LessonPackage:
         """Create lessons package for a student."""
@@ -33,11 +39,33 @@ class BillingService:
         if expires_at <= utc_now():
             raise BusinessRuleException("Package expiration must be in the future")
 
-        return await self.repository.create_package(
+        package = await self.repository.create_package(
             payload.student_id,
             payload.lessons_total,
             expires_at,
         )
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="billing.package.create",
+            entity_type="lesson_package",
+            entity_id=str(package.id),
+            payload={
+                "student_id": str(package.student_id),
+                "lessons_total": package.lessons_total,
+                "expires_at": package.expires_at.isoformat(),
+            },
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(package.id),
+            event_type="billing.package.created",
+            payload={
+                "package_id": str(package.id),
+                "student_id": str(package.student_id),
+                "lessons_total": package.lessons_total,
+            },
+        )
+        return package
 
     async def list_student_packages(
         self,
@@ -99,12 +127,35 @@ class BillingService:
         if actor.role.name == RoleEnum.STUDENT and package.student_id != actor.id:
             raise UnauthorizedException("Students can pay only their packages")
 
-        return await self.repository.create_payment(
+        payment = await self.repository.create_payment(
             package_id=payload.package_id,
             amount=Decimal(payload.amount),
             currency=payload.currency,
             external_reference=payload.external_reference,
         )
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="billing.payment.create",
+            entity_type="payment",
+            entity_id=str(payment.id),
+            payload={
+                "package_id": str(payment.package_id),
+                "amount": str(payment.amount),
+                "currency": payment.currency,
+                "external_reference": payment.external_reference,
+            },
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(payment.id),
+            event_type="billing.payment.created",
+            payload={
+                "payment_id": str(payment.id),
+                "package_id": str(payment.package_id),
+                "status": str(payment.status),
+            },
+        )
+        return payment
 
     async def update_payment_status(
         self,
@@ -122,6 +173,7 @@ class BillingService:
 
         if payment.status == status:
             return payment
+        previous_status = payment.status
 
         allowed_transitions: dict[PaymentStatusEnum, set[PaymentStatusEnum]] = {
             PaymentStatusEnum.PENDING: {PaymentStatusEnum.SUCCEEDED, PaymentStatusEnum.FAILED},
@@ -141,9 +193,34 @@ class BillingService:
         else:
             paid_at = None
 
-        return await self.repository.set_payment_status(payment, status, paid_at)
+        payment = await self.repository.set_payment_status(payment, status, paid_at)
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="billing.payment.status.update",
+            entity_type="payment",
+            entity_id=str(payment.id),
+            payload={
+                "from_status": str(previous_status),
+                "to_status": str(status),
+                "paid_at": payment.paid_at.isoformat() if payment.paid_at is not None else None,
+            },
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(payment.id),
+            event_type="billing.payment.status.updated",
+            payload={
+                "payment_id": str(payment.id),
+                "from_status": str(previous_status),
+                "to_status": str(status),
+            },
+        )
+        return payment
 
 
 async def get_billing_service(session: AsyncSession = Depends(get_db_session)) -> BillingService:
     """Dependency provider for billing service."""
-    return BillingService(BillingRepository(session))
+    return BillingService(
+        repository=BillingRepository(session),
+        audit_repository=AuditRepository(session),
+    )

@@ -39,3 +39,17 @@ Production-ready modular monolith backend for an online guitar school.
 - Admin operational overview endpoint:
   - `GET /api/v1/admin/ops/overview?max_retries=5`
 - Response provides queue and consistency signals (outbox retries/dead-letter, stale holds, overdue packages).
+
+## Operational Runbook
+
+1. Check platform snapshot:
+   - `GET /api/v1/admin/kpi/overview`
+2. Check queue and consistency health:
+   - `GET /api/v1/admin/ops/overview?max_retries=5`
+3. If `stale_booking_holds > 0`:
+   - run `POST /api/v1/booking/holds/expire`
+4. If `overdue_active_packages > 0`:
+   - run `POST /api/v1/billing/packages/expire`
+5. If `outbox_failed_dead_letter > 0`:
+   - inspect `/api/v1/audit/outbox/pending` and `notifications` records,
+   - reprocess only after root-cause fix.

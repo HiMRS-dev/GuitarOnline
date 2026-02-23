@@ -158,10 +158,10 @@ Status: completed (2026-02-23).
 - Delivery status observability. (completed)
 
 ### Phase 4: Admin and operations
-- Status: in progress (started 2026-02-23).
-- Admin read models for bookings/payments/lessons KPIs. (partially completed)
-- Auditable admin actions with traceability. (partially completed)
-- Operational endpoints and runbooks. (partially completed)
+- Status: completed (2026-02-23).
+- Admin read models for bookings/payments/lessons KPIs. (completed)
+- Auditable admin actions with traceability. (completed)
+- Operational endpoints and runbooks. (completed)
 
 ### Phase 5: Production readiness
 Status: in progress (started 2026-02-23).
@@ -285,3 +285,9 @@ Status: in progress (started 2026-02-23).
     - each ops overview read writes `admin.ops.view` action into `admin_actions`.
   - covered by `tests/test_admin_operations_overview.py`.
   - latest local suite status: `38 passed`.
+- Phase 4 operations runbook completed:
+  - added `README.md` runbook section for:
+    - KPI overview check,
+    - operations overview check,
+    - hold/package remediation actions,
+    - dead-letter handling guidance.

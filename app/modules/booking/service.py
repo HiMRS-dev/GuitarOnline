@@ -10,15 +10,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import get_db_session
-from app.core.enums import BookingStatusEnum, PackageStatusEnum, RoleEnum, SlotStatusEnum
+from app.core.enums import (
+    BookingStatusEnum,
+    LessonStatusEnum,
+    PackageStatusEnum,
+    RoleEnum,
+    SlotStatusEnum,
+)
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.repository import BillingRepository
 from app.modules.booking.models import Booking
 from app.modules.booking.repository import BookingRepository
-from app.modules.booking.schemas import BookingCancelRequest, BookingHoldRequest, BookingRescheduleRequest
+from app.modules.booking.schemas import (
+    BookingCancelRequest,
+    BookingHoldRequest,
+    BookingRescheduleRequest,
+)
 from app.modules.identity.models import User
+from app.modules.lessons.repository import LessonsRepository
 from app.modules.scheduling.repository import SchedulingRepository
-from app.shared.exceptions import BusinessRuleException, ConflictException, NotFoundException, UnauthorizedException
+from app.shared.exceptions import (
+    BusinessRuleException,
+    ConflictException,
+    NotFoundException,
+    UnauthorizedException,
+)
 from app.shared.utils import utc_now
 
 settings = get_settings()
@@ -32,11 +48,13 @@ class BookingService:
         booking_repository: BookingRepository,
         scheduling_repository: SchedulingRepository,
         billing_repository: BillingRepository,
+        lessons_repository: LessonsRepository,
         audit_repository: AuditRepository,
     ) -> None:
         self.booking_repository = booking_repository
         self.scheduling_repository = scheduling_repository
         self.billing_repository = billing_repository
+        self.lessons_repository = lessons_repository
         self.audit_repository = audit_repository
 
     def _validate_actor_access(self, booking: Booking, actor: User) -> None:
@@ -47,6 +65,53 @@ class BookingService:
         if actor.role.name == RoleEnum.TEACHER and booking.teacher_id == actor.id:
             return
         raise UnauthorizedException("You cannot manage this booking")
+
+    async def _ensure_lesson_for_confirmed_booking(self, booking: Booking) -> None:
+        """Create lesson for confirmed booking if it does not exist yet."""
+        lesson = await self.lessons_repository.get_lesson_by_booking_id(booking.id)
+        if lesson is not None:
+            return
+
+        lesson = await self.lessons_repository.create_lesson(
+            booking_id=booking.id,
+            student_id=booking.student_id,
+            teacher_id=booking.teacher_id,
+            scheduled_start_at=booking.slot.start_at,
+            scheduled_end_at=booking.slot.end_at,
+            topic=None,
+            notes=None,
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="lesson",
+            aggregate_id=str(lesson.id),
+            event_type="lesson.created",
+            payload={
+                "lesson_id": str(lesson.id),
+                "booking_id": str(booking.id),
+                "student_id": str(booking.student_id),
+                "teacher_id": str(booking.teacher_id),
+            },
+        )
+
+    async def _cancel_lesson_for_booking(self, booking: Booking, reason: str | None) -> None:
+        """Cancel linked lesson if it exists and is not already canceled."""
+        lesson = await self.lessons_repository.get_lesson_by_booking_id(booking.id)
+        if lesson is None or lesson.status == LessonStatusEnum.CANCELED:
+            return
+
+        await self.lessons_repository.update_lesson(lesson, status=LessonStatusEnum.CANCELED)
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="lesson",
+            aggregate_id=str(lesson.id),
+            event_type="lesson.canceled",
+            payload={
+                "lesson_id": str(lesson.id),
+                "booking_id": str(booking.id),
+                "student_id": str(booking.student_id),
+                "teacher_id": str(booking.teacher_id),
+                "reason": reason,
+            },
+        )
 
     async def hold_booking(self, payload: BookingHoldRequest, actor: User) -> Booking:
         """Create booking in HOLD status for 10 minutes."""
@@ -88,7 +153,11 @@ class BookingService:
             aggregate_type="booking",
             aggregate_id=str(booking.id),
             event_type="booking.hold.created",
-            payload={"booking_id": str(booking.id), "slot_id": str(slot.id), "student_id": str(actor.id)},
+            payload={
+                "booking_id": str(booking.id),
+                "slot_id": str(slot.id),
+                "student_id": str(actor.id),
+            },
         )
 
         return booking
@@ -134,12 +203,22 @@ class BookingService:
             aggregate_type="booking",
             aggregate_id=str(booking.id),
             event_type="booking.confirmed",
-            payload={"booking_id": str(booking.id), "student_id": str(booking.student_id), "slot_id": str(booking.slot_id)},
+            payload={
+                "booking_id": str(booking.id),
+                "student_id": str(booking.student_id),
+                "slot_id": str(booking.slot_id),
+            },
         )
+        await self._ensure_lesson_for_confirmed_booking(booking)
 
         return booking
 
-    async def cancel_booking(self, booking_id: UUID, payload: BookingCancelRequest, actor: User) -> Booking:
+    async def cancel_booking(
+        self,
+        booking_id: UUID,
+        payload: BookingCancelRequest,
+        actor: User,
+    ) -> Booking:
         """Cancel booking with refund rules based on 24h window."""
         booking = await self.booking_repository.get_booking_by_id(booking_id)
         if booking is None:
@@ -184,6 +263,7 @@ class BookingService:
                 "refund_returned": refund_returned,
             },
         )
+        await self._cancel_lesson_for_booking(booking, payload.reason)
 
         return booking
 
@@ -242,7 +322,12 @@ class BookingService:
             )
         return len(holds)
 
-    async def list_bookings(self, actor: User, limit: int, offset: int) -> tuple[list[Booking], int]:
+    async def list_bookings(
+        self,
+        actor: User,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Booking], int]:
         """List bookings for actor according to role."""
         return await self.booking_repository.list_bookings(actor.id, actor.role.name, limit, offset)
 
@@ -253,5 +338,6 @@ async def get_booking_service(session: AsyncSession = Depends(get_db_session)) -
         booking_repository=BookingRepository(session),
         scheduling_repository=SchedulingRepository(session),
         billing_repository=BillingRepository(session),
+        lessons_repository=LessonsRepository(session),
         audit_repository=AuditRepository(session),
     )

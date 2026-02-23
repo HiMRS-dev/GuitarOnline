@@ -8,7 +8,13 @@ from uuid import UUID, uuid4
 import pytest
 
 import app.modules.booking.service as booking_service_module
-from app.core.enums import BookingStatusEnum, PackageStatusEnum, RoleEnum, SlotStatusEnum
+from app.core.enums import (
+    BookingStatusEnum,
+    LessonStatusEnum,
+    PackageStatusEnum,
+    RoleEnum,
+    SlotStatusEnum,
+)
 from app.modules.booking.schemas import (
     BookingCancelRequest,
     BookingHoldRequest,
@@ -22,6 +28,7 @@ class FakeSlot:
     id: UUID
     teacher_id: UUID
     start_at: datetime
+    end_at: datetime
     status: SlotStatusEnum
 
 
@@ -50,6 +57,19 @@ class FakeBooking:
     cancellation_reason: str | None = None
     refund_returned: bool = False
     rescheduled_from_booking_id: UUID | None = None
+
+
+@dataclass
+class FakeLesson:
+    id: UUID
+    booking_id: UUID
+    student_id: UUID
+    teacher_id: UUID
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime
+    status: LessonStatusEnum = LessonStatusEnum.SCHEDULED
+    topic: str | None = None
+    notes: str | None = None
 
 
 class FakeBookingRepository:
@@ -129,6 +149,45 @@ class FakeBillingRepository:
         self.return_calls += 1
 
 
+class FakeLessonsRepository:
+    def __init__(self, lessons: dict[UUID, FakeLesson] | None = None) -> None:
+        self._lessons_by_booking: dict[UUID, FakeLesson] = lessons or {}
+        self.create_calls = 0
+
+    async def get_lesson_by_booking_id(self, booking_id: UUID) -> FakeLesson | None:
+        return self._lessons_by_booking.get(booking_id)
+
+    async def create_lesson(
+        self,
+        booking_id: UUID,
+        student_id: UUID,
+        teacher_id: UUID,
+        scheduled_start_at: datetime,
+        scheduled_end_at: datetime,
+        topic: str | None,
+        notes: str | None,
+    ) -> FakeLesson:
+        lesson = FakeLesson(
+            id=uuid4(),
+            booking_id=booking_id,
+            student_id=student_id,
+            teacher_id=teacher_id,
+            scheduled_start_at=scheduled_start_at,
+            scheduled_end_at=scheduled_end_at,
+            topic=topic,
+            notes=notes,
+        )
+        self._lessons_by_booking[booking_id] = lesson
+        self.create_calls += 1
+        return lesson
+
+    async def update_lesson(self, lesson: FakeLesson, **changes) -> FakeLesson:
+        for key, value in changes.items():
+            if value is not None:
+                setattr(lesson, key, value)
+        return lesson
+
+
 class FakeAuditRepository:
     def __init__(self) -> None:
         self.events: list[dict] = []
@@ -159,24 +218,28 @@ def make_service(
     slots: dict[UUID, FakeSlot],
     packages: dict[UUID, FakePackage],
     bookings: dict[UUID, FakeBooking] | None = None,
+    lessons: dict[UUID, FakeLesson] | None = None,
 ) -> tuple[
     BookingService,
     FakeBookingRepository,
     FakeBillingRepository,
     FakeSchedulingRepository,
+    FakeLessonsRepository,
     FakeAuditRepository,
 ]:
     booking_repo = FakeBookingRepository(slots=slots, bookings=bookings)
     scheduling_repo = FakeSchedulingRepository(slots=slots)
     billing_repo = FakeBillingRepository(packages=packages)
+    lessons_repo = FakeLessonsRepository(lessons=lessons)
     audit_repo = FakeAuditRepository()
     service = BookingService(
         booking_repository=booking_repo,
         scheduling_repository=scheduling_repo,
         billing_repository=billing_repo,
+        lessons_repository=lessons_repo,
         audit_repository=audit_repo,
     )
-    return service, booking_repo, billing_repo, scheduling_repo, audit_repo
+    return service, booking_repo, billing_repo, scheduling_repo, lessons_repo, audit_repo
 
 
 @pytest.mark.asyncio
@@ -193,6 +256,7 @@ async def test_hold_sets_10_minute_expiration(monkeypatch: pytest.MonkeyPatch) -
         id=slot_id,
         teacher_id=teacher_id,
         start_at=fixed_now + timedelta(hours=48),
+        end_at=fixed_now + timedelta(hours=49),
         status=SlotStatusEnum.OPEN,
     )
     package = FakePackage(
@@ -204,7 +268,7 @@ async def test_hold_sets_10_minute_expiration(monkeypatch: pytest.MonkeyPatch) -
         lessons_left=10,
     )
 
-    service, _, _, _, _ = make_service(slots={slot_id: slot}, packages={package_id: package})
+    service, _, _, _, _, _ = make_service(slots={slot_id: slot}, packages={package_id: package})
     actor = make_actor(student_id, RoleEnum.STUDENT)
 
     booking = await service.hold_booking(
@@ -215,6 +279,57 @@ async def test_hold_sets_10_minute_expiration(monkeypatch: pytest.MonkeyPatch) -
     assert booking.status == BookingStatusEnum.HOLD
     assert booking.hold_expires_at == fixed_now + timedelta(minutes=settings.booking_hold_minutes)
     assert slot.status == SlotStatusEnum.HOLD
+
+
+@pytest.mark.asyncio
+async def test_confirm_creates_lesson_and_emits_lesson_created_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=36),
+        end_at=fixed_now + timedelta(hours=37),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=10),
+        lessons_total=8,
+        lessons_left=8,
+    )
+
+    service, _, billing_repo, _, lessons_repo, audit_repo = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    hold = await service.hold_booking(
+        BookingHoldRequest(slot_id=slot_id, package_id=package_id),
+        actor,
+    )
+    confirmed = await service.confirm_booking(hold.id, actor)
+    lesson = await lessons_repo.get_lesson_by_booking_id(confirmed.id)
+
+    assert confirmed.status == BookingStatusEnum.CONFIRMED
+    assert billing_repo.consume_calls == 1
+    assert lessons_repo.create_calls == 1
+    assert lesson is not None
+    assert lesson.status == LessonStatusEnum.SCHEDULED
+    assert lesson.scheduled_start_at == slot.start_at
+    assert lesson.scheduled_end_at == slot.end_at
+    assert any(event["event_type"] == "lesson.created" for event in audit_repo.events)
 
 
 @pytest.mark.asyncio
@@ -232,6 +347,7 @@ async def test_cancel_more_than_24h_returns_lesson(monkeypatch: pytest.MonkeyPat
         id=slot_id,
         teacher_id=teacher_id,
         start_at=fixed_now + timedelta(hours=25),
+        end_at=fixed_now + timedelta(hours=26),
         status=SlotStatusEnum.BOOKED,
     )
     package = FakePackage(
@@ -252,7 +368,7 @@ async def test_cancel_more_than_24h_returns_lesson(monkeypatch: pytest.MonkeyPat
         status=BookingStatusEnum.CONFIRMED,
     )
 
-    service, _, billing_repo, _, _ = make_service(
+    service, _, billing_repo, _, _, _ = make_service(
         slots={slot_id: slot},
         packages={package_id: package},
         bookings={booking_id: booking},
@@ -283,6 +399,7 @@ async def test_cancel_less_than_24h_burns_lesson(monkeypatch: pytest.MonkeyPatch
         id=slot_id,
         teacher_id=teacher_id,
         start_at=fixed_now + timedelta(hours=23),
+        end_at=fixed_now + timedelta(hours=24),
         status=SlotStatusEnum.BOOKED,
     )
     package = FakePackage(
@@ -303,7 +420,7 @@ async def test_cancel_less_than_24h_burns_lesson(monkeypatch: pytest.MonkeyPatch
         status=BookingStatusEnum.CONFIRMED,
     )
 
-    service, _, billing_repo, _, _ = make_service(
+    service, _, billing_repo, _, _, _ = make_service(
         slots={slot_id: slot},
         packages={package_id: package},
         bookings={booking_id: booking},
@@ -335,12 +452,14 @@ async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyP
         id=old_slot_id,
         teacher_id=teacher_id,
         start_at=fixed_now + timedelta(hours=30),
+        end_at=fixed_now + timedelta(hours=31),
         status=SlotStatusEnum.BOOKED,
     )
     new_slot = FakeSlot(
         id=new_slot_id,
         teacher_id=teacher_id,
         start_at=fixed_now + timedelta(hours=48),
+        end_at=fixed_now + timedelta(hours=49),
         status=SlotStatusEnum.OPEN,
     )
     package = FakePackage(
@@ -360,11 +479,20 @@ async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyP
         package_id=package_id,
         status=BookingStatusEnum.CONFIRMED,
     )
+    old_lesson = FakeLesson(
+        id=uuid4(),
+        booking_id=old_booking_id,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        scheduled_start_at=old_slot.start_at,
+        scheduled_end_at=old_slot.end_at,
+    )
 
-    service, booking_repo, billing_repo, _, audit_repo = make_service(
+    service, booking_repo, billing_repo, _, lessons_repo, audit_repo = make_service(
         slots={old_slot_id: old_slot, new_slot_id: new_slot},
         packages={package_id: package},
         bookings={old_booking_id: old_booking},
+        lessons={old_booking_id: old_lesson},
     )
     actor = make_actor(student_id, RoleEnum.STUDENT)
 
@@ -382,4 +510,12 @@ async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyP
     assert billing_repo.return_calls == 1
     assert billing_repo.consume_calls == 1
     assert package.lessons_left == 4
+    old_lesson_after = await lessons_repo.get_lesson_by_booking_id(old_booking_id)
+    new_lesson = await lessons_repo.get_lesson_by_booking_id(new_booking.id)
+    assert old_lesson_after is not None
+    assert old_lesson_after.status == LessonStatusEnum.CANCELED
+    assert new_lesson is not None
+    assert new_lesson.status == LessonStatusEnum.SCHEDULED
     assert any(event["event_type"] == "booking.rescheduled" for event in audit_repo.events)
+    assert any(event["event_type"] == "lesson.canceled" for event in audit_repo.events)
+    assert any(event["event_type"] == "lesson.created" for event in audit_repo.events)

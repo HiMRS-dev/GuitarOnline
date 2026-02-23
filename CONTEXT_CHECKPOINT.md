@@ -165,3 +165,22 @@ Status: done locally (pending baseline commit).
 - Audit logs and outbox provide traceability for critical actions.
 - Integration tests cover main business scenarios and run in CI.
 - Docker local runbook is stable and documented.
+
+## 11) Progress Update (2026-02-23)
+- Step B (booking <-> lesson synchronization) completed:
+  - booking confirmation creates lesson if missing,
+  - booking cancel/reschedule cancels linked lesson,
+  - outbox emits `lesson.created` / `lesson.canceled`.
+  - commit: `c03f3d1`.
+- Step C (integration tests in dockerized environment) completed:
+  - added `tests/test_booking_billing_integration.py` with 5 scenarios:
+    1. hold + confirm decrements package lessons,
+    2. cancel >24h returns lesson,
+    3. cancel <24h does not return lesson,
+    4. reschedule keeps balance and links bookings,
+    5. hold expiration releases slot.
+  - verified against running Docker stack: `5 passed`.
+  - full test suite status: `10 passed`.
+- New risk discovered during Step C:
+  - `/api/v1/identity/auth/register` returns `500` in container due `passlib+bcrypt` backend issue (`ValueError: password cannot be longer than 72 bytes`).
+  - integration tests currently provision users directly in DB + JWT to isolate booking/billing flows from this blocker.

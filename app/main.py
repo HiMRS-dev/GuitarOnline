@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
+from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, close_engine
@@ -21,6 +22,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.scheduling.router import router as scheduling_router
 from app.modules.teachers.router import router as teachers_router
 from app.shared.exceptions import register_exception_handlers
+from app.shared.utils import utc_now
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -75,3 +77,29 @@ app.include_router(audit_router, prefix=settings.api_prefix)
 async def healthcheck() -> dict[str, str]:
     """Liveness probe endpoint."""
     return {"status": "ok"}
+
+
+async def _is_database_ready() -> bool:
+    """Return True if DB accepts basic queries."""
+    try:
+        async with SessionLocal() as session:
+            await session.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        logger.exception("Database readiness check failed")
+        return False
+
+
+@app.get("/ready")
+async def readiness_check() -> dict[str, str]:
+    """Readiness probe endpoint with DB dependency check."""
+    if not await _is_database_ready():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database is not ready",
+        )
+    return {
+        "status": "ready",
+        "database": "ok",
+        "timestamp": utc_now().isoformat(),
+    }

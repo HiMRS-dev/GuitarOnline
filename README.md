@@ -11,6 +11,9 @@ Production-ready modular monolith backend for an online guitar school.
    - `docker compose up --build`
 3. Open docs:
    - `http://localhost:8000/docs`
+4. Probes:
+   - liveness: `http://localhost:8000/health`
+   - readiness (DB-aware): `http://localhost:8000/ready`
 
 ## Migrations
 
@@ -66,3 +69,12 @@ Production-ready modular monolith backend for an online guitar school.
 5. If `outbox_failed_dead_letter > 0`:
    - inspect `/api/v1/audit/outbox/pending` and `notifications` records,
    - reprocess only after root-cause fix.
+
+## Backup and Restore
+
+- Create DB backup from dockerized PostgreSQL:
+  - `powershell -ExecutionPolicy Bypass -File scripts/db_backup.ps1`
+- Create DB backup to a custom path:
+  - `powershell -ExecutionPolicy Bypass -File scripts/db_backup.ps1 -OutputFile backups/manual.sql`
+- Restore DB from backup file:
+  - `powershell -ExecutionPolicy Bypass -File scripts/db_restore.ps1 -InputFile backups/manual.sql`

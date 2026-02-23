@@ -26,6 +26,7 @@
   - `tests/test_config_security.py` (environment secret-key guardrails).
   - `tests/test_rate_limiter.py` (core sliding-window limiter behavior).
   - `tests/test_identity_rate_limit.py` (identity endpoint rate-limit dependencies).
+  - `tests/test_health_readiness.py` (readiness probe behavior).
   - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
@@ -172,7 +173,7 @@ Status: completed (2026-02-23).
 Status: in progress (started 2026-02-23).
 - CI (lint + unit + integration + migration checks). (partially completed)
 - Security hardening (auth policies, secret handling, rate limits). (partially completed)
-- Deployment baseline, monitoring, backup/restore strategy.
+- Deployment baseline, monitoring, backup/restore strategy. (partially completed)
 
 ## 10) Definition of Done for "Platform MVP"
 - Roles/auth flows work for student/teacher/admin.
@@ -319,4 +320,15 @@ Status: in progress (started 2026-02-23).
     - `tests/test_rate_limiter.py`,
     - `tests/test_identity_rate_limit.py`.
   - integration suite adapted for realistic proxy-IP simulation in auth registration helper.
+  - latest local suite status: `46 passed`.
+- Phase 5 deployment baseline and recovery strategy (partial):
+  - added readiness probe endpoint:
+    - `GET /ready` checks live DB connectivity (`SELECT 1`) and returns `503` on failure.
+  - covered by `tests/test_health_readiness.py`.
+  - added backup/restore scripts for dockerized PostgreSQL:
+    - `scripts/db_backup.ps1`,
+    - `scripts/db_restore.ps1`.
+  - updated `README.md` with:
+    - liveness/readiness probe usage,
+    - backup/restore operational commands.
   - latest local suite status: `46 passed`.

@@ -139,7 +139,8 @@ Status: completed (2026-02-23).
 - Idempotency guards for critical transitions.
 
 ### Phase 2: Billing hardening
-- Payment status workflows + reconciliation paths.
+Status: in progress (started 2026-02-23).
+- Payment status workflows + reconciliation paths. (partially completed)
 - Package expiration job/logic and edge-case handling.
 - Better audit coverage for financial actions.
 
@@ -191,3 +192,11 @@ Status: completed (2026-02-23).
   - `cancel_booking` is idempotent for already `CANCELED` bookings.
   - `reschedule_booking` returns existing successor booking on retry.
   - covered by new unit tests in `tests/test_booking_rules.py`.
+- Phase 2 payment workflow hardening (partial):
+  - `billing.update_payment_status` now enforces valid transitions:
+    - `pending -> succeeded/failed`
+    - `failed -> pending/succeeded` (reconciliation retry path)
+    - `succeeded -> refunded`
+  - status update is idempotent when target status equals current status.
+  - `paid_at` is set on first success and preserved on refund.
+  - covered by `tests/test_billing_payment_rules.py` (6 tests).

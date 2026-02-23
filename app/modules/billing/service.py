@@ -33,7 +33,11 @@ class BillingService:
         if expires_at <= utc_now():
             raise BusinessRuleException("Package expiration must be in the future")
 
-        return await self.repository.create_package(payload.student_id, payload.lessons_total, expires_at)
+        return await self.repository.create_package(
+            payload.student_id,
+            payload.lessons_total,
+            expires_at,
+        )
 
     async def list_student_packages(
         self,
@@ -45,7 +49,11 @@ class BillingService:
         """List packages for student."""
         if actor.role.name != RoleEnum.ADMIN and actor.id != student_id:
             raise UnauthorizedException("Access denied")
-        return await self.repository.list_packages_by_student(student_id=student_id, limit=limit, offset=offset)
+        return await self.repository.list_packages_by_student(
+            student_id=student_id,
+            limit=limit,
+            offset=offset,
+        )
 
     async def get_active_package(self, package_id: UUID, student_id: UUID) -> LessonPackage:
         """Return active package with all business checks."""
@@ -98,7 +106,12 @@ class BillingService:
             external_reference=payload.external_reference,
         )
 
-    async def update_payment_status(self, payment_id: UUID, status: PaymentStatusEnum, actor: User) -> Payment:
+    async def update_payment_status(
+        self,
+        payment_id: UUID,
+        status: PaymentStatusEnum,
+        actor: User,
+    ) -> Payment:
         """Update payment status (admin only)."""
         if actor.role.name != RoleEnum.ADMIN:
             raise UnauthorizedException("Only admin can update payment status")
@@ -107,7 +120,27 @@ class BillingService:
         if payment is None:
             raise NotFoundException("Payment not found")
 
-        paid_at = utc_now() if status == PaymentStatusEnum.SUCCEEDED else None
+        if payment.status == status:
+            return payment
+
+        allowed_transitions: dict[PaymentStatusEnum, set[PaymentStatusEnum]] = {
+            PaymentStatusEnum.PENDING: {PaymentStatusEnum.SUCCEEDED, PaymentStatusEnum.FAILED},
+            PaymentStatusEnum.FAILED: {PaymentStatusEnum.PENDING, PaymentStatusEnum.SUCCEEDED},
+            PaymentStatusEnum.SUCCEEDED: {PaymentStatusEnum.REFUNDED},
+            PaymentStatusEnum.REFUNDED: set(),
+        }
+        if status not in allowed_transitions[payment.status]:
+            raise BusinessRuleException(
+                f"Invalid payment status transition: {payment.status} -> {status}",
+            )
+
+        if status == PaymentStatusEnum.SUCCEEDED:
+            paid_at = payment.paid_at or utc_now()
+        elif status == PaymentStatusEnum.REFUNDED:
+            paid_at = payment.paid_at
+        else:
+            paid_at = None
+
         return await self.repository.set_payment_status(payment, status, paid_at)
 
 

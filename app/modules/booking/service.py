@@ -170,6 +170,9 @@ class BookingService:
 
         self._validate_actor_access(booking, actor)
 
+        if booking.status == BookingStatusEnum.CONFIRMED:
+            await self._ensure_lesson_for_confirmed_booking(booking)
+            return booking
         if booking.status != BookingStatusEnum.HOLD:
             raise ConflictException("Only HOLD booking can be confirmed")
 
@@ -226,8 +229,10 @@ class BookingService:
 
         self._validate_actor_access(booking, actor)
 
-        if booking.status in (BookingStatusEnum.CANCELED, BookingStatusEnum.EXPIRED):
-            raise ConflictException("Booking already canceled or expired")
+        if booking.status == BookingStatusEnum.CANCELED:
+            return booking
+        if booking.status == BookingStatusEnum.EXPIRED:
+            raise ConflictException("Booking already expired")
 
         now = utc_now()
         refund_returned = False
@@ -274,6 +279,17 @@ class BookingService:
         actor: User,
     ) -> Booking:
         """Reschedule as cancel + new booking."""
+        old_booking = await self.booking_repository.get_booking_by_id(booking_id)
+        if old_booking is None:
+            raise NotFoundException("Booking not found")
+        self._validate_actor_access(old_booking, actor)
+
+        existing_successor = await self.booking_repository.get_reschedule_successor(booking_id)
+        if existing_successor is not None:
+            return existing_successor
+        if old_booking.status in (BookingStatusEnum.CANCELED, BookingStatusEnum.EXPIRED):
+            raise ConflictException("Booking cannot be rescheduled in current status")
+
         old_booking = await self.cancel_booking(
             booking_id=booking_id,
             payload=BookingCancelRequest(reason="Rescheduled by user"),

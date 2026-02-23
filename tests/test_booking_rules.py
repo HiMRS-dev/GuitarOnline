@@ -118,6 +118,12 @@ class FakeBookingRepository:
             and booking.hold_expires_at <= now
         ]
 
+    async def get_reschedule_successor(self, booking_id: UUID) -> FakeBooking | None:
+        for booking in self._bookings.values():
+            if booking.rescheduled_from_booking_id == booking_id:
+                return booking
+        return None
+
 
 class FakeSchedulingRepository:
     def __init__(self, slots: dict[UUID, FakeSlot]) -> None:
@@ -333,6 +339,65 @@ async def test_confirm_creates_lesson_and_emits_lesson_created_event(
 
 
 @pytest.mark.asyncio
+async def test_confirm_is_idempotent_for_already_confirmed_booking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+    booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=36),
+        end_at=fixed_now + timedelta(hours=37),
+        status=SlotStatusEnum.BOOKED,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=10),
+        lessons_total=8,
+        lessons_left=3,
+    )
+    booking = FakeBooking(
+        id=booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CONFIRMED,
+        confirmed_at=fixed_now - timedelta(minutes=3),
+    )
+
+    service, _, billing_repo, _, lessons_repo, audit_repo = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+        bookings={booking_id: booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    confirmed = await service.confirm_booking(booking_id, actor)
+    lesson = await lessons_repo.get_lesson_by_booking_id(booking_id)
+
+    assert confirmed.id == booking_id
+    assert confirmed.status == BookingStatusEnum.CONFIRMED
+    assert billing_repo.consume_calls == 0
+    assert package.lessons_left == 3
+    assert lessons_repo.create_calls == 1
+    assert lesson is not None
+    assert lesson.status == LessonStatusEnum.SCHEDULED
+    assert any(event["event_type"] == "lesson.created" for event in audit_repo.events)
+
+
+@pytest.mark.asyncio
 async def test_cancel_more_than_24h_returns_lesson(monkeypatch: pytest.MonkeyPatch) -> None:
     fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
     monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
@@ -437,6 +502,63 @@ async def test_cancel_less_than_24h_burns_lesson(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+async def test_cancel_is_idempotent_for_already_canceled_booking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+    booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=36),
+        end_at=fixed_now + timedelta(hours=37),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=8,
+        lessons_left=3,
+    )
+    booking = FakeBooking(
+        id=booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CANCELED,
+        canceled_at=fixed_now - timedelta(hours=1),
+        cancellation_reason="Initial cancel",
+        refund_returned=True,
+    )
+
+    service, _, billing_repo, _, _, audit_repo = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+        bookings={booking_id: booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    canceled = await service.cancel_booking(booking_id, BookingCancelRequest(reason="retry"), actor)
+
+    assert canceled.id == booking_id
+    assert canceled.status == BookingStatusEnum.CANCELED
+    assert canceled.cancellation_reason == "Initial cancel"
+    assert billing_repo.return_calls == 0
+    assert len(audit_repo.events) == 0
+
+
+@pytest.mark.asyncio
 async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyPatch) -> None:
     fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
     monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
@@ -519,3 +641,85 @@ async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyP
     assert any(event["event_type"] == "booking.rescheduled" for event in audit_repo.events)
     assert any(event["event_type"] == "lesson.canceled" for event in audit_repo.events)
     assert any(event["event_type"] == "lesson.created" for event in audit_repo.events)
+
+
+@pytest.mark.asyncio
+async def test_reschedule_returns_existing_successor_on_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    old_slot_id = uuid4()
+    new_slot_id = uuid4()
+    package_id = uuid4()
+    old_booking_id = uuid4()
+    new_booking_id = uuid4()
+
+    old_slot = FakeSlot(
+        id=old_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=30),
+        end_at=fixed_now + timedelta(hours=31),
+        status=SlotStatusEnum.OPEN,
+    )
+    new_slot = FakeSlot(
+        id=new_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=48),
+        end_at=fixed_now + timedelta(hours=49),
+        status=SlotStatusEnum.BOOKED,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=10,
+        lessons_left=4,
+    )
+    old_booking = FakeBooking(
+        id=old_booking_id,
+        slot_id=old_slot_id,
+        slot=old_slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CANCELED,
+        canceled_at=fixed_now - timedelta(minutes=10),
+        cancellation_reason="Rescheduled by user",
+        refund_returned=True,
+    )
+    new_booking = FakeBooking(
+        id=new_booking_id,
+        slot_id=new_slot_id,
+        slot=new_slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CONFIRMED,
+        confirmed_at=fixed_now - timedelta(minutes=8),
+        rescheduled_from_booking_id=old_booking_id,
+    )
+
+    service, booking_repo, billing_repo, _, _, audit_repo = make_service(
+        slots={old_slot_id: old_slot, new_slot_id: new_slot},
+        packages={package_id: package},
+        bookings={old_booking_id: old_booking, new_booking_id: new_booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    retried = await service.reschedule_booking(
+        old_booking_id,
+        BookingRescheduleRequest(new_slot_id=new_slot_id),
+        actor,
+    )
+
+    assert retried.id == new_booking_id
+    assert retried.rescheduled_from_booking_id == old_booking_id
+    assert billing_repo.return_calls == 0
+    assert billing_repo.consume_calls == 0
+    assert len(booking_repo._bookings) == 2
+    assert len(audit_repo.events) == 0

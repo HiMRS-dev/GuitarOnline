@@ -17,7 +17,8 @@
 - Migration state:
   - `alembic/versions/20260219_0001_initial_schema.py` exists and is applied.
 - Tests currently in repo:
-  - `tests/test_booking_rules.py` (4 unit tests for booking/billing business rules).
+  - `tests/test_booking_rules.py` (unit tests for booking/billing rules + idempotency).
+  - `tests/test_booking_billing_integration.py` (5 HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
 - Fixed settings/env parsing crash:
@@ -59,11 +60,10 @@
   - backup created: `settings-store.json.bak-20260219-225319`.
 
 ## 6) Known Risks / Open Technical Debt
-- No `.gitignore` yet:
-  - risk of committing `.env` accidentally.
+- Repo-wide style baseline is not yet enforced:
+  - `ruff check app tests` has legacy findings outside recently changed files.
 - Docker Hub connectivity is still flaky in this environment:
   - mitigated by `mirror.gcr.io`, but still an external dependency.
-- No integration tests yet for full HTTP + DB flows in dockerized runtime.
 - No CI pipeline configured yet (lint/test/migration gates).
 
 ## 7) Tomorrow Quick Start (5-10 min)
@@ -93,7 +93,7 @@ Acceptance:
 - Commit contains code/infrastructure/test changes from this session.
 - No secrets committed.
 
-### Step B: Next functional backend task
+### Step B: Next functional backend task (Completed 2026-02-23)
 Proposed next task:
 - Implement booking-to-lesson synchronization so domain flow is complete:
   - on booking confirm => create lesson record (if not exists),
@@ -109,7 +109,7 @@ Acceptance:
 - Cancel/reschedule does not leave orphaned or conflicting lessons.
 - Outbox contains expected integration events.
 
-### Step C: Integration tests over docker environment (booking/billing)
+### Step C: Integration tests over docker environment (booking/billing) (Completed 2026-02-23)
 Goal: verify real HTTP + DB behavior, not only unit logic.
 
 Minimum integration suite:
@@ -133,9 +133,10 @@ Acceptance:
 Status: done locally (pending baseline commit).
 
 ### Phase 1: Core domain coherence
+Status: completed (2026-02-23).
 - Booking <-> Lessons lifecycle integration.
 - Outbox event consistency for booking/lesson flows.
-- Add idempotency guards for critical transitions.
+- Idempotency guards for critical transitions.
 
 ### Phase 2: Billing hardening
 - Payment status workflows + reconciliation paths.
@@ -185,3 +186,8 @@ Status: done locally (pending baseline commit).
   - fixed `passlib+bcrypt` incompatibility by pinning `bcrypt=4.0.1` in `pyproject.toml`/`poetry.lock`.
   - verified `/api/v1/identity/auth/register` returns `201` in dockerized app after rebuild.
   - integration tests now use real `register + login` flow again.
+- Phase 1 idempotency guards completed:
+  - `confirm_booking` is idempotent for already `CONFIRMED` bookings (no double package consumption).
+  - `cancel_booking` is idempotent for already `CANCELED` bookings.
+  - `reschedule_booking` returns existing successor booking on retry.
+  - covered by new unit tests in `tests/test_booking_rules.py`.

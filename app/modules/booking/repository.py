@@ -9,8 +9,7 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import RoleEnum
-from app.core.enums import BookingStatusEnum
+from app.core.enums import BookingStatusEnum, RoleEnum
 from app.modules.booking.models import Booking
 
 
@@ -77,6 +76,16 @@ class BookingRepository:
             Booking.hold_expires_at <= now,
         )
         return (await self.session.scalars(stmt)).all()
+
+    async def get_reschedule_successor(self, booking_id: UUID) -> Booking | None:
+        stmt = (
+            select(Booking)
+            .options(selectinload(Booking.slot), selectinload(Booking.package))
+            .where(Booking.rescheduled_from_booking_id == booking_id)
+            .order_by(Booking.created_at.desc())
+            .limit(1)
+        )
+        return await self.session.scalar(stmt)
 
     async def save(self, booking: Booking) -> Booking:
         await self.session.flush()

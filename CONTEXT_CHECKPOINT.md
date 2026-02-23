@@ -70,8 +70,8 @@
 - Docker Hub connectivity is still flaky in this environment:
   - mitigated by `mirror.gcr.io`, but still an external dependency.
 - CI gates are improved but still partial:
-  - workflow now runs scoped lint, pytest, and migration upgrade checks.
-  - full repo-wide lint baseline and dedicated integration environment gates are not enforced yet.
+  - workflow now runs scoped lint, pytest, migration upgrade checks, and HTTP integration tests.
+  - full repo-wide lint baseline is not enforced yet.
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -270,9 +270,10 @@ Status: in progress (started 2026-02-23).
   - updated `.github/workflows/ci.yml` with separate jobs:
     - `lint` (scoped `ruff check` over stable modules/tests),
     - `test` (`pytest -q`),
-    - `migration` (`alembic upgrade head` against PostgreSQL service).
+    - `migration` (`alembic upgrade head` against PostgreSQL service),
+    - `integration` (run API + `tests/test_booking_billing_integration.py`).
   - remaining gap:
-    - CI still does not run full HTTP integration suite in a dedicated stack.
+    - lint is still scoped because repo-wide style baseline has legacy findings.
 - Phase 4 operational overview endpoint (partial):
   - added endpoint `GET /api/v1/admin/ops/overview?max_retries=5` (admin-only).
   - operational snapshot includes:

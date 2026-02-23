@@ -15,7 +15,11 @@ class TeacherProfile(BaseModelMixin, Base):
 
     __tablename__ = "teacher_profiles"
 
-    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     bio: Mapped[str] = mapped_column(Text, default="", nullable=False)
     experience_years: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

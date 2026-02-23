@@ -36,7 +36,12 @@ class TeachersService:
             experience_years=payload.experience_years,
         )
 
-    async def update_profile(self, profile_id, payload: TeacherProfileUpdate, actor: User) -> TeacherProfile:
+    async def update_profile(
+        self,
+        profile_id,
+        payload: TeacherProfileUpdate,
+        actor: User,
+    ) -> TeacherProfile:
         """Update teacher profile."""
         profile = await self.repository.get_profile_by_id(profile_id)
         if profile is None:

@@ -71,7 +71,11 @@ class IdentityService:
 
         token_id = str(uuid4())
         access_token = create_access_token(subject=str(user.id), role=user.role.name)
-        refresh_token = create_refresh_token(subject=str(user.id), token_id=token_id, role=user.role.name)
+        refresh_token = create_refresh_token(
+            subject=str(user.id),
+            token_id=token_id,
+            role=user.role.name,
+        )
 
         expires_at = utc_now() + timedelta(days=settings.refresh_token_expire_days)
         await self.repository.create_refresh_token(user.id, token_id, expires_at)
@@ -101,7 +105,11 @@ class IdentityService:
 
         new_token_id = str(uuid4())
         access_token = create_access_token(subject=str(user.id), role=user.role.name)
-        refresh_token = create_refresh_token(subject=str(user.id), token_id=new_token_id, role=user.role.name)
+        refresh_token = create_refresh_token(
+            subject=str(user.id),
+            token_id=new_token_id,
+            role=user.role.name,
+        )
         expires_at = utc_now() + timedelta(days=settings.refresh_token_expire_days)
         await self.repository.create_refresh_token(user.id, new_token_id, expires_at)
 

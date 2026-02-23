@@ -40,7 +40,12 @@ class SchedulingRepository:
         stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
         return await self.session.scalar(stmt)
 
-    async def list_open_slots(self, teacher_id: UUID | None, limit: int, offset: int) -> tuple[list[AvailabilitySlot], int]:
+    async def list_open_slots(
+        self,
+        teacher_id: UUID | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[AvailabilitySlot], int]:
         base_stmt: Select[tuple[AvailabilitySlot]] = select(AvailabilitySlot).where(
             AvailabilitySlot.status == SlotStatusEnum.OPEN,
         )
@@ -54,7 +59,11 @@ class SchedulingRepository:
         items = (await self.session.scalars(stmt)).all()
         return items, total
 
-    async def set_slot_status(self, slot: AvailabilitySlot, status: SlotStatusEnum) -> AvailabilitySlot:
+    async def set_slot_status(
+        self,
+        slot: AvailabilitySlot,
+        status: SlotStatusEnum,
+    ) -> AvailabilitySlot:
         slot.status = status
         await self.session.flush()
         return slot

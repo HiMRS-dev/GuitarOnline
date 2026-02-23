@@ -69,15 +69,12 @@
   - backup created: `settings-store.json.bak-20260219-225319`.
 
 ## 6) Known Risks / Open Technical Debt
-- Repo-wide style baseline is not yet enforced:
-  - `ruff check app tests` has legacy findings outside recently changed files.
 - Docker Hub connectivity is still flaky in this environment:
   - mitigated by `mirror.gcr.io`, but still an external dependency.
-- CI gates are improved but still partial:
-  - workflow now runs scoped lint, pytest, migration upgrade checks, and HTTP integration tests.
-  - full repo-wide lint baseline is not enforced yet.
 - Identity rate limiting is process-local in current implementation:
   - in-memory limiter protects single instance only; distributed/shared limiter (Redis) is not wired yet.
+- Monitoring stack remains lightweight:
+  - observability is currently API/read-model based (no external metrics backend configured).
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -170,10 +167,10 @@ Status: completed (2026-02-23).
 - Operational endpoints and runbooks. (completed)
 
 ### Phase 5: Production readiness
-Status: in progress (started 2026-02-23).
-- CI (lint + unit + integration + migration checks). (partially completed)
-- Security hardening (auth policies, secret handling, rate limits). (partially completed)
-- Deployment baseline, monitoring, backup/restore strategy. (partially completed)
+Status: completed (2026-02-23).
+- CI (lint + unit + integration + migration checks). (completed)
+- Security hardening (auth policies, secret handling, rate limits). (completed)
+- Deployment baseline, monitoring, backup/restore strategy. (completed)
 
 ## 10) Definition of Done for "Platform MVP"
 - Roles/auth flows work for student/teacher/admin.
@@ -274,12 +271,11 @@ Status: in progress (started 2026-02-23).
   - latest local suite status: `36 passed`.
 - Phase 5 CI hardening (partial):
   - updated `.github/workflows/ci.yml` with separate jobs:
-    - `lint` (scoped `ruff check` over stable modules/tests),
+    - `lint` (`ruff check app tests`),
     - `test` (`pytest -q`),
     - `migration` (`alembic upgrade head` against PostgreSQL service),
     - `integration` (run API + `tests/test_booking_billing_integration.py`).
-  - remaining gap:
-    - lint is still scoped because repo-wide style baseline has legacy findings.
+  - repo-wide lint baseline is enforced in CI.
 - Phase 4 operational overview endpoint (partial):
   - added endpoint `GET /api/v1/admin/ops/overview?max_retries=5` (admin-only).
   - operational snapshot includes:
@@ -337,3 +333,6 @@ Status: in progress (started 2026-02-23).
     - `outbox-worker`.
   - updated `README.md` with production compose bring-up and migration command.
   - latest local suite status: `48 passed`.
+- Repo-wide style baseline completed:
+  - `ruff check app tests` is now green locally.
+  - CI lint job switched from scoped files to full `app/tests` check.

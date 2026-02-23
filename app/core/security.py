@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -33,7 +33,7 @@ def _create_token(subject: str, expires_delta: timedelta, token_type: str, **cla
     payload: dict[str, Any] = {
         "sub": subject,
         "type": token_type,
-        "exp": datetime.now(timezone.utc) + expires_delta,
+        "exp": datetime.now(UTC) + expires_delta,
     }
     payload.update(claims)
     return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
@@ -48,7 +48,13 @@ def create_access_token(subject: str, **claims: Any) -> str:
 def create_refresh_token(subject: str, token_id: str, **claims: Any) -> str:
     """Create refresh token."""
     expires = timedelta(days=settings.refresh_token_expire_days)
-    return _create_token(subject=subject, expires_delta=expires, token_type="refresh", jti=token_id, **claims)
+    return _create_token(
+        subject=subject,
+        expires_delta=expires,
+        token_type="refresh",
+        jti=token_id,
+        **claims,
+    )
 
 
 def decode_token(token: str) -> dict[str, Any]:
@@ -56,4 +62,7 @@ def decode_token(token: str) -> dict[str, Any]:
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        ) from exc

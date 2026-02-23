@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy import DateTime, ForeignKey
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, BaseModelMixin
@@ -21,7 +22,11 @@ class AvailabilitySlot(BaseModelMixin, Base):
 
     __tablename__ = "availability_slots"
 
-    teacher_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    teacher_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     created_by_admin_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
@@ -36,4 +41,4 @@ class AvailabilitySlot(BaseModelMixin, Base):
         index=True,
     )
 
-    booking: Mapped["Booking | None"] = relationship(back_populates="slot", uselist=False)
+    booking: Mapped[Booking | None] = relationship(back_populates="slot", uselist=False)

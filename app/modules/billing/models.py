@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, BaseModelMixin
@@ -23,7 +24,11 @@ class LessonPackage(BaseModelMixin, Base):
 
     __tablename__ = "lesson_packages"
 
-    student_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     lessons_total: Mapped[int] = mapped_column(nullable=False)
     lessons_left: Mapped[int] = mapped_column(nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -33,9 +38,12 @@ class LessonPackage(BaseModelMixin, Base):
         nullable=False,
     )
 
-    student: Mapped["User"] = relationship()
-    bookings: Mapped[list["Booking"]] = relationship(back_populates="package")
-    payments: Mapped[list["Payment"]] = relationship(back_populates="package", cascade="all, delete-orphan")
+    student: Mapped[User] = relationship()
+    bookings: Mapped[list[Booking]] = relationship(back_populates="package")
+    payments: Mapped[list[Payment]] = relationship(
+        back_populates="package",
+        cascade="all, delete-orphan",
+    )
 
 
 class Payment(BaseModelMixin, Base):
@@ -43,7 +51,10 @@ class Payment(BaseModelMixin, Base):
 
     __tablename__ = "payments"
 
-    package_id: Mapped[UUID] = mapped_column(ForeignKey("lesson_packages.id", ondelete="CASCADE"), nullable=False)
+    package_id: Mapped[UUID] = mapped_column(
+        ForeignKey("lesson_packages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
     status: Mapped[PaymentStatusEnum] = mapped_column(

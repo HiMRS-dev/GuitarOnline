@@ -45,7 +45,11 @@ class SchedulingService:
         offset: int,
     ) -> tuple[list[AvailabilitySlot], int]:
         """List open slots with pagination."""
-        return await self.repository.list_open_slots(teacher_id=teacher_id, limit=limit, offset=offset)
+        return await self.repository.list_open_slots(
+            teacher_id=teacher_id,
+            limit=limit,
+            offset=offset,
+        )
 
     async def get_slot_for_booking(self, slot_id: UUID) -> AvailabilitySlot:
         """Return slot that can be used for booking hold."""
@@ -69,6 +73,8 @@ class SchedulingService:
         await self.repository.set_slot_status(slot, SlotStatusEnum.OPEN)
 
 
-async def get_scheduling_service(session: AsyncSession = Depends(get_db_session)) -> SchedulingService:
+async def get_scheduling_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> SchedulingService:
     """Dependency provider for scheduling service."""
     return SchedulingService(SchedulingRepository(session))

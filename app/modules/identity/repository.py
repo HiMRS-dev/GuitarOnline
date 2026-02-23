@@ -50,7 +50,12 @@ class IdentityRepository:
         await self.session.refresh(user, attribute_names=["role"])
         return user
 
-    async def create_refresh_token(self, user_id: UUID, token_id: str, expires_at: datetime) -> RefreshToken:
+    async def create_refresh_token(
+        self,
+        user_id: UUID,
+        token_id: str,
+        expires_at: datetime,
+    ) -> RefreshToken:
         refresh_token = RefreshToken(user_id=user_id, token_id=token_id, expires_at=expires_at)
         self.session.add(refresh_token)
         await self.session.flush()

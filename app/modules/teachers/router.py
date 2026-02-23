@@ -7,7 +7,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, status
 
 from app.modules.identity.service import get_current_user
-from app.modules.teachers.schemas import TeacherProfileCreate, TeacherProfileRead, TeacherProfileUpdate
+from app.modules.teachers.schemas import (
+    TeacherProfileCreate,
+    TeacherProfileRead,
+    TeacherProfileUpdate,
+)
 from app.modules.teachers.service import TeachersService, get_teachers_service
 from app.shared.pagination import Page, build_page, get_pagination_params
 

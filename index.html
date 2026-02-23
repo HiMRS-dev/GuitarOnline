@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GuitarOnline Workspace</title>
+    <title>GuitarOnline Рабочее пространство</title>
     <style>
       :root {
         --bg1: #e8f2ff;
@@ -100,26 +100,26 @@
   <body>
     <main class="wrap">
       <section class="card">
-        <h1>GuitarOnline Backend Workspace</h1>
+        <h1>GuitarOnline Рабочее пространство backend</h1>
         <p>
-          This page is served by VS Code Live Server (<code>:5500</code>). The API itself runs on
+          Эта страница отдается через VS Code Live Server (<code>:5500</code>). Сам API работает на
           <code>:8000</code>.
         </p>
 
         <div class="hint">
-          If API links do not open, start backend first (for example:
+          Если ссылки API не открываются, сначала запустите backend (например:
           <code>docker compose up --build</code>).
         </div>
 
         <div class="links">
-          <a href="http://127.0.0.1:8000/" target="_blank" rel="noreferrer">Open API Landing</a>
-          <a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Open Swagger Docs</a>
-          <a href="http://127.0.0.1:8000/health" target="_blank" rel="noreferrer">Open Health Probe</a>
-          <a href="http://127.0.0.1:8000/ready" target="_blank" rel="noreferrer">Open Readiness Probe</a>
-          <a href="http://127.0.0.1:8000/metrics" target="_blank" rel="noreferrer">Open Metrics</a>
+          <a href="http://127.0.0.1:8000/" target="_blank" rel="noreferrer">Открыть стартовую API</a>
+          <a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Открыть Swagger Docs</a>
+          <a href="http://127.0.0.1:8000/health" target="_blank" rel="noreferrer">Открыть Health</a>
+          <a href="http://127.0.0.1:8000/ready" target="_blank" rel="noreferrer">Открыть Ready</a>
+          <a href="http://127.0.0.1:8000/metrics" target="_blank" rel="noreferrer">Открыть метрики</a>
         </div>
 
-        <div class="status" id="status">Checking API health...</div>
+        <div class="status" id="status">Проверяю состояние API...</div>
       </section>
     </main>
 
@@ -129,10 +129,10 @@
       async function checkApi() {
         try {
           await fetch("http://127.0.0.1:8000/health", { mode: "no-cors", cache: "no-store" });
-          statusNode.textContent = "API status: reachable (check /health for exact response)";
+          statusNode.textContent = "Статус API: доступен (точный ответ смотрите в /health)";
           statusNode.className = "status ok";
         } catch (_) {
-          statusNode.textContent = "API status: not reachable on 127.0.0.1:8000";
+          statusNode.textContent = "Статус API: недоступен на 127.0.0.1:8000";
           statusNode.className = "status bad";
         }
       }

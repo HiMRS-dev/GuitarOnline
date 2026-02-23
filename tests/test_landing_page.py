@@ -12,6 +12,7 @@ async def test_landing_page_contains_navigation_links() -> None:
 
     assert response.status_code == 200
     assert "GuitarOnline API" in payload
+    assert "Сервис backend запущен" in payload
     assert 'href="/docs"' in payload
     assert 'href="/health"' in payload
     assert 'href="/ready"' in payload

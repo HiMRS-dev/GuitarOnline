@@ -34,7 +34,7 @@ def _landing_page_html() -> str:
     """Build minimal landing page for root path."""
     return f"""
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -102,14 +102,14 @@ def _landing_page_html() -> str:
     <main class="container">
       <section class="hero">
         <h1>{settings.app_name} API</h1>
-        <p>Backend service is running. Use links below to access docs and probes.</p>
+        <p>Сервис backend запущен. Используйте ссылки ниже для доступа к документации и пробам.</p>
         <div class="links">
-          <a href="/docs">API Docs</a>
-          <a href="/health">Health</a>
-          <a href="/ready">Readiness</a>
-          <a href="/metrics">Metrics</a>
+          <a href="/docs">Документация API</a>
+          <a href="/health">Проверка Health</a>
+          <a href="/ready">Проверка Ready</a>
+          <a href="/metrics">Метрики</a>
         </div>
-        <code>Base API prefix: {settings.api_prefix}</code>
+        <code>Базовый префикс API: {settings.api_prefix}</code>
       </section>
     </main>
   </body>

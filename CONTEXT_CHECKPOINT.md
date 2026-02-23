@@ -447,3 +447,8 @@ Status: completed (2026-02-23).
     - `index.html` at repo root (`http://127.0.0.1:5500/`),
     - includes quick links to API endpoints on `127.0.0.1:8000`.
   - updated `README.md` quick-start links.
+- Russian UI localization follow-up completed:
+  - translated user-facing texts to Russian for:
+    - API landing page (`GET /`) in `app/main.py`,
+    - VS Code Live Server helper page `index.html`.
+  - updated landing-page test coverage in `tests/test_landing_page.py`.

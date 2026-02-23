@@ -13,8 +13,6 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from app.core.security import create_access_token
-
 API_BASE_URL = os.getenv("INTEGRATION_BASE_URL", "http://localhost:8000/api/v1").rstrip("/")
 HEALTHCHECK_URL = os.getenv("INTEGRATION_HEALTH_URL", "http://localhost:8000/health")
 DB_DSN = os.getenv("INTEGRATION_DB_DSN", "postgresql://postgres:postgres@localhost:5432/guitaronline")
@@ -45,37 +43,28 @@ def _future_range(hours_from_now: int, duration_minutes: int = 60) -> tuple[str,
 
 
 async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
-    try:
-        connection = await asyncpg.connect(DB_DSN)
-    except Exception as exc:
-        pytest.skip(f"PostgreSQL is unavailable for integration user setup: {exc}")
-        return AuthUser(id=uuid4(), access_token="")
+    email = f"{role}-{uuid4().hex}@guitaronline.dev"
+    password = "StrongPass123!"
 
-    try:
-        role_id = await connection.fetchval("SELECT id FROM roles WHERE name = $1", role.upper())
-        if role_id is None:
-            raise AssertionError(f"Role '{role}' not found in DB")
+    register_response = await client.post(
+        "/identity/auth/register",
+        json={
+            "email": email,
+            "password": password,
+            "timezone": "UTC",
+            "role": role,
+        },
+    )
+    _assert_status(register_response, 201)
+    user_id = UUID(register_response.json()["id"])
 
-        user_id = uuid4()
-        now = datetime.now(UTC)
-        email = f"{role}-{uuid4().hex}@guitaronline.dev"
-        await connection.execute(
-            "INSERT INTO users "
-            "(id, created_at, updated_at, email, password_hash, timezone, is_active, role_id) "
-            "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-            user_id,
-            now,
-            now,
-            email,
-            "integration-not-used",
-            "UTC",
-            True,
-            role_id,
-        )
-    finally:
-        await connection.close()
+    login_response = await client.post(
+        "/identity/auth/login",
+        json={"email": email, "password": password},
+    )
+    _assert_status(login_response, 200)
+    access_token = login_response.json()["access_token"]
 
-    access_token = create_access_token(subject=str(user_id), role=role)
     return AuthUser(id=user_id, access_token=access_token)
 
 

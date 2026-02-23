@@ -181,6 +181,7 @@ Status: done locally (pending baseline commit).
     5. hold expiration releases slot.
   - verified against running Docker stack: `5 passed`.
   - full test suite status: `10 passed`.
-- New risk discovered during Step C:
-  - `/api/v1/identity/auth/register` returns `500` in container due `passlib+bcrypt` backend issue (`ValueError: password cannot be longer than 72 bytes`).
-  - integration tests currently provision users directly in DB + JWT to isolate booking/billing flows from this blocker.
+- Runtime auth risk resolved:
+  - fixed `passlib+bcrypt` incompatibility by pinning `bcrypt=4.0.1` in `pyproject.toml`/`poetry.lock`.
+  - verified `/api/v1/identity/auth/register` returns `201` in dockerized app after rebuild.
+  - integration tests now use real `register + login` flow again.

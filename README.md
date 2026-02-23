@@ -24,6 +24,8 @@ Production-ready modular monolith backend for an online guitar school.
 
 - Start production-oriented compose stack:
   - `docker compose -f docker-compose.prod.yml up --build -d`
+- Optional warmup for flaky networks (pull images with retries before deploy):
+  - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1`
 - Included services:
   - `db` (PostgreSQL),
   - `redis` (shared auth rate-limiter state),
@@ -120,3 +122,9 @@ Production-ready modular monolith backend for an online guitar school.
   - `powershell -ExecutionPolicy Bypass -File scripts/db_backup.ps1 -OutputFile backups/manual.sql`
 - Restore DB from backup file:
   - `powershell -ExecutionPolicy Bypass -File scripts/db_restore.ps1 -InputFile backups/manual.sql`
+
+## Docker Network Mitigation
+
+- If Docker Hub pulls are unstable, pre-pull core runtime images with retries:
+  - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1 -MaxRetries 6 -InitialDelaySeconds 3`
+- Production compose uses `pull_policy: if_not_present` for external images to reduce unnecessary pull attempts.

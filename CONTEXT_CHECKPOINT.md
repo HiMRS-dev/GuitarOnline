@@ -71,7 +71,10 @@
 
 ## 6) Known Risks / Open Technical Debt
 - Docker Hub connectivity is still flaky in this environment:
-  - mitigated by `mirror.gcr.io`, but still an external dependency.
+  - mitigated by `mirror.gcr.io`,
+  - mitigated in-repo by `scripts/docker_warmup.ps1` (pull with retries) and
+    `pull_policy: if_not_present` in `docker-compose.prod.yml`,
+  - still an external dependency and cannot be fully eliminated at repo level.
 - Identity rate limiting now supports shared Redis backend:
   - `AUTH_RATE_LIMIT_BACKEND=redis` uses cross-instance limiter state via Redis,
   - fallback `memory` backend remains process-local and should be used only for dev/single-instance mode,
@@ -402,3 +405,9 @@ Status: completed (2026-02-23).
     - `.env.example` includes `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`,
     - `README.md` includes monitoring stack usage and endpoints.
   - latest local suite status: `53 passed, 5 skipped` (`tests/test_booking_billing_integration.py` skipped because local integration stack was unavailable).
+- Docker pull resilience follow-up completed:
+  - added warmup script with retry/backoff for core runtime images:
+    - `scripts/docker_warmup.ps1`.
+  - production compose now uses `pull_policy: if_not_present` for external image services
+    (`db`, `redis`, `prometheus`, `alertmanager`, `grafana`).
+  - `README.md` updated with warmup and network mitigation runbook.

@@ -331,4 +331,9 @@ Status: in progress (started 2026-02-23).
   - updated `README.md` with:
     - liveness/readiness probe usage,
     - backup/restore operational commands.
-  - latest local suite status: `46 passed`.
+  - added deployment baseline compose profile: `docker-compose.prod.yml`:
+    - `db`,
+    - `app`,
+    - `outbox-worker`.
+  - updated `README.md` with production compose bring-up and migration command.
+  - latest local suite status: `48 passed`.

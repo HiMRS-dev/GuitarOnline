@@ -15,6 +15,17 @@ Production-ready modular monolith backend for an online guitar school.
    - liveness: `http://localhost:8000/health`
    - readiness (DB-aware): `http://localhost:8000/ready`
 
+## Deployment Baseline
+
+- Start production-oriented compose stack:
+  - `docker compose -f docker-compose.prod.yml up --build -d`
+- Included services:
+  - `db` (PostgreSQL),
+  - `app` (FastAPI API),
+  - `outbox-worker` (notifications outbox consumer loop).
+- Apply migrations after deploy:
+  - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
+
 ## Migrations
 
 - Create revision:

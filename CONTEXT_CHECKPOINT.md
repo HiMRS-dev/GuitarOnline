@@ -28,6 +28,7 @@
   - `tests/test_identity_rate_limit.py` (identity endpoint rate-limit dependencies).
   - `tests/test_health_readiness.py` (readiness probe behavior).
   - `tests/test_metrics_observability.py` (Prometheus metrics endpoint and instrumentation).
+  - `tests/test_landing_page.py` (root landing page content and links).
   - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
@@ -436,3 +437,8 @@ Status: completed (2026-02-23).
   - added receiver template for Slack/PagerDuty/email:
     - `ops/alertmanager/alertmanager.receivers.example.yml`.
   - `README.md` now documents receiver onboarding flow.
+- Root UX baseline follow-up completed:
+  - added start landing page endpoint:
+    - `GET /` now returns HTML navigation page (docs/health/ready/metrics),
+    - reduces "folder listing" impression when opening service root.
+  - covered by `tests/test_landing_page.py`.

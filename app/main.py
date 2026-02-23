@@ -6,6 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 
 from app.core.config import get_settings
@@ -27,6 +28,93 @@ from app.shared.utils import utc_now
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+def _landing_page_html() -> str:
+    """Build minimal landing page for root path."""
+    return f"""
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{settings.app_name} API</title>
+    <style>
+      :root {{
+        color-scheme: light;
+      }}
+      body {{
+        margin: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: linear-gradient(135deg, #f3f8ff 0%, #eef4f0 100%);
+        color: #1c2a34;
+      }}
+      .container {{
+        max-width: 860px;
+        margin: 48px auto;
+        padding: 0 20px;
+      }}
+      .hero {{
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #dce7ea;
+        box-shadow: 0 10px 28px rgba(20, 31, 46, 0.08);
+        padding: 28px;
+      }}
+      h1 {{
+        margin: 0 0 12px;
+        font-size: 2rem;
+      }}
+      p {{
+        margin: 0;
+        line-height: 1.5;
+      }}
+      .links {{
+        margin-top: 22px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+      }}
+      a {{
+        display: block;
+        text-decoration: none;
+        border-radius: 10px;
+        border: 1px solid #c6d7db;
+        background: #f9fcff;
+        color: #16384a;
+        padding: 10px 12px;
+      }}
+      a:hover {{
+        border-color: #93b2ba;
+        background: #f0f8ff;
+      }}
+      code {{
+        display: inline-block;
+        margin-top: 10px;
+        font-size: 0.9rem;
+        background: #f0f4f6;
+        border-radius: 6px;
+        padding: 4px 6px;
+      }}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section class="hero">
+        <h1>{settings.app_name} API</h1>
+        <p>Backend service is running. Use links below to access docs and probes.</p>
+        <div class="links">
+          <a href="/docs">API Docs</a>
+          <a href="/health">Health</a>
+          <a href="/ready">Readiness</a>
+          <a href="/metrics">Metrics</a>
+        </div>
+        <code>Base API prefix: {settings.api_prefix}</code>
+      </section>
+    </main>
+  </body>
+</html>
+"""
 
 
 @asynccontextmanager
@@ -73,6 +161,12 @@ app.include_router(lessons_router, prefix=settings.api_prefix)
 app.include_router(notifications_router, prefix=settings.api_prefix)
 app.include_router(admin_router, prefix=settings.api_prefix)
 app.include_router(audit_router, prefix=settings.api_prefix)
+
+
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+async def landing_page() -> HTMLResponse:
+    """Root page with quick navigation links."""
+    return HTMLResponse(content=_landing_page_html())
 
 
 @app.get("/health")

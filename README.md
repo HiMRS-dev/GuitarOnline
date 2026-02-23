@@ -16,6 +16,7 @@ Production-ready modular monolith backend for an online guitar school.
 3. Open docs:
    - `http://localhost:8000/docs`
    - root landing page: `http://localhost:8000/`
+   - VS Code Live Server helper page: `http://127.0.0.1:5500/`
 4. Probes:
    - liveness: `http://localhost:8000/health`
    - readiness (DB-aware): `http://localhost:8000/ready`

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GuitarOnline Workspace</title>
+    <style>
+      :root {
+        --bg1: #e8f2ff;
+        --bg2: #eef8ef;
+        --text: #1b2b35;
+        --card: #ffffff;
+        --line: #cddce2;
+        --accent: #1f6fa0;
+        --accent-hover: #18597f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: var(--text);
+        background: linear-gradient(140deg, var(--bg1) 0%, var(--bg2) 100%);
+      }
+
+      .wrap {
+        max-width: 900px;
+        margin: 48px auto;
+        padding: 0 20px;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: 0 14px 28px rgba(23, 34, 48, 0.08);
+        padding: 26px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 2rem;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.5;
+      }
+
+      .hint {
+        margin-top: 12px;
+        padding: 10px 12px;
+        border: 1px dashed #9bb3bc;
+        border-radius: 10px;
+        background: #f7fbff;
+        font-size: 0.95rem;
+      }
+
+      .links {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+      }
+
+      a {
+        display: block;
+        text-decoration: none;
+        border: 1px solid #b3c7cf;
+        border-radius: 10px;
+        padding: 10px 12px;
+        color: var(--accent);
+        background: #f8fcff;
+        transition: 0.15s ease;
+      }
+
+      a:hover {
+        color: #ffffff;
+        background: var(--accent-hover);
+        border-color: var(--accent-hover);
+      }
+
+      .status {
+        margin-top: 18px;
+        font-size: 0.95rem;
+      }
+
+      .ok {
+        color: #1f7a3f;
+      }
+
+      .bad {
+        color: #b13b3b;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="card">
+        <h1>GuitarOnline Backend Workspace</h1>
+        <p>
+          This page is served by VS Code Live Server (<code>:5500</code>). The API itself runs on
+          <code>:8000</code>.
+        </p>
+
+        <div class="hint">
+          If API links do not open, start backend first (for example:
+          <code>docker compose up --build</code>).
+        </div>
+
+        <div class="links">
+          <a href="http://127.0.0.1:8000/" target="_blank" rel="noreferrer">Open API Landing</a>
+          <a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Open Swagger Docs</a>
+          <a href="http://127.0.0.1:8000/health" target="_blank" rel="noreferrer">Open Health Probe</a>
+          <a href="http://127.0.0.1:8000/ready" target="_blank" rel="noreferrer">Open Readiness Probe</a>
+          <a href="http://127.0.0.1:8000/metrics" target="_blank" rel="noreferrer">Open Metrics</a>
+        </div>
+
+        <div class="status" id="status">Checking API health...</div>
+      </section>
+    </main>
+
+    <script>
+      const statusNode = document.getElementById("status");
+
+      async function checkApi() {
+        try {
+          await fetch("http://127.0.0.1:8000/health", { mode: "no-cors", cache: "no-store" });
+          statusNode.textContent = "API status: reachable (check /health for exact response)";
+          statusNode.className = "status ok";
+        } catch (_) {
+          statusNode.textContent = "API status: not reachable on 127.0.0.1:8000";
+          statusNode.className = "status bad";
+        }
+      }
+
+      checkApi();
+    </script>
+  </body>
+</html>

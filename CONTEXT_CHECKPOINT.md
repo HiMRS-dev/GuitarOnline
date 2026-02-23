@@ -442,3 +442,8 @@ Status: completed (2026-02-23).
     - `GET /` now returns HTML navigation page (docs/health/ready/metrics),
     - reduces "folder listing" impression when opening service root.
   - covered by `tests/test_landing_page.py`.
+- Live Server root helper follow-up completed:
+  - added static root page for VS Code `Go Live` usage:
+    - `index.html` at repo root (`http://127.0.0.1:5500/`),
+    - includes quick links to API endpoints on `127.0.0.1:8000`.
+  - updated `README.md` quick-start links.

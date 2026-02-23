@@ -68,9 +68,9 @@
   - `ruff check app tests` has legacy findings outside recently changed files.
 - Docker Hub connectivity is still flaky in this environment:
   - mitigated by `mirror.gcr.io`, but still an external dependency.
-- CI is now present for test automation, but still minimal:
-  - current workflow runs pytest only.
-  - lint/migration/integration gates are not enforced yet.
+- CI gates are improved but still partial:
+  - workflow now runs scoped lint, pytest, and migration upgrade checks.
+  - full repo-wide lint baseline and dedicated integration environment gates are not enforced yet.
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -265,3 +265,10 @@ Status: in progress (started 2026-02-23).
     - each KPI view writes `admin.kpi.view` action into `admin_actions`.
   - covered by `tests/test_admin_kpi_overview.py`.
   - latest local suite status: `36 passed`.
+- Phase 5 CI hardening (partial):
+  - updated `.github/workflows/ci.yml` with separate jobs:
+    - `lint` (scoped `ruff check` over stable modules/tests),
+    - `test` (`pytest -q`),
+    - `migration` (`alembic upgrade head` against PostgreSQL service).
+  - remaining gap:
+    - CI still does not run full HTTP integration suite in a dedicated stack.

@@ -33,6 +33,8 @@ class AuthUsers:
 
 
 _CACHED_AUTH_USERS: AuthUsers | None = None
+_INTEGRATION_STACK_HEALTHY: bool | None = None
+_INTEGRATION_STACK_ERROR: str | None = None
 
 
 def _assert_status(response: httpx.Response, expected_status: int) -> None:
@@ -207,18 +209,32 @@ async def _force_hold_expired(booking_id: UUID) -> None:
 
 @pytest_asyncio.fixture()
 async def api_client() -> AsyncIterator[httpx.AsyncClient]:
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as probe:
-        try:
-            health_response = await probe.get(HEALTHCHECK_URL)
-        except httpx.HTTPError as exc:
-            pytest.skip(f"Integration stack unavailable at {HEALTHCHECK_URL}: {exc}")
-            return
-        if health_response.status_code != 200:
-            pytest.skip(
-                f"Integration stack returned {health_response.status_code} "
-                f"for {HEALTHCHECK_URL}",
-            )
-            return
+    global _INTEGRATION_STACK_HEALTHY, _INTEGRATION_STACK_ERROR  # noqa: PLW0603 - cached probe state
+
+    if _INTEGRATION_STACK_HEALTHY is None:
+        probe_timeout_seconds = min(REQUEST_TIMEOUT_SECONDS, 3.0)
+        async with httpx.AsyncClient(timeout=probe_timeout_seconds) as probe:
+            try:
+                health_response = await probe.get(HEALTHCHECK_URL)
+            except httpx.HTTPError as exc:
+                _INTEGRATION_STACK_HEALTHY = False
+                _INTEGRATION_STACK_ERROR = (
+                    f"Integration stack unavailable at {HEALTHCHECK_URL}: {exc}"
+                )
+            else:
+                if health_response.status_code != 200:
+                    _INTEGRATION_STACK_HEALTHY = False
+                    _INTEGRATION_STACK_ERROR = (
+                        f"Integration stack returned {health_response.status_code} "
+                        f"for {HEALTHCHECK_URL}"
+                    )
+                else:
+                    _INTEGRATION_STACK_HEALTHY = True
+                    _INTEGRATION_STACK_ERROR = None
+
+    if not _INTEGRATION_STACK_HEALTHY:
+        pytest.skip(_INTEGRATION_STACK_ERROR or "Integration stack is unavailable")
+        return
 
     async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS) as client:
         yield client

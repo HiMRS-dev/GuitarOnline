@@ -83,7 +83,8 @@
   - `X-Forwarded-For` is trusted only from configured proxies (`AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`).
 - Monitoring stack remains lightweight:
   - Prometheus + Alertmanager + Grafana baseline is wired in production compose,
-  - external on-call receivers (Slack/PagerDuty/email) are not configured yet.
+  - external on-call receivers (Slack/PagerDuty/email) are not configured yet,
+  - onboarding template is prepared at `ops/alertmanager/alertmanager.receivers.example.yml`.
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -411,3 +412,21 @@ Status: completed (2026-02-23).
   - production compose now uses `pull_policy: if_not_present` for external image services
     (`db`, `redis`, `prometheus`, `alertmanager`, `grafana`).
   - `README.md` updated with warmup and network mitigation runbook.
+- Ops config validation follow-up completed:
+  - added local validation script:
+    - `scripts/validate_ops_configs.ps1`.
+  - CI now validates ops configs in dedicated `ops-config` job:
+    - `docker compose -f docker-compose.prod.yml config -q`,
+    - `promtool check config` + `promtool check rules`,
+    - `amtool check-config` for Alertmanager.
+  - `README.md` updated with ops config validation runbook.
+- Integration test runtime hardening follow-up completed:
+  - `tests/test_booking_billing_integration.py` now caches stack health probe result,
+    so when local stack is unavailable tests skip quickly without repeating full timeout per test.
+  - current local measurement:
+    - `tests/test_booking_billing_integration.py` completes as `5 skipped` in ~`3.6s`
+      when `INTEGRATION_HEALTH_URL` is unavailable.
+- Alert receiver onboarding follow-up completed:
+  - added receiver template for Slack/PagerDuty/email:
+    - `ops/alertmanager/alertmanager.receivers.example.yml`.
+  - `README.md` now documents receiver onboarding flow.

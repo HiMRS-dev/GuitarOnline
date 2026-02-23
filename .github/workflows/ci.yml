@@ -25,9 +25,34 @@ jobs:
       - name: Run lint checks
         run: poetry run ruff check app tests
 
-  test:
+  ops-config:
     runs-on: ubuntu-latest
     needs: [lint]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate production compose syntax
+        run: docker compose -f docker-compose.prod.yml config -q
+
+      - name: Validate Prometheus config
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+
+      - name: Validate Prometheus alert rules
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
+
+      - name: Validate Alertmanager config
+        run: |
+          docker run --rm --entrypoint amtool -v "$PWD/ops/alertmanager:/etc/alertmanager:ro" \
+            prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
+
+  test:
+    runs-on: ubuntu-latest
+    needs: [lint, ops-config]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,7 +73,7 @@ jobs:
 
   migration:
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: [lint, ops-config]
     services:
       postgres:
         image: postgres:16

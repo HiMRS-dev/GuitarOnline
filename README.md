@@ -91,6 +91,15 @@ Production-ready modular monolith backend for an online guitar school.
   - 5xx ratio > 5% for 5m,
   - p95 latency > 1s for 10m.
 
+## Alert Receiver Onboarding
+
+- Current Alertmanager baseline receiver is local (`default-log`) and safe by default.
+- For real on-call routing, use template:
+  - `ops/alertmanager/alertmanager.receivers.example.yml`
+- Add required receiver blocks to:
+  - `ops/alertmanager/alertmanager.yml`
+- Then update Alertmanager `route`/`routes` to map severities (`warning`/`critical`) to your real receivers.
+
 ## Admin Operations
 
 - Admin KPI overview endpoint:
@@ -128,3 +137,12 @@ Production-ready modular monolith backend for an online guitar school.
 - If Docker Hub pulls are unstable, pre-pull core runtime images with retries:
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1 -MaxRetries 6 -InitialDelaySeconds 3`
 - Production compose uses `pull_policy: if_not_present` for external images to reduce unnecessary pull attempts.
+
+## Ops Config Validation
+
+- Validate production ops config bundle locally:
+  - `powershell -ExecutionPolicy Bypass -File scripts/validate_ops_configs.ps1`
+- Validation includes:
+  - `docker-compose.prod.yml` syntax,
+  - Prometheus config and alert rules (`promtool`),
+  - Alertmanager config (`amtool`).

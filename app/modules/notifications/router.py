@@ -49,7 +49,11 @@ async def list_my_notifications(
     current_user=Depends(get_current_user),
 ) -> Page[NotificationRead]:
     """List notifications for current user."""
-    items, total = await service.list_my_notifications(current_user, pagination.limit, pagination.offset)
+    items, total = await service.list_my_notifications(
+        current_user,
+        pagination.limit,
+        pagination.offset,
+    )
     serialized = [NotificationRead.model_validate(item) for item in items]
     return build_page(serialized, total, pagination)
 

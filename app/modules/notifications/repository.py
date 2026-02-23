@@ -18,7 +18,13 @@ class NotificationsRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def create_notification(self, user_id: UUID, channel: str, title: str, body: str) -> Notification:
+    async def create_notification(
+        self,
+        user_id: UUID,
+        channel: str,
+        title: str,
+        body: str,
+    ) -> Notification:
         notification = Notification(user_id=user_id, channel=channel, title=title, body=body)
         self.session.add(notification)
         await self.session.flush()
@@ -28,8 +34,15 @@ class NotificationsRepository:
         stmt = select(Notification).where(Notification.id == notification_id)
         return await self.session.scalar(stmt)
 
-    async def list_notifications_for_user(self, user_id: UUID, limit: int, offset: int) -> tuple[list[Notification], int]:
-        base_stmt: Select[tuple[Notification]] = select(Notification).where(Notification.user_id == user_id)
+    async def list_notifications_for_user(
+        self,
+        user_id: UUID,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Notification], int]:
+        base_stmt: Select[tuple[Notification]] = select(Notification).where(
+            Notification.user_id == user_id,
+        )
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
         total = int((await self.session.scalar(count_stmt)) or 0)
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -29,6 +30,41 @@ class BillingService:
     ) -> None:
         self.repository = repository
         self.audit_repository = audit_repository
+
+    async def _expire_package(
+        self,
+        package: LessonPackage,
+        *,
+        actor_id: UUID | None,
+        now: datetime,
+        trigger: str,
+    ) -> None:
+        """Expire package and emit audit/outbox once."""
+        if package.status == PackageStatusEnum.EXPIRED:
+            return
+
+        await self.repository.set_package_status(package, PackageStatusEnum.EXPIRED)
+        await self.audit_repository.create_audit_log(
+            actor_id=actor_id,
+            action="billing.package.expire",
+            entity_type="lesson_package",
+            entity_id=str(package.id),
+            payload={
+                "student_id": str(package.student_id),
+                "expired_at": now.isoformat(),
+                "trigger": trigger,
+            },
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(package.id),
+            event_type="billing.package.expired",
+            payload={
+                "package_id": str(package.id),
+                "student_id": str(package.student_id),
+                "trigger": trigger,
+            },
+        )
 
     async def create_package(self, payload: PackageCreate, actor: User) -> LessonPackage:
         """Create lessons package for a student."""
@@ -91,9 +127,17 @@ class BillingService:
         if package.student_id != student_id:
             raise UnauthorizedException("Package does not belong to current student")
 
-        if package.expires_at <= utc_now():
-            if package.status != PackageStatusEnum.EXPIRED:
-                await self.repository.set_package_status(package, PackageStatusEnum.EXPIRED)
+        now = utc_now()
+        is_expired = package.expires_at <= now
+        if package.status == PackageStatusEnum.ACTIVE and is_expired:
+            await self._expire_package(
+                package,
+                actor_id=None,
+                now=now,
+                trigger="active_package_check",
+            )
+
+        if is_expired:
             raise BusinessRuleException("Package is expired")
 
         if package.status != PackageStatusEnum.ACTIVE:
@@ -124,25 +168,11 @@ class BillingService:
         now = utc_now()
         packages = await self.repository.find_packages_to_expire(now)
         for package in packages:
-            await self.repository.set_package_status(package, PackageStatusEnum.EXPIRED)
-            await self.audit_repository.create_audit_log(
+            await self._expire_package(
+                package,
                 actor_id=actor.id,
-                action="billing.package.expire",
-                entity_type="lesson_package",
-                entity_id=str(package.id),
-                payload={
-                    "student_id": str(package.student_id),
-                    "expired_at": now.isoformat(),
-                },
-            )
-            await self.audit_repository.create_outbox_event(
-                aggregate_type="billing",
-                aggregate_id=str(package.id),
-                event_type="billing.package.expired",
-                payload={
-                    "package_id": str(package.id),
-                    "student_id": str(package.student_id),
-                },
+                now=now,
+                trigger="admin_expire_packages",
             )
         return len(packages)
 
@@ -157,6 +187,20 @@ class BillingService:
 
         if actor.role.name == RoleEnum.STUDENT and package.student_id != actor.id:
             raise UnauthorizedException("Students can pay only their packages")
+
+        now = utc_now()
+        is_expired = package.expires_at <= now
+        if package.status == PackageStatusEnum.ACTIVE and is_expired:
+            await self._expire_package(
+                package,
+                actor_id=actor.id,
+                now=now,
+                trigger="payment_creation_check",
+            )
+        if is_expired:
+            raise BusinessRuleException("Package is expired")
+        if package.status != PackageStatusEnum.ACTIVE:
+            raise BusinessRuleException("Package is not active")
 
         payment = await self.repository.create_payment(
             package_id=payload.package_id,

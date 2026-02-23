@@ -1,4 +1,4 @@
-# GuitarOnline Context Checkpoint (2026-02-19, EOD)
+# GuitarOnline Context Checkpoint (Updated 2026-02-23)
 
 ## 1) Product Context
 - Project: backend for an online guitar learning platform (modular monolith).
@@ -82,7 +82,7 @@ If any startup issue:
 
 ## 8) Exact Plan For Next Session (In Order)
 
-### Step A: Baseline commit (infra + tests)
+### Step A: Baseline commit (infra + tests) (Completed 2026-02-23)
 Goal: freeze stable local baseline before new functional changes.
 
 Tasks:
@@ -132,7 +132,7 @@ Acceptance:
 ## 9) Full Platform Roadmap (Execution Backbone)
 
 ### Phase 0: Stable baseline
-Status: done locally (pending baseline commit).
+Status: completed (2026-02-23).
 
 ### Phase 1: Core domain coherence
 Status: completed (2026-02-23).
@@ -141,10 +141,10 @@ Status: completed (2026-02-23).
 - Idempotency guards for critical transitions.
 
 ### Phase 2: Billing hardening
-Status: in progress (started 2026-02-23).
-- Payment status workflows + reconciliation paths. (partially completed)
-- Package expiration job/logic and edge-case handling. (partially completed)
-- Better audit coverage for financial actions. (partially completed)
+Status: completed (2026-02-23).
+- Payment status workflows + reconciliation paths. (completed)
+- Package expiration job/logic and edge-case handling. (completed)
+- Better audit coverage for financial actions. (completed)
 
 ### Phase 3: Notifications pipeline
 - Status: completed (2026-02-23).
@@ -234,3 +234,17 @@ Status: in progress (started 2026-02-23).
     - outbox counters (`pending/processed/failed` + total),
     - retryable failed vs dead-letter failed outbox counts (`max_retries` aware).
   - added coverage in `tests/test_notifications_delivery_metrics.py`.
+- Phase 2 billing hardening completed:
+  - added package auto-expiration helper with consistent audit/outbox emission:
+    - used by `get_active_package`,
+    - used by `create_payment`,
+    - used by `expire_packages`.
+  - improved payment creation guards:
+    - payment is rejected for expired packages,
+    - payment is rejected for non-active packages.
+  - expanded reconciliation/edge-case unit coverage in `tests/test_billing_payment_rules.py`:
+    - `failed -> succeeded` sets `paid_at`,
+    - transitions from `refunded` are rejected,
+    - expired package checks emit `billing.package.expired`,
+    - payment creation against inactive package has no side effects.
+  - latest local suite status: `34 passed`.

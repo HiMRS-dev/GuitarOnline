@@ -74,6 +74,9 @@
   - mitigated by `mirror.gcr.io`,
   - mitigated in-repo by `scripts/docker_warmup.ps1` (pull with retries) and
     `pull_policy: if_not_present` in `docker-compose.prod.yml`,
+  - mitigated by image cache export/import scripts:
+    - `scripts/docker_cache_export.ps1`,
+    - `scripts/docker_cache_import.ps1`,
   - still an external dependency and cannot be fully eliminated at repo level.
 - Identity rate limiting now supports shared Redis backend:
   - `AUTH_RATE_LIMIT_BACKEND=redis` uses cross-instance limiter state via Redis,
@@ -409,9 +412,12 @@ Status: completed (2026-02-23).
 - Docker pull resilience follow-up completed:
   - added warmup script with retry/backoff for core runtime images:
     - `scripts/docker_warmup.ps1`.
+  - added cache portability scripts for offline image reuse:
+    - `scripts/docker_cache_export.ps1`,
+    - `scripts/docker_cache_import.ps1`.
   - production compose now uses `pull_policy: if_not_present` for external image services
     (`db`, `redis`, `prometheus`, `alertmanager`, `grafana`).
-  - `README.md` updated with warmup and network mitigation runbook.
+  - `README.md` updated with warmup/cache/network mitigation runbook.
 - Ops config validation follow-up completed:
   - added local validation script:
     - `scripts/validate_ops_configs.ps1`.

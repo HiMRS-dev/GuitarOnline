@@ -136,6 +136,10 @@ Production-ready modular monolith backend for an online guitar school.
 
 - If Docker Hub pulls are unstable, pre-pull core runtime images with retries:
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1 -MaxRetries 6 -InitialDelaySeconds 3`
+- Export local image cache (for offline reuse on this/another host):
+  - `powershell -ExecutionPolicy Bypass -File scripts/docker_cache_export.ps1 -OutputFile backups/docker_images_cache.tar`
+- Import image cache:
+  - `powershell -ExecutionPolicy Bypass -File scripts/docker_cache_import.ps1 -InputFile backups/docker_images_cache.tar`
 - Production compose uses `pull_policy: if_not_present` for external images to reduce unnecessary pull attempts.
 
 ## Ops Config Validation

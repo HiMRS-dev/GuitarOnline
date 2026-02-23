@@ -67,3 +67,16 @@ class AdminKpiOverviewRead(BaseModel):
     packages_active: int
     packages_expired: int
     packages_canceled: int
+
+
+class AdminOperationsOverviewRead(BaseModel):
+    """Operational snapshot for admin runbook checks."""
+
+    generated_at: datetime
+    max_retries: int
+    outbox_pending: int
+    outbox_failed_retryable: int
+    outbox_failed_dead_letter: int
+    notifications_failed: int
+    stale_booking_holds: int
+    overdue_active_packages: int

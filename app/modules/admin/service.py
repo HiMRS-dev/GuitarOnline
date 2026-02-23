@@ -9,7 +9,11 @@ from app.core.database import get_db_session
 from app.core.enums import RoleEnum
 from app.modules.admin.models import AdminAction
 from app.modules.admin.repository import AdminRepository
-from app.modules.admin.schemas import AdminActionCreate, AdminKpiOverviewRead
+from app.modules.admin.schemas import (
+    AdminActionCreate,
+    AdminKpiOverviewRead,
+    AdminOperationsOverviewRead,
+)
 from app.modules.identity.models import User
 from app.shared.exceptions import UnauthorizedException
 
@@ -58,6 +62,29 @@ class AdminService:
             payload={"generated_at": snapshot["generated_at"].isoformat()},
         )
         return AdminKpiOverviewRead(**snapshot)
+
+    async def get_operations_overview(
+        self,
+        actor: User,
+        *,
+        max_retries: int,
+    ) -> AdminOperationsOverviewRead:
+        """Return operational snapshot for runbook checks."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can view operations overview")
+
+        snapshot = await self.repository.get_operations_overview(max_retries=max_retries)
+        await self.repository.create_action(
+            admin_id=actor.id,
+            action="admin.ops.view",
+            target_type="operations_overview",
+            target_id=None,
+            payload={
+                "generated_at": snapshot["generated_at"].isoformat(),
+                "max_retries": max_retries,
+            },
+        )
+        return AdminOperationsOverviewRead(**snapshot)
 
 
 async def get_admin_service(session: AsyncSession = Depends(get_db_session)) -> AdminService:

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
-from app.modules.admin.schemas import AdminActionCreate, AdminActionRead, AdminKpiOverviewRead
+from app.modules.admin.schemas import (
+    AdminActionCreate,
+    AdminActionRead,
+    AdminKpiOverviewRead,
+    AdminOperationsOverviewRead,
+)
 from app.modules.admin.service import AdminService, get_admin_service
 from app.modules.identity.service import get_current_user
 from app.shared.pagination import Page, build_page, get_pagination_params
@@ -42,3 +47,13 @@ async def get_admin_kpi_overview(
 ) -> AdminKpiOverviewRead:
     """Get admin KPI overview snapshot."""
     return await service.get_kpi_overview(current_user)
+
+
+@router.get("/ops/overview", response_model=AdminOperationsOverviewRead)
+async def get_admin_operations_overview(
+    max_retries: int = Query(default=5, ge=1, le=100),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(get_current_user),
+) -> AdminOperationsOverviewRead:
+    """Get operational overview snapshot."""
+    return await service.get_operations_overview(current_user, max_retries=max_retries)

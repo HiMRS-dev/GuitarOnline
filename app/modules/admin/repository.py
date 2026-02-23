@@ -12,15 +12,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import (
     BookingStatusEnum,
     LessonStatusEnum,
+    NotificationStatusEnum,
+    OutboxStatusEnum,
     PackageStatusEnum,
     PaymentStatusEnum,
     RoleEnum,
 )
 from app.modules.admin.models import AdminAction
+from app.modules.audit.models import OutboxEvent
 from app.modules.billing.models import LessonPackage, Payment
 from app.modules.booking.models import Booking
 from app.modules.identity.models import Role, User
 from app.modules.lessons.models import Lesson
+from app.modules.notifications.models import Notification
 from app.shared.utils import utc_now
 
 
@@ -158,3 +162,72 @@ class AdminRepository:
         stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.status == status)
         value = (await self.session.scalar(stmt)) or Decimal("0")
         return Decimal(value)
+
+    async def get_operations_overview(
+        self,
+        *,
+        max_retries: int,
+        now: datetime | None = None,
+    ) -> dict[str, datetime | int]:
+        snapshot_now = now or utc_now()
+
+        outbox_pending = await self._count_outbox_by_status(OutboxStatusEnum.PENDING)
+        outbox_failed_retryable = await self._count_failed_outbox(
+            retryable=True,
+            max_retries=max_retries,
+        )
+        outbox_failed_dead_letter = await self._count_failed_outbox(
+            retryable=False,
+            max_retries=max_retries,
+        )
+        notifications_failed = await self._count_notifications_by_status(
+            NotificationStatusEnum.FAILED,
+        )
+        stale_booking_holds = await self._count_stale_booking_holds(snapshot_now)
+        overdue_active_packages = await self._count_overdue_active_packages(snapshot_now)
+
+        return {
+            "generated_at": snapshot_now,
+            "max_retries": max_retries,
+            "outbox_pending": outbox_pending,
+            "outbox_failed_retryable": outbox_failed_retryable,
+            "outbox_failed_dead_letter": outbox_failed_dead_letter,
+            "notifications_failed": notifications_failed,
+            "stale_booking_holds": stale_booking_holds,
+            "overdue_active_packages": overdue_active_packages,
+        }
+
+    async def _count_outbox_by_status(self, status: OutboxStatusEnum) -> int:
+        stmt = select(func.count(OutboxEvent.id)).where(OutboxEvent.status == status)
+        return int((await self.session.scalar(stmt)) or 0)
+
+    async def _count_failed_outbox(self, *, retryable: bool, max_retries: int) -> int:
+        comparison = (
+            OutboxEvent.retries < max_retries
+            if retryable
+            else OutboxEvent.retries >= max_retries
+        )
+        stmt = select(func.count(OutboxEvent.id)).where(
+            OutboxEvent.status == OutboxStatusEnum.FAILED,
+            comparison,
+        )
+        return int((await self.session.scalar(stmt)) or 0)
+
+    async def _count_notifications_by_status(self, status: NotificationStatusEnum) -> int:
+        stmt = select(func.count(Notification.id)).where(Notification.status == status)
+        return int((await self.session.scalar(stmt)) or 0)
+
+    async def _count_stale_booking_holds(self, now: datetime) -> int:
+        stmt = select(func.count(Booking.id)).where(
+            Booking.status == BookingStatusEnum.HOLD,
+            Booking.hold_expires_at.is_not(None),
+            Booking.hold_expires_at <= now,
+        )
+        return int((await self.session.scalar(stmt)) or 0)
+
+    async def _count_overdue_active_packages(self, now: datetime) -> int:
+        stmt = select(func.count(LessonPackage.id)).where(
+            LessonPackage.status == PackageStatusEnum.ACTIVE,
+            LessonPackage.expires_at <= now,
+        )
+        return int((await self.session.scalar(stmt)) or 0)

@@ -22,6 +22,7 @@
   - `tests/test_outbox_notifications_worker.py` (outbox worker behavior and retries).
   - `tests/test_notifications_delivery_metrics.py` (delivery observability metrics).
   - `tests/test_admin_kpi_overview.py` (admin KPI read model + traceability).
+  - `tests/test_admin_operations_overview.py` (admin operational read model + traceability).
   - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
@@ -160,7 +161,7 @@ Status: completed (2026-02-23).
 - Status: in progress (started 2026-02-23).
 - Admin read models for bookings/payments/lessons KPIs. (partially completed)
 - Auditable admin actions with traceability. (partially completed)
-- Operational endpoints and runbooks.
+- Operational endpoints and runbooks. (partially completed)
 
 ### Phase 5: Production readiness
 Status: in progress (started 2026-02-23).
@@ -272,3 +273,15 @@ Status: in progress (started 2026-02-23).
     - `migration` (`alembic upgrade head` against PostgreSQL service).
   - remaining gap:
     - CI still does not run full HTTP integration suite in a dedicated stack.
+- Phase 4 operational overview endpoint (partial):
+  - added endpoint `GET /api/v1/admin/ops/overview?max_retries=5` (admin-only).
+  - operational snapshot includes:
+    - outbox pending count,
+    - retryable failed and dead-letter failed outbox counts,
+    - failed notifications count,
+    - stale booking holds count,
+    - overdue active packages count.
+  - traceability:
+    - each ops overview read writes `admin.ops.view` action into `admin_actions`.
+  - covered by `tests/test_admin_operations_overview.py`.
+  - latest local suite status: `38 passed`.

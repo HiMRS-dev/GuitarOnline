@@ -16,13 +16,29 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AUTH_RATE_LIMIT_BACKEND: ${AUTH_RATE_LIMIT_BACKEND:-redis}
+      AUTH_RATE_LIMIT_REDIS_NAMESPACE: ${AUTH_RATE_LIMIT_REDIS_NAMESPACE:-auth_rate_limit}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
@@ -47,8 +63,13 @@ services:
     environment:
       OUTBOX_WORKER_MODE: loop
       OUTBOX_WORKER_POLL_SECONDS: 10
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AUTH_RATE_LIMIT_BACKEND: ${AUTH_RATE_LIMIT_BACKEND:-redis}
+      AUTH_RATE_LIMIT_REDIS_NAMESPACE: ${AUTH_RATE_LIMIT_REDIS_NAMESPACE:-auth_rate_limit}
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: python -m app.workers.outbox_notifications_worker
 

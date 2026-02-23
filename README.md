@@ -7,8 +7,10 @@ Production-ready modular monolith backend for an online guitar school.
 1. Copy env file:
    - `cp .env.example .env`
    - in production, set a non-placeholder `SECRET_KEY` (startup rejects `change-me*`)
-   - in production, explicitly acknowledge process-local limiter if Redis is not wired:
-     `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`
+   - choose auth limiter backend:
+     - recommended production mode: `AUTH_RATE_LIMIT_BACKEND=redis` with valid `REDIS_URL`
+     - fallback mode: `AUTH_RATE_LIMIT_BACKEND=memory` + explicit
+       `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`
 2. Run containers:
    - `docker compose up --build`
 3. Open docs:
@@ -23,6 +25,7 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml up --build -d`
 - Included services:
   - `db` (PostgreSQL),
+  - `redis` (shared auth rate-limiter state),
   - `app` (FastAPI API),
   - `outbox-worker` (notifications outbox consumer loop).
 - Apply migrations after deploy:
@@ -42,6 +45,9 @@ Production-ready modular monolith backend for an online guitar school.
   - `POST /api/v1/identity/auth/login`
   - `POST /api/v1/identity/auth/refresh`
 - Configure limits with env vars:
+  - `AUTH_RATE_LIMIT_BACKEND` (`memory` or `redis`)
+  - `AUTH_RATE_LIMIT_REDIS_NAMESPACE` (Redis key prefix for limiter buckets)
+  - `REDIS_URL` (required when backend is `redis`)
   - `AUTH_RATE_LIMIT_WINDOW_SECONDS`
   - `AUTH_RATE_LIMIT_REGISTER_REQUESTS`
   - `AUTH_RATE_LIMIT_LOGIN_REQUESTS`

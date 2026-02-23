@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,8 +40,18 @@ class Settings(BaseSettings):
     auth_rate_limit_register_requests: int = 5
     auth_rate_limit_login_requests: int = 10
     auth_rate_limit_refresh_requests: int = 20
+    auth_rate_limit_backend: Literal["memory", "redis"] = "memory"
+    auth_rate_limit_redis_namespace: str = "auth_rate_limit"
     auth_rate_limit_trusted_proxy_ips: tuple[str, ...] = ("127.0.0.1", "::1")
     auth_rate_limit_allow_in_memory_in_production: bool = False
+
+    @field_validator("auth_rate_limit_backend", mode="before")
+    @classmethod
+    def normalize_rate_limit_backend(cls, value: object) -> object:
+        """Normalize backend token for case-insensitive env parsing."""
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
 
     @field_validator("auth_rate_limit_trusted_proxy_ips", mode="before")
     @classmethod
@@ -60,6 +71,10 @@ class Settings(BaseSettings):
     def validate_security_for_environment(self) -> "Settings":
         """Block unsafe defaults in production-like environments."""
         env_name = self.app_env.strip().lower()
+
+        if self.auth_rate_limit_backend == "redis" and not self.redis_url:
+            raise ValueError("REDIS_URL must be set when AUTH_RATE_LIMIT_BACKEND=redis")
+
         if env_name not in {"production", "prod"}:
             return self
 
@@ -69,7 +84,10 @@ class Settings(BaseSettings):
                 "SECRET_KEY must not use placeholder values (change-me*) in production environment",
             )
 
-        if not self.auth_rate_limit_allow_in_memory_in_production:
+        if (
+            self.auth_rate_limit_backend == "memory"
+            and not self.auth_rate_limit_allow_in_memory_in_production
+        ):
             raise ValueError(
                 "AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION must be true in production "
                 "when using in-memory auth rate limiting",

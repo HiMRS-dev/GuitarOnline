@@ -71,9 +71,11 @@
 ## 6) Known Risks / Open Technical Debt
 - Docker Hub connectivity is still flaky in this environment:
   - mitigated by `mirror.gcr.io`, but still an external dependency.
-- Identity rate limiting remains process-local in current implementation:
-  - distributed/shared limiter (Redis) is still not wired,
-  - production now requires explicit acknowledgement via `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`,
+- Identity rate limiting now supports shared Redis backend:
+  - `AUTH_RATE_LIMIT_BACKEND=redis` uses cross-instance limiter state via Redis,
+  - fallback `memory` backend remains process-local and should be used only for dev/single-instance mode,
+  - for production with `memory`, explicit acknowledgement remains required:
+    `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`,
   - `X-Forwarded-For` is trusted only from configured proxies (`AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`).
 - Monitoring stack remains lightweight:
   - observability is currently API/read-model based (no external metrics backend configured).
@@ -302,11 +304,15 @@ Status: completed (2026-02-23).
       when `APP_ENV` is `production`/`prod`.
   - added production guard for process-local auth limiter:
     - startup requires `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`
-      in `production`/`prod` until shared limiter is wired.
+      in `production`/`prod` when `AUTH_RATE_LIMIT_BACKEND=memory`.
   - covered by `tests/test_config_security.py`.
   - latest local suite status: `41 passed`.
-- Phase 5 auth rate limiting hardening (partial):
+- Phase 5 auth rate limiting hardening (completed):
   - added in-memory sliding-window limiter core: `app/core/rate_limit.py`.
+  - added Redis-backed shared sliding-window limiter backend in `app/core/rate_limit.py`.
+  - limiter backend now selected by env:
+    - `AUTH_RATE_LIMIT_BACKEND` (`memory`/`redis`),
+    - `AUTH_RATE_LIMIT_REDIS_NAMESPACE`.
   - added per-IP guards for identity endpoints:
     - `POST /api/v1/identity/auth/register`,
     - `POST /api/v1/identity/auth/login`,
@@ -356,3 +362,11 @@ Status: completed (2026-02-23).
   - CI integration job now sets `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS=127.0.0.1,::1` when starting API.
   - `scripts/db_restore.ps1` now streams backup content to `psql` instead of loading full SQL dump in memory.
   - latest local suite status: `51 passed`.
+- Shared limiter follow-up completed:
+  - added Redis runtime dependency (`redis`) and backend selector tests in `tests/test_rate_limiter.py`.
+  - production config validation now enforces:
+    - `REDIS_URL` is required when `AUTH_RATE_LIMIT_BACKEND=redis`,
+    - in-memory explicit ack is required only for memory backend in `production`/`prod`.
+  - `docker-compose.prod.yml` now includes `redis` service and defaults app/worker limiter backend to Redis.
+  - `README.md` and `.env.example` updated with Redis limiter configuration.
+  - latest local suite status: `56 passed`.

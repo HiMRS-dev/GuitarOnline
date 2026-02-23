@@ -39,3 +39,25 @@ def test_custom_secret_key_allowed_in_production_with_explicit_ack() -> None:
         auth_rate_limit_allow_in_memory_in_production=True,
     )
     assert settings.secret_key == "super-secure-value"
+
+
+def test_redis_backend_requires_redis_url() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            secret_key="super-secure-value",
+            auth_rate_limit_backend="redis",
+            redis_url=None,
+        )
+
+
+def test_redis_backend_allows_production_without_in_memory_ack() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        secret_key="super-secure-value",
+        auth_rate_limit_backend="redis",
+        redis_url="redis://redis:6379/0",
+    )
+    assert settings.auth_rate_limit_backend == "redis"

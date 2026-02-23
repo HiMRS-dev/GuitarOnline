@@ -78,6 +78,14 @@ class BillingRepository:
         stmt = select(Payment).where(Payment.id == payment_id)
         return await self.session.scalar(stmt)
 
+    async def get_payment_student_id(self, payment_id: UUID) -> UUID | None:
+        stmt = (
+            select(LessonPackage.student_id)
+            .join(Payment, Payment.package_id == LessonPackage.id)
+            .where(Payment.id == payment_id)
+        )
+        return await self.session.scalar(stmt)
+
     async def set_payment_status(
         self,
         payment: Payment,

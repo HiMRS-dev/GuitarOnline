@@ -47,3 +47,8 @@ class NotificationsRepository:
         notification.sent_at = sent_at
         await self.session.flush()
         return notification
+
+    async def count_by_status(self) -> dict[NotificationStatusEnum, int]:
+        stmt = select(Notification.status, func.count()).group_by(Notification.status)
+        rows = (await self.session.execute(stmt)).all()
+        return {status: int(count) for status, count in rows}

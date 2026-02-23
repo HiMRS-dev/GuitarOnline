@@ -39,3 +39,19 @@ class NotificationRead(BaseModel):
     sent_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class NotificationDeliveryMetricsRead(BaseModel):
+    """Delivery observability snapshot for notifications pipeline."""
+
+    notifications_total: int
+    notifications_pending: int
+    notifications_sent: int
+    notifications_failed: int
+    outbox_total: int
+    outbox_pending: int
+    outbox_processed: int
+    outbox_failed: int
+    outbox_retryable_failed: int
+    outbox_dead_letter: int
+    max_retries: int

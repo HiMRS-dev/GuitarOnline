@@ -73,7 +73,30 @@ class AuditRepository:
         )
         return (await self.session.scalars(stmt)).all()
 
-    async def mark_outbox_processed(self, event: OutboxEvent, processed_at: datetime) -> OutboxEvent:
+    async def list_failed_outbox(self, limit: int, max_retries: int) -> list[OutboxEvent]:
+        stmt = (
+            select(OutboxEvent)
+            .where(
+                OutboxEvent.status == OutboxStatusEnum.FAILED,
+                OutboxEvent.retries < max_retries,
+            )
+            .order_by(OutboxEvent.updated_at.asc())
+            .limit(limit)
+        )
+        return (await self.session.scalars(stmt)).all()
+
+    async def mark_outbox_pending(self, event: OutboxEvent) -> OutboxEvent:
+        event.status = OutboxStatusEnum.PENDING
+        event.error_message = None
+        event.processed_at = None
+        await self.session.flush()
+        return event
+
+    async def mark_outbox_processed(
+        self,
+        event: OutboxEvent,
+        processed_at: datetime,
+    ) -> OutboxEvent:
         event.status = OutboxStatusEnum.PROCESSED
         event.processed_at = processed_at
         event.error_message = None
@@ -84,5 +107,25 @@ class AuditRepository:
         event.status = OutboxStatusEnum.FAILED
         event.retries += 1
         event.error_message = error_message
+        event.processed_at = None
         await self.session.flush()
         return event
+
+    async def count_outbox_by_status(self) -> dict[OutboxStatusEnum, int]:
+        stmt = select(OutboxEvent.status, func.count()).group_by(OutboxEvent.status)
+        rows = (await self.session.execute(stmt)).all()
+        return {status: int(count) for status, count in rows}
+
+    async def count_retryable_failed_outbox(self, max_retries: int) -> int:
+        stmt = select(func.count()).where(
+            OutboxEvent.status == OutboxStatusEnum.FAILED,
+            OutboxEvent.retries < max_retries,
+        )
+        return int((await self.session.scalar(stmt)) or 0)
+
+    async def count_dead_letter_outbox(self, max_retries: int) -> int:
+        stmt = select(func.count()).where(
+            OutboxEvent.status == OutboxStatusEnum.FAILED,
+            OutboxEvent.retries >= max_retries,
+        )
+        return int((await self.session.scalar(stmt)) or 0)

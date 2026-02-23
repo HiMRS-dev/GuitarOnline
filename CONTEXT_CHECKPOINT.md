@@ -147,9 +147,10 @@ Status: in progress (started 2026-02-23).
 - Better audit coverage for financial actions. (partially completed)
 
 ### Phase 3: Notifications pipeline
-- Outbox consumer/worker for notification dispatch.
-- Retries/backoff/dead-letter strategy for failed sends.
-- Delivery status observability.
+- Status: completed (2026-02-23).
+- Outbox consumer/worker for notification dispatch. (completed)
+- Retries/backoff/dead-letter strategy for failed sends. (completed)
+- Delivery status observability. (completed)
 
 ### Phase 4: Admin and operations
 - Admin read models for bookings/payments/lessons KPIs.
@@ -215,3 +216,21 @@ Status: in progress (started 2026-02-23).
 - CI bootstrap completed (partial):
   - added GitHub Actions workflow `.github/workflows/ci.yml`.
   - workflow installs dependencies via Poetry and runs `pytest -q` on push/PR.
+- Phase 3 notifications worker (partial):
+  - added outbox worker core: `app/modules/notifications/outbox_worker.py`.
+  - added executable worker runner: `app/workers/outbox_notifications_worker.py`.
+  - worker behavior:
+    - processes pending outbox events into `notifications` records and marks them `SENT`,
+    - requeues retryable failed outbox events with exponential backoff,
+    - keeps terminal failures in `FAILED` state as dead-letter.
+  - audit repository now supports:
+    - listing retryable failed outbox events,
+    - moving failed event back to pending.
+  - covered by `tests/test_outbox_notifications_worker.py`.
+- Phase 3 delivery observability completed:
+  - added admin endpoint `GET /api/v1/notifications/delivery/metrics`.
+  - endpoint returns:
+    - notification status counters (`pending/sent/failed` + total),
+    - outbox counters (`pending/processed/failed` + total),
+    - retryable failed vs dead-letter failed outbox counts (`max_retries` aware).
+  - added coverage in `tests/test_notifications_delivery_metrics.py`.

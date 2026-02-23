@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GuitarOnline Личный кабинет MVP</title>
+    <link rel="stylesheet" href="/portal/static/styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb bg-orb-left" aria-hidden="true"></div>
+    <div class="bg-orb bg-orb-right" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">GuitarOnline</p>
+          <h1>Личный кабинет MVP</h1>
+          <p class="subtitle">
+            Базовый интерфейс для проверки ключевого пользовательского потока на backend API.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <a href="/docs">Swagger Docs</a>
+          <a href="/">Старт API</a>
+          <button id="logout-btn" class="danger" type="button" hidden>Выйти</button>
+        </div>
+      </header>
+
+      <p id="global-status" class="global-status muted">
+        Ожидание авторизации. Войдите или зарегистрируйтесь.
+      </p>
+
+      <div class="layout">
+        <section class="panel auth-panel">
+          <h2>Регистрация</h2>
+          <form id="register-form" class="form-stack">
+            <label>
+              Email
+              <input name="email" type="email" autocomplete="email" required />
+            </label>
+            <label>
+              Пароль
+              <input
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                required
+              />
+            </label>
+            <label>
+              Таймзона
+              <input name="timezone" type="text" value="Europe/Moscow" required />
+            </label>
+            <label>
+              Роль
+              <select name="role" required>
+                <option value="student">student</option>
+                <option value="teacher">teacher</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+            <button type="submit">Создать аккаунт</button>
+          </form>
+
+          <h2>Вход</h2>
+          <form id="login-form" class="form-stack">
+            <label>
+              Email
+              <input name="email" type="email" autocomplete="username" required />
+            </label>
+            <label>
+              Пароль
+              <input name="password" type="password" autocomplete="current-password" required />
+            </label>
+            <button type="submit">Войти</button>
+          </form>
+        </section>
+
+        <section id="dashboard-panel" class="panel dashboard-panel" hidden>
+          <div class="tabs">
+            <button type="button" class="tab-btn active" data-tab="profile">Профиль</button>
+            <button type="button" class="tab-btn" data-tab="slots">Открытые слоты</button>
+            <button type="button" class="tab-btn" data-tab="bookings">Мои бронирования</button>
+            <button type="button" class="tab-btn" data-tab="packages">Мои пакеты</button>
+          </div>
+
+          <section id="tab-profile" class="tab-content active">
+            <h3>Профиль пользователя</h3>
+            <div id="profile-content" class="cards"></div>
+          </section>
+
+          <section id="tab-slots" class="tab-content">
+            <div class="tab-head">
+              <h3>Открытые слоты</h3>
+              <button id="refresh-slots-btn" type="button">Обновить</button>
+            </div>
+            <div id="slots-content" class="cards"></div>
+          </section>
+
+          <section id="tab-bookings" class="tab-content">
+            <div class="tab-head">
+              <h3>Мои бронирования</h3>
+              <button id="refresh-bookings-btn" type="button">Обновить</button>
+            </div>
+            <div id="bookings-content" class="cards"></div>
+          </section>
+
+          <section id="tab-packages" class="tab-content">
+            <div class="tab-head">
+              <h3>Мои пакеты</h3>
+              <button id="refresh-packages-btn" type="button">Обновить</button>
+            </div>
+            <div id="packages-content" class="cards"></div>
+          </section>
+        </section>
+      </div>
+    </main>
+
+    <script src="/portal/static/app.js" defer></script>
+  </body>
+</html>

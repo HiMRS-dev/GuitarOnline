@@ -29,6 +29,7 @@
   - `tests/test_health_readiness.py` (readiness probe behavior).
   - `tests/test_metrics_observability.py` (Prometheus metrics endpoint and instrumentation).
   - `tests/test_landing_page.py` (root landing page content and links).
+  - `tests/test_portal_page.py` (frontend MVP portal route serving).
   - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
@@ -452,3 +453,16 @@ Status: completed (2026-02-23).
     - API landing page (`GET /`) in `app/main.py`,
     - VS Code Live Server helper page `index.html`.
   - updated landing-page test coverage in `tests/test_landing_page.py`.
+- Frontend MVP portal follow-up completed:
+  - added backend-served frontend portal at `GET /portal` with static assets at `/portal/static/*`:
+    - `app/frontend/index.html`,
+    - `app/frontend/static/styles.css`,
+    - `app/frontend/static/app.js`.
+  - implemented portal flows:
+    - register/login (JWT),
+    - profile (`/api/v1/identity/users/me`),
+    - open slots (`/api/v1/scheduling/slots/open`),
+    - my bookings (`/api/v1/booking/my`),
+    - my packages for student role (`/api/v1/billing/packages/students/{id}`).
+  - root landing and Go Live helper now include direct link to `/portal`.
+  - covered by `tests/test_portal_page.py` and updated `tests/test_landing_page.py`.

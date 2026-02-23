@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.core.config import get_settings
@@ -28,6 +30,8 @@ from app.shared.utils import utc_now
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+_FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+_FRONTEND_STATIC_DIR = _FRONTEND_DIR / "static"
 
 
 def _landing_page_html() -> str:
@@ -104,6 +108,7 @@ def _landing_page_html() -> str:
         <h1>{settings.app_name} API</h1>
         <p>Сервис backend запущен. Используйте ссылки ниже для доступа к документации и пробам.</p>
         <div class="links">
+          <a href="/portal">Личный кабинет MVP</a>
           <a href="/docs">Документация API</a>
           <a href="/health">Проверка Health</a>
           <a href="/ready">Проверка Ready</a>
@@ -149,6 +154,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.middleware("http")(instrument_http_request)
+app.mount("/portal/static", StaticFiles(directory=_FRONTEND_STATIC_DIR), name="portal-static")
 
 register_exception_handlers(app)
 
@@ -167,6 +173,12 @@ app.include_router(audit_router, prefix=settings.api_prefix)
 async def landing_page() -> HTMLResponse:
     """Root page with quick navigation links."""
     return HTMLResponse(content=_landing_page_html())
+
+
+@app.get("/portal", include_in_schema=False)
+async def portal_page() -> FileResponse:
+    """Serve frontend MVP page."""
+    return FileResponse(_FRONTEND_DIR / "index.html")
 
 
 @app.get("/health")

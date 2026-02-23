@@ -16,6 +16,7 @@ Production-ready modular monolith backend for an online guitar school.
 3. Open docs:
    - `http://localhost:8000/docs`
    - root landing page: `http://localhost:8000/`
+   - frontend MVP portal: `http://localhost:8000/portal`
    - VS Code Live Server helper page: `http://127.0.0.1:5500/`
 4. Probes:
    - liveness: `http://localhost:8000/health`
@@ -69,6 +70,19 @@ Production-ready modular monolith backend for an online guitar school.
   - `poetry run python -m app.workers.outbox_notifications_worker`
 - Run in polling mode:
   - `OUTBOX_WORKER_MODE=loop poetry run python -m app.workers.outbox_notifications_worker`
+
+## Frontend MVP Portal
+
+- Portal URL:
+  - `GET /portal`
+- Built-in screens:
+  - register/login,
+  - current user profile,
+  - open slots,
+  - my bookings,
+  - my lesson packages (student role).
+- Static assets are served by FastAPI at:
+  - `/portal/static/*`
 
 ## Delivery Observability
 

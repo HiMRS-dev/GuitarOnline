@@ -18,6 +18,7 @@ Production-ready modular monolith backend for an online guitar school.
 4. Probes:
    - liveness: `http://localhost:8000/health`
    - readiness (DB-aware): `http://localhost:8000/ready`
+   - metrics (Prometheus format): `http://localhost:8000/metrics`
 
 ## Deployment Baseline
 
@@ -27,7 +28,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `db` (PostgreSQL),
   - `redis` (shared auth rate-limiter state),
   - `app` (FastAPI API),
-  - `outbox-worker` (notifications outbox consumer loop).
+  - `outbox-worker` (notifications outbox consumer loop),
+  - `prometheus` (metrics scraping backend, port `9090`).
 - Apply migrations after deploy:
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
 
@@ -67,6 +69,14 @@ Production-ready modular monolith backend for an online guitar school.
 - Admin API endpoint for delivery metrics:
   - `GET /api/v1/notifications/delivery/metrics?max_retries=5`
 - Metrics include notification status totals and outbox queue/dead-letter counts.
+
+## Platform Monitoring
+
+- API exposes Prometheus-compatible metrics endpoint:
+  - `GET /metrics`
+- Production compose includes Prometheus scraping `app:8000/metrics`.
+- Open Prometheus UI at:
+  - `http://localhost:9090`
 
 ## Admin Operations
 

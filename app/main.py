@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, close_engine
+from app.core.metrics import build_metrics_response, instrument_http_request
 from app.modules.admin.router import router as admin_router
 from app.modules.audit.router import router as audit_router
 from app.modules.billing.router import router as billing_router
@@ -59,6 +60,7 @@ app = FastAPI(
     debug=settings.debug,
     lifespan=lifespan,
 )
+app.middleware("http")(instrument_http_request)
 
 register_exception_handlers(app)
 
@@ -103,3 +105,9 @@ async def readiness_check() -> dict[str, str]:
         "database": "ok",
         "timestamp": utc_now().isoformat(),
     }
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics_endpoint(_: Request) -> Response:
+    """Prometheus metrics endpoint."""
+    return build_metrics_response()

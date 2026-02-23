@@ -27,6 +27,7 @@
   - `tests/test_rate_limiter.py` (core sliding-window limiter behavior).
   - `tests/test_identity_rate_limit.py` (identity endpoint rate-limit dependencies).
   - `tests/test_health_readiness.py` (readiness probe behavior).
+  - `tests/test_metrics_observability.py` (Prometheus metrics endpoint and instrumentation).
   - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
@@ -78,7 +79,8 @@
     `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`,
   - `X-Forwarded-For` is trusted only from configured proxies (`AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS`).
 - Monitoring stack remains lightweight:
-  - observability is currently API/read-model based (no external metrics backend configured).
+  - Prometheus backend is wired in production compose baseline,
+  - dashboards/alert routing are not configured yet (no Grafana/Alertmanager baseline).
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -335,7 +337,10 @@ Status: completed (2026-02-23).
 - Phase 5 deployment baseline and recovery strategy (partial):
   - added readiness probe endpoint:
     - `GET /ready` checks live DB connectivity (`SELECT 1`) and returns `503` on failure.
+  - added Prometheus metrics endpoint:
+    - `GET /metrics` exposes HTTP request counters/latency in Prometheus format.
   - covered by `tests/test_health_readiness.py`.
+  - covered by `tests/test_metrics_observability.py`.
   - added backup/restore scripts for dockerized PostgreSQL:
     - `scripts/db_backup.ps1`,
     - `scripts/db_restore.ps1`.
@@ -344,8 +349,10 @@ Status: completed (2026-02-23).
     - backup/restore operational commands.
   - added deployment baseline compose profile: `docker-compose.prod.yml`:
     - `db`,
+    - `redis`,
     - `app`,
-    - `outbox-worker`.
+    - `outbox-worker`,
+    - `prometheus`.
   - updated `README.md` with production compose bring-up and migration command.
   - latest local suite status: `48 passed`.
 - Repo-wide style baseline completed:
@@ -370,3 +377,12 @@ Status: completed (2026-02-23).
   - `docker-compose.prod.yml` now includes `redis` service and defaults app/worker limiter backend to Redis.
   - `README.md` and `.env.example` updated with Redis limiter configuration.
   - latest local suite status: `56 passed`.
+- Monitoring baseline follow-up completed:
+  - added Prometheus instrumentation middleware and endpoint:
+    - `app/core/metrics.py`,
+    - `GET /metrics` in `app/main.py`.
+  - production compose now includes Prometheus service with scrape config:
+    - `ops/prometheus/prometheus.yml`,
+    - `docker-compose.prod.yml` (`prometheus` on `9090`).
+  - `README.md` updated with metrics/Prometheus usage.
+  - latest local suite status: `53 passed, 5 skipped` (`tests/test_booking_billing_integration.py` skipped because local integration stack was unavailable).

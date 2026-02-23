@@ -73,5 +73,21 @@ services:
         condition: service_healthy
     command: python -m app.workers.outbox_notifications_worker
 
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
 volumes:
   pg_data:
+  prometheus_data:

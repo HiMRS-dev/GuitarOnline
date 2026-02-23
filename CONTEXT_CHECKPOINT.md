@@ -64,7 +64,9 @@
   - `ruff check app tests` has legacy findings outside recently changed files.
 - Docker Hub connectivity is still flaky in this environment:
   - mitigated by `mirror.gcr.io`, but still an external dependency.
-- No CI pipeline configured yet (lint/test/migration gates).
+- CI is now present for test automation, but still minimal:
+  - current workflow runs pytest only.
+  - lint/migration/integration gates are not enforced yet.
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -155,7 +157,8 @@ Status: in progress (started 2026-02-23).
 - Operational endpoints and runbooks.
 
 ### Phase 5: Production readiness
-- CI (lint + unit + integration + migration checks).
+Status: in progress (started 2026-02-23).
+- CI (lint + unit + integration + migration checks). (partially completed)
 - Security hardening (auth policies, secret handling, rate limits).
 - Deployment baseline, monitoring, backup/restore strategy.
 
@@ -209,3 +212,6 @@ Status: in progress (started 2026-02-23).
   - added admin endpoint `POST /api/v1/billing/packages/expire` to expire overdue active packages.
   - `BillingService.get_active_package` now persists `EXPIRED` status when an active package is already past `expires_at`.
   - covered by additional billing unit tests.
+- CI bootstrap completed (partial):
+  - added GitHub Actions workflow `.github/workflows/ci.yml`.
+  - workflow installs dependencies via Poetry and runs `pytest -q` on push/PR.

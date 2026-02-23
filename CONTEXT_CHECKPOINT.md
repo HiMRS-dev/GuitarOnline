@@ -24,6 +24,8 @@
   - `tests/test_admin_kpi_overview.py` (admin KPI read model + traceability).
   - `tests/test_admin_operations_overview.py` (admin operational read model + traceability).
   - `tests/test_config_security.py` (environment secret-key guardrails).
+  - `tests/test_rate_limiter.py` (core sliding-window limiter behavior).
+  - `tests/test_identity_rate_limit.py` (identity endpoint rate-limit dependencies).
   - `tests/test_booking_billing_integration.py` (HTTP+DB integration scenarios).
 
 ## 3) Baseline Implemented In This Session
@@ -73,6 +75,8 @@
 - CI gates are improved but still partial:
   - workflow now runs scoped lint, pytest, migration upgrade checks, and HTTP integration tests.
   - full repo-wide lint baseline is not enforced yet.
+- Identity rate limiting is process-local in current implementation:
+  - in-memory limiter protects single instance only; distributed/shared limiter (Redis) is not wired yet.
 
 ## 7) Tomorrow Quick Start (5-10 min)
 1. `docker desktop status`
@@ -298,3 +302,21 @@ Status: in progress (started 2026-02-23).
     - `Settings` now rejects `SECRET_KEY=change-me` when `APP_ENV` is `production`/`prod`.
   - covered by `tests/test_config_security.py`.
   - latest local suite status: `41 passed`.
+- Phase 5 auth rate limiting hardening (partial):
+  - added in-memory sliding-window limiter core: `app/core/rate_limit.py`.
+  - added per-IP guards for identity endpoints:
+    - `POST /api/v1/identity/auth/register`,
+    - `POST /api/v1/identity/auth/login`,
+    - `POST /api/v1/identity/auth/refresh`.
+  - configurable via env:
+    - `AUTH_RATE_LIMIT_WINDOW_SECONDS`,
+    - `AUTH_RATE_LIMIT_REGISTER_REQUESTS`,
+    - `AUTH_RATE_LIMIT_LOGIN_REQUESTS`,
+    - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`.
+  - rate-limit violations return unified app error:
+    - code: `rate_limited`, HTTP: `429`.
+  - covered by:
+    - `tests/test_rate_limiter.py`,
+    - `tests/test_identity_rate_limit.py`.
+  - integration suite adapted for realistic proxy-IP simulation in auth registration helper.
+  - latest local suite status: `46 passed`.

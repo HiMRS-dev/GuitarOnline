@@ -34,6 +34,11 @@ class Settings(BaseSettings):
 
     redis_url: str | None = None
 
+    auth_rate_limit_window_seconds: int = 60
+    auth_rate_limit_register_requests: int = 5
+    auth_rate_limit_login_requests: int = 10
+    auth_rate_limit_refresh_requests: int = 20
+
     @model_validator(mode="after")
     def validate_secret_key_for_environment(self) -> "Settings":
         """Block default secret key in production-like environments."""

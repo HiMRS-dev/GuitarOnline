@@ -42,12 +42,20 @@ def _future_range(hours_from_now: int, duration_minutes: int = 60) -> tuple[str,
     return start_at.isoformat(), end_at.isoformat()
 
 
+def _random_test_ip() -> str:
+    value = uuid4().int
+    octets = [10, (value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF]
+    return ".".join(str(octet) for octet in octets)
+
+
 async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
     email = f"{role}-{uuid4().hex}@guitaronline.dev"
     password = "StrongPass123!"
+    headers = {"X-Forwarded-For": _random_test_ip()}
 
     register_response = await client.post(
         "/identity/auth/register",
+        headers=headers,
         json={
             "email": email,
             "password": password,
@@ -60,6 +68,7 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
 
     login_response = await client.post(
         "/identity/auth/login",
+        headers=headers,
         json={"email": email, "password": password},
     )
     _assert_status(login_response, 200)

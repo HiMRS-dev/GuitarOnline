@@ -25,16 +25,25 @@ jobs:
       - name: Run lint checks
         run: >
           poetry run ruff check
+          app/core/config.py
+          app/core/rate_limit.py
           app/modules/admin
           app/modules/billing/service.py
+          app/modules/identity/rate_limit.py
+          app/modules/identity/router.py
           app/modules/notifications
+          app/shared/exceptions.py
           app/workers/outbox_notifications_worker.py
           tests/test_admin_kpi_overview.py
+          tests/test_admin_operations_overview.py
           tests/test_billing_payment_rules.py
+          tests/test_config_security.py
+          tests/test_identity_rate_limit.py
           tests/test_notifications_delivery_metrics.py
           tests/test_outbox_notifications_worker.py
           tests/test_booking_rules.py
           tests/test_booking_billing_integration.py
+          tests/test_rate_limiter.py
 
   test:
     runs-on: ubuntu-latest

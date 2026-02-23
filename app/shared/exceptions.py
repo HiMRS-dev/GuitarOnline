@@ -49,6 +49,13 @@ class BusinessRuleException(AppException):
     code = "business_rule_violation"
 
 
+class RateLimitException(AppException):
+    """Raised when request rate exceeds configured limits."""
+
+    status_code = 429
+    code = "rate_limited"
+
+
 async def app_exception_handler(_: Request, exc: AppException) -> JSONResponse:
     """Handle custom domain exceptions."""
     return JSONResponse(

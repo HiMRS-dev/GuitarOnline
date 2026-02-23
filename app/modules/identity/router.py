@@ -4,8 +4,23 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
-from app.modules.identity.schemas import LoginRequest, RefreshRequest, TokenPair, UserCreate, UserRead
-from app.modules.identity.service import IdentityService, get_current_user, get_identity_service
+from app.modules.identity.rate_limit import (
+    enforce_login_rate_limit,
+    enforce_refresh_rate_limit,
+    enforce_register_rate_limit,
+)
+from app.modules.identity.schemas import (
+    LoginRequest,
+    RefreshRequest,
+    TokenPair,
+    UserCreate,
+    UserRead,
+)
+from app.modules.identity.service import (
+    IdentityService,
+    get_current_user,
+    get_identity_service,
+)
 
 router = APIRouter(prefix="/identity", tags=["identity"])
 
@@ -13,6 +28,7 @@ router = APIRouter(prefix="/identity", tags=["identity"])
 @router.post("/auth/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def register(
     payload: UserCreate,
+    _=Depends(enforce_register_rate_limit),
     service: IdentityService = Depends(get_identity_service),
 ) -> UserRead:
     """Register a new account."""
@@ -23,6 +39,7 @@ async def register(
 @router.post("/auth/login", response_model=TokenPair)
 async def login(
     payload: LoginRequest,
+    _=Depends(enforce_login_rate_limit),
     service: IdentityService = Depends(get_identity_service),
 ) -> TokenPair:
     """Sign in by email/password and return JWT token pair."""
@@ -32,6 +49,7 @@ async def login(
 @router.post("/auth/refresh", response_model=TokenPair)
 async def refresh_tokens(
     payload: RefreshRequest,
+    _=Depends(enforce_refresh_rate_limit),
     service: IdentityService = Depends(get_identity_service),
 ) -> TokenPair:
     """Rotate refresh token and issue new token pair."""

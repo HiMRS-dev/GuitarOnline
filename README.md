@@ -19,6 +19,18 @@ Production-ready modular monolith backend for an online guitar school.
 - Apply migrations:
   - `poetry run alembic upgrade head`
 
+## Security Controls
+
+- Identity endpoints are rate-limited per client IP:
+  - `POST /api/v1/identity/auth/register`
+  - `POST /api/v1/identity/auth/login`
+  - `POST /api/v1/identity/auth/refresh`
+- Configure limits with env vars:
+  - `AUTH_RATE_LIMIT_WINDOW_SECONDS`
+  - `AUTH_RATE_LIMIT_REGISTER_REQUESTS`
+  - `AUTH_RATE_LIMIT_LOGIN_REQUESTS`
+  - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`
+
 ## Workers
 
 - Run notifications outbox worker once:

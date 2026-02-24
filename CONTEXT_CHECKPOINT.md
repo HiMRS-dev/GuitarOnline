@@ -472,7 +472,7 @@ Status: completed (2026-02-23).
 Execution rule:
 - Start each next step only after previous step is fully completed and committed.
 
-### Queue 1: Frontend MVP functional completion (Pending)
+### Queue 1: Frontend MVP functional completion (Implemented, browser acceptance pending)
 Goal:
 - Finish core user flow directly in `/portal` UI.
 
@@ -507,7 +507,7 @@ Tasks:
 Acceptance:
 - Forced expired access token recovers via refresh or cleanly logs out without broken UI state.
 
-### Queue 3: Portal integration test coverage (Pending)
+### Queue 3: Portal integration test coverage (Completed 2026-02-24)
 Goal:
 - Prevent regressions in new `/portal` entrypoint and static delivery.
 
@@ -522,7 +522,7 @@ Acceptance:
 - New portal-related tests pass in CI.
 - Existing tests remain green.
 
-### Queue 4: Single-site runtime profile (Pending)
+### Queue 4: Single-site runtime profile (Completed 2026-02-24)
 Goal:
 - Provide clean deployment topology where users open one base URL.
 
@@ -536,7 +536,7 @@ Tasks:
 Acceptance:
 - Local/prod profile starts with one public entrypoint and working API/docs/portal routes.
 
-### Queue 5: Demo data bootstrap (Pending)
+### Queue 5: Demo data bootstrap (Completed 2026-02-24)
 Goal:
 - Make project demonstrable in a fresh environment quickly.
 
@@ -560,7 +560,7 @@ Tasks:
 Acceptance:
 - Test alert is delivered to at least one real target channel.
 
-### Queue 7: Release hardening and MVP closure (Pending)
+### Queue 7: Release hardening and MVP closure (In progress)
 Goal:
 - Finish project with release-grade baseline and handoff.
 
@@ -572,3 +572,35 @@ Tasks:
 Acceptance:
 - Release checklist executed successfully on target environment.
 - Checkpoint status switched to MVP closed.
+
+## 13) Progress Update (2026-02-24)
+- Queue 1 implementation delivered in portal frontend:
+  - booking actions in UI (`hold`, `confirm`, `cancel`, `reschedule`),
+  - role-aware tabs and sections for `student` / `teacher` / `admin`,
+  - Russian-oriented API error rendering with validation path translation.
+  - commits: `88cdc81`, `e72fbd6`.
+- Queue 3 delivered:
+  - static assets routing tests added for:
+    - `/portal/static/styles.css`,
+    - `/portal/static/app.js`,
+  - portal endpoint-sequence integration tests added with bounded runtime skip behavior when local stack is unavailable:
+    - `tests/test_portal_auth_flow_integration.py`.
+  - commit: `10240d6`.
+- Queue 4 delivered:
+  - optional reverse-proxy runtime profile:
+    - `docker-compose.proxy.yml`,
+    - `ops/nginx/default.conf`,
+  - docs and validation script updated:
+    - `README.md`,
+    - `scripts/validate_ops_configs.ps1`.
+  - commit: `35df422`.
+- Queue 5 delivered:
+  - idempotent demo seed script:
+    - `scripts/seed_demo_data.py`,
+  - runbook and demo credentials documented in `README.md`.
+  - commit: `605d18b`.
+- Queue 7 partial progress:
+  - explicit release checklist added:
+    - `ops/release_checklist.md`,
+  - linked in `README.md`.
+  - commit: `7138711`.

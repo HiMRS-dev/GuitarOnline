@@ -107,6 +107,25 @@ Production-ready modular monolith backend for an online guitar school.
 - Static assets are served by FastAPI at:
   - `/portal/static/*`
 
+## Demo Data Bootstrap (Non-Production)
+
+- Seed script:
+  - `py -m poetry run python scripts/seed_demo_data.py`
+- Dockerized run (app container):
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/seed_demo_data.py`
+- Script behavior:
+  - idempotent and safe for repeated runs,
+  - creates/updates demo users and teacher profile,
+  - creates missing future teacher slots,
+  - ensures at least one active student package.
+- Safety:
+  - by default script refuses to run when `APP_ENV` is `production`/`prod`,
+  - override is possible only with explicit `--allow-production`.
+- Demo credentials (for local/demo environments only):
+  - `demo-admin@guitaronline.dev / DemoPass123!`
+  - `demo-teacher@guitaronline.dev / DemoPass123!`
+  - `demo-student@guitaronline.dev / DemoPass123!`
+
 ## Delivery Observability
 
 - Admin API endpoint for delivery metrics:

@@ -9,6 +9,12 @@ const state = {
   slots: [],
   bookings: [],
   packages: [],
+  lessons: [],
+  adminOperations: {
+    lastExpiredHolds: null,
+    lastExpiredPackages: null,
+    updatedAt: null,
+  },
 };
 
 const elements = {
@@ -21,11 +27,16 @@ const elements = {
   slotsContent: document.getElementById("slots-content"),
   bookingsContent: document.getElementById("bookings-content"),
   packagesContent: document.getElementById("packages-content"),
+  lessonsContent: document.getElementById("lessons-content"),
+  adminActionsContent: document.getElementById("admin-actions-content"),
   tabButtons: Array.from(document.querySelectorAll(".tab-btn")),
   tabContents: Array.from(document.querySelectorAll(".tab-content")),
   refreshSlotsButton: document.getElementById("refresh-slots-btn"),
   refreshBookingsButton: document.getElementById("refresh-bookings-btn"),
   refreshPackagesButton: document.getElementById("refresh-packages-btn"),
+  refreshLessonsButton: document.getElementById("refresh-lessons-btn"),
+  runExpireHoldsButton: document.getElementById("run-expire-holds-btn"),
+  runExpirePackagesButton: document.getElementById("run-expire-packages-btn"),
   slotPackageControls: document.getElementById("slot-package-controls"),
   slotPackageSelect: document.getElementById("slot-package-select"),
 };
@@ -54,6 +65,9 @@ function bindEvents() {
   elements.refreshSlotsButton?.addEventListener("click", () => refreshSlots());
   elements.refreshBookingsButton?.addEventListener("click", () => refreshBookings());
   elements.refreshPackagesButton?.addEventListener("click", () => refreshPackages());
+  elements.refreshLessonsButton?.addEventListener("click", () => refreshLessons());
+  elements.runExpireHoldsButton?.addEventListener("click", handleExpireHolds);
+  elements.runExpirePackagesButton?.addEventListener("click", handleExpirePackages);
   elements.slotsContent?.addEventListener("click", handleSlotsActionClick);
   elements.bookingsContent?.addEventListener("click", handleBookingsActionClick);
 
@@ -87,6 +101,10 @@ function clearSession() {
   state.slots = [];
   state.bookings = [];
   state.packages = [];
+  state.lessons = [];
+  state.adminOperations.lastExpiredHolds = null;
+  state.adminOperations.lastExpiredPackages = null;
+  state.adminOperations.updatedAt = null;
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 
@@ -102,6 +120,8 @@ function showAuthMode() {
   elements.slotsContent.innerHTML = "";
   elements.bookingsContent.innerHTML = "";
   elements.packagesContent.innerHTML = "";
+  elements.lessonsContent.innerHTML = "";
+  elements.adminActionsContent.innerHTML = "";
 
   if (elements.slotPackageControls) {
     elements.slotPackageControls.hidden = true;
@@ -121,16 +141,77 @@ function setGlobalStatus(message, tone) {
 
 function activateTab(tabName) {
   for (const button of elements.tabButtons) {
-    button.classList.toggle("active", button.dataset.tab === tabName);
+    button.classList.toggle("active", button.dataset.tab === tabName && !button.hidden);
   }
 
   for (const content of elements.tabContents) {
-    content.classList.toggle("active", content.id === `tab-${tabName}`);
+    content.classList.toggle("active", content.id === `tab-${tabName}` && !content.hidden);
   }
 }
 
+function getCurrentRole() {
+  return state.currentUser?.role?.name ?? null;
+}
+
 function isStudentRole() {
-  return state.currentUser?.role?.name === "student";
+  return getCurrentRole() === "student";
+}
+
+function isTeacherRole() {
+  return getCurrentRole() === "teacher";
+}
+
+function isAdminRole() {
+  return getCurrentRole() === "admin";
+}
+
+function isTabVisible(tabName, roleName) {
+  if (!roleName) {
+    return tabName === "profile";
+  }
+
+  const visibilityMap = {
+    profile: ["student", "teacher", "admin"],
+    slots: ["student"],
+    bookings: ["student"],
+    packages: ["student"],
+    lessons: ["teacher"],
+    "admin-ops": ["admin"],
+  };
+
+  const allowedRoles = visibilityMap[tabName] ?? [];
+  return allowedRoles.includes(roleName);
+}
+
+function applyRoleAwareTabs() {
+  const roleName = getCurrentRole();
+  let firstVisibleTab = null;
+
+  for (const button of elements.tabButtons) {
+    const tabName = button.dataset.tab ?? "";
+    const visible = isTabVisible(tabName, roleName);
+    button.hidden = !visible;
+    if (visible && firstVisibleTab === null) {
+      firstVisibleTab = tabName;
+    }
+  }
+
+  for (const content of elements.tabContents) {
+    const tabName = content.id.replace("tab-", "");
+    content.hidden = !isTabVisible(tabName, roleName);
+  }
+
+  const activeButton = elements.tabButtons.find(
+    (button) => button.classList.contains("active") && !button.hidden,
+  );
+  if (activeButton?.dataset.tab) {
+    activateTab(activeButton.dataset.tab);
+    return;
+  }
+
+  if (firstVisibleTab) {
+    activateTab(firstVisibleTab);
+  }
 }
 
 function getHoldEligiblePackages() {
@@ -197,7 +278,9 @@ async function bootstrapAuthenticatedSession() {
   await loadProfile();
   showDashboardMode();
   activateTab("profile");
-  await Promise.all([refreshSlots(), refreshBookings(), refreshPackages()]);
+  applyRoleAwareTabs();
+  await Promise.all([refreshSlots(), refreshBookings(), refreshPackages(), refreshLessons()]);
+  renderAdminOperations();
 }
 
 async function refreshSlots() {
@@ -275,6 +358,29 @@ async function refreshPackages() {
   }
 }
 
+async function refreshLessons() {
+  if (!state.currentUser) {
+    state.lessons = [];
+    renderEmpty(elements.lessonsContent, "Профиль не загружен.");
+    return;
+  }
+
+  if (!isTeacherRole()) {
+    state.lessons = [];
+    renderEmpty(elements.lessonsContent, "Раздел уроков доступен только для роли teacher.");
+    return;
+  }
+
+  try {
+    const page = await apiRequest("/lessons/my?limit=20&offset=0");
+    state.lessons = page.items ?? [];
+    renderLessons(state.lessons);
+  } catch (error) {
+    state.lessons = [];
+    renderEmpty(elements.lessonsContent, `Не удалось загрузить уроки: ${error.message}`);
+  }
+}
+
 async function loadProfile() {
   const user = await apiRequest("/identity/users/me");
   state.currentUser = user;
@@ -290,6 +396,71 @@ function renderProfile(user) {
       <p class="meta"><strong>Таймзона:</strong> ${escapeHtml(user.timezone)}</p>
       <p class="meta"><strong>Активен:</strong> ${user.is_active ? "да" : "нет"}</p>
       <p class="meta"><strong>Создан:</strong> ${formatDateTime(user.created_at)}</p>
+    </article>
+  `;
+}
+
+function renderLessons(lessons) {
+  if (lessons.length === 0) {
+    renderEmpty(elements.lessonsContent, "У вас пока нет уроков.");
+    return;
+  }
+
+  elements.lessonsContent.innerHTML = lessons
+    .map((lesson) => {
+      return `
+        <article class="card-item">
+          <h4>Урок ${escapeHtml(lesson.id)}</h4>
+          <p class="meta"><strong>Статус:</strong> ${escapeHtml(lesson.status)}</p>
+          <p class="meta"><strong>Бронирование:</strong> ${escapeHtml(lesson.booking_id)}</p>
+          <p class="meta"><strong>Студент:</strong> ${escapeHtml(lesson.student_id)}</p>
+          <p class="meta"><strong>Начало:</strong> ${formatDateTime(lesson.scheduled_start_at)}</p>
+          <p class="meta"><strong>Окончание:</strong> ${formatDateTime(lesson.scheduled_end_at)}</p>
+          <p class="meta"><strong>Тема:</strong> ${escapeHtml(lesson.topic ?? "-")}</p>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderAdminOperations() {
+  if (!isAdminRole()) {
+    renderEmpty(elements.adminActionsContent, "Раздел admin доступен только для роли admin.");
+    if (elements.runExpireHoldsButton) {
+      elements.runExpireHoldsButton.disabled = true;
+    }
+    if (elements.runExpirePackagesButton) {
+      elements.runExpirePackagesButton.disabled = true;
+    }
+    return;
+  }
+
+  if (elements.runExpireHoldsButton) {
+    elements.runExpireHoldsButton.disabled = false;
+  }
+  if (elements.runExpirePackagesButton) {
+    elements.runExpirePackagesButton.disabled = false;
+  }
+
+  const lastHolds =
+    state.adminOperations.lastExpiredHolds === null
+      ? "еще не запускалось"
+      : String(state.adminOperations.lastExpiredHolds);
+  const lastPackages =
+    state.adminOperations.lastExpiredPackages === null
+      ? "еще не запускалось"
+      : String(state.adminOperations.lastExpiredPackages);
+  const updatedAt = state.adminOperations.updatedAt
+    ? formatDateTime(state.adminOperations.updatedAt)
+    : "-";
+
+  elements.adminActionsContent.innerHTML = `
+    <article class="card-item">
+      <h4>Сводка admin операций</h4>
+      <p class="meta"><strong>Истекших HOLD:</strong> ${escapeHtml(lastHolds)}</p>
+      <p class="meta"><strong>Истекших пакетов:</strong> ${escapeHtml(lastPackages)}</p>
+      <p class="meta"><strong>Обновлено:</strong> ${escapeHtml(updatedAt)}</p>
+      <p class="hint">Кнопки выше запускают backend-триггеры истечения.</p>
     </article>
   `;
 }
@@ -593,8 +764,48 @@ async function handleBookingsActionClick(event) {
   });
 }
 
+async function handleExpireHolds(event) {
+  if (!isAdminRole()) {
+    setGlobalStatus("Операция доступна только для роли admin.", "error");
+    return;
+  }
+
+  const button = event.currentTarget;
+  await withButtonAction(button, async () => {
+    const expiredCount = await apiRequest("/booking/holds/expire", {
+      method: "POST",
+    });
+
+    state.adminOperations.lastExpiredHolds = Number(expiredCount);
+    state.adminOperations.updatedAt = new Date().toISOString();
+    renderAdminOperations();
+    setGlobalStatus(`Истекших HOLD-бронирований: ${expiredCount}`, "success");
+    await Promise.all([refreshSlots(), refreshBookings()]);
+  });
+}
+
+async function handleExpirePackages(event) {
+  if (!isAdminRole()) {
+    setGlobalStatus("Операция доступна только для роли admin.", "error");
+    return;
+  }
+
+  const button = event.currentTarget;
+  await withButtonAction(button, async () => {
+    const expiredCount = await apiRequest("/billing/packages/expire", {
+      method: "POST",
+    });
+
+    state.adminOperations.lastExpiredPackages = Number(expiredCount);
+    state.adminOperations.updatedAt = new Date().toISOString();
+    renderAdminOperations();
+    setGlobalStatus(`Истекших пакетов: ${expiredCount}`, "success");
+    await refreshPackages();
+  });
+}
+
 async function refreshAfterBookingMutation() {
-  await Promise.all([refreshSlots(), refreshBookings(), refreshPackages()]);
+  await Promise.all([refreshSlots(), refreshBookings(), refreshPackages(), refreshLessons()]);
 }
 
 async function withButtonAction(button, action) {
@@ -643,6 +854,117 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function translateBackendMessage(message) {
+  const normalized = String(message ?? "").trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  const directTranslations = {
+    "Not authenticated": "Требуется авторизация.",
+    "Could not validate credentials": "Не удалось проверить учетные данные.",
+    "Invalid credentials": "Неверный email или пароль.",
+    "Unauthorized": "Недостаточно прав для выполнения операции.",
+    "Access denied": "Доступ запрещен.",
+    "Slot not found": "Слот не найден.",
+    "Slot is not available": "Слот сейчас недоступен.",
+    "Cannot book a slot in the past": "Нельзя бронировать слот в прошлом.",
+    "Package not found": "Пакет не найден.",
+    "Package does not belong to current student": "Пакет не принадлежит текущему студенту.",
+    "Package does not belong to current user": "Пакет не принадлежит текущему пользователю.",
+    "Package is not active": "Пакет не активен.",
+    "Package is expired": "Срок действия пакета истек.",
+    "No lessons left in package": "В пакете не осталось уроков.",
+    "No lessons left": "В пакете не осталось уроков.",
+    "Only students can hold bookings": "Только студенты могут создавать HOLD-бронирования.",
+    "Booking not found": "Бронирование не найдено.",
+    "Only HOLD booking can be confirmed": "Подтвердить можно только бронирование в статусе HOLD.",
+    "Booking hold has expired": "Время HOLD-бронирования истекло.",
+    "Booking package is required": "Для бронирования требуется пакет.",
+    "Package is inactive or expired": "Пакет неактивен или уже истек.",
+    "Booking already expired": "Бронирование уже истекло.",
+    "Booking cannot be rescheduled in current status":
+      "В текущем статусе бронирование нельзя перенести.",
+    "You cannot manage this booking": "У вас нет прав управлять этим бронированием.",
+    "Only admin can run hold expiration": "Только admin может запускать истечение HOLD-бронирований.",
+    "Only admin can expire packages": "Только admin может запускать истечение пакетов.",
+    "Only admin can create lesson packages": "Только admin может создавать пакеты уроков.",
+    "Only admin or teacher can create lessons": "Только admin или teacher может создавать уроки.",
+    "Only admin or teacher can update lessons": "Только admin или teacher может изменять уроки.",
+    "Teacher can update only own lessons": "Teacher может изменять только свои уроки.",
+    "Lesson not found": "Урок не найден.",
+  };
+
+  if (normalized in directTranslations) {
+    return directTranslations[normalized];
+  }
+  return normalized;
+}
+
+function translateValidationMessage(message) {
+  const normalized = String(message ?? "").trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  const directTranslations = {
+    "Field required": "Поле обязательно.",
+    "Input should be a valid UUID": "Введите корректный UUID.",
+    "Input should be a valid datetime": "Введите корректную дату и время.",
+    "Input should be a valid email address": "Введите корректный email.",
+  };
+
+  if (normalized in directTranslations) {
+    return directTranslations[normalized];
+  }
+
+  const minLengthMatch = normalized.match(/^String should have at least (\d+) character/);
+  if (minLengthMatch) {
+    return `Минимальная длина: ${minLengthMatch[1]} символов.`;
+  }
+
+  const maxLengthMatch = normalized.match(/^String should have at most (\d+) character/);
+  if (maxLengthMatch) {
+    return `Максимальная длина: ${maxLengthMatch[1]} символов.`;
+  }
+
+  return translateBackendMessage(normalized);
+}
+
+function translateValidationPath(pathItems) {
+  const fieldTranslations = {
+    body: "тело запроса",
+    query: "query-параметр",
+    path: "путь",
+    email: "email",
+    password: "пароль",
+    timezone: "таймзона",
+    role: "роль",
+    slot_id: "ID слота",
+    package_id: "ID пакета",
+    booking_id: "ID бронирования",
+    new_slot_id: "ID нового слота",
+    reason: "причина",
+    refresh_token: "refresh token",
+  };
+
+  return pathItems.map((item) => fieldTranslations[item] ?? String(item)).join(" -> ");
+}
+
+function fallbackStatusMessage(statusCode) {
+  const fallbackMessages = {
+    400: "Некорректный запрос.",
+    401: "Требуется авторизация.",
+    403: "Недостаточно прав.",
+    404: "Ресурс не найден.",
+    409: "Конфликт данных.",
+    422: "Ошибка валидации запроса.",
+    429: "Слишком много запросов. Попробуйте позже.",
+    500: "Внутренняя ошибка сервера.",
+  };
+  return fallbackMessages[statusCode] ?? `HTTP ${statusCode}`;
+}
+
 function extractValidationError(payload) {
   if (!Array.isArray(payload?.detail)) {
     return null;
@@ -660,10 +982,10 @@ function extractValidationError(payload) {
       }
 
       if (Array.isArray(item.loc) && item.loc.length > 0) {
-        return `${item.loc.join(".")}: ${message}`;
+        return `${translateValidationPath(item.loc)}: ${translateValidationMessage(message)}`;
       }
 
-      return message;
+      return translateValidationMessage(message);
     })
     .filter(Boolean);
 
@@ -682,16 +1004,16 @@ function extractErrorMessage(payload, statusCode) {
 
   if (payload && typeof payload === "object") {
     if (payload.error && typeof payload.error.message === "string") {
-      return payload.error.message;
+      return translateBackendMessage(payload.error.message);
     }
     if (typeof payload.detail === "string") {
-      return payload.detail;
+      return translateBackendMessage(payload.detail);
     }
     if (typeof payload.message === "string") {
-      return payload.message;
+      return translateBackendMessage(payload.message);
     }
   }
-  return `HTTP ${statusCode}`;
+  return fallbackStatusMessage(statusCode);
 }
 
 async function refreshSession() {

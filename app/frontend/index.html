@@ -83,6 +83,8 @@
             <button type="button" class="tab-btn" data-tab="slots">Открытые слоты</button>
             <button type="button" class="tab-btn" data-tab="bookings">Мои бронирования</button>
             <button type="button" class="tab-btn" data-tab="packages">Мои пакеты</button>
+            <button type="button" class="tab-btn" data-tab="lessons">Мои уроки</button>
+            <button type="button" class="tab-btn" data-tab="admin-ops">Admin операции</button>
           </div>
 
           <section id="tab-profile" class="tab-content active">
@@ -116,6 +118,29 @@
               <button id="refresh-packages-btn" type="button">Обновить</button>
             </div>
             <div id="packages-content" class="cards"></div>
+          </section>
+
+          <section id="tab-lessons" class="tab-content">
+            <div class="tab-head">
+              <h3>Мои уроки</h3>
+              <button id="refresh-lessons-btn" type="button">Обновить</button>
+            </div>
+            <div id="lessons-content" class="cards"></div>
+          </section>
+
+          <section id="tab-admin-ops" class="tab-content">
+            <div class="tab-head">
+              <h3>Admin операции</h3>
+            </div>
+            <div class="action-row">
+              <button id="run-expire-holds-btn" type="button" class="action-btn">
+                Expire HOLD bookings
+              </button>
+              <button id="run-expire-packages-btn" type="button" class="action-btn secondary">
+                Expire active packages
+              </button>
+            </div>
+            <div id="admin-actions-content" class="cards"></div>
           </section>
         </section>
       </div>

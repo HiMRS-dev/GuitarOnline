@@ -235,6 +235,24 @@ select:focus {
   margin: 0;
 }
 
+.inline-controls {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.inline-label {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.inline-controls select {
+  min-width: 260px;
+  max-width: 100%;
+}
+
 .cards {
   margin-top: 12px;
   display: grid;
@@ -262,6 +280,47 @@ select:focus {
 
 .meta + .meta {
   margin-top: 4px;
+}
+
+.action-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.action-row input,
+.action-row select {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.action-btn {
+  min-width: 132px;
+}
+
+.secondary {
+  border-color: #b8cbd2;
+  color: #2d5a66;
+  background: #f3fafc;
+}
+
+.secondary:hover {
+  border-color: #7ba7b3;
+  background: #e8f4f8;
+}
+
+button:disabled,
+.action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.hint {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
 }
 
 .empty-note {

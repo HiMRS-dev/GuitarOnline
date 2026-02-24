@@ -27,6 +27,8 @@ Production-ready modular monolith backend for an online guitar school.
 
 - Start production-oriented compose stack:
   - `docker compose -f docker-compose.prod.yml up --build -d`
+- Optional single-site reverse-proxy profile (one public entrypoint):
+  - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml up --build -d`
 - Optional warmup for flaky networks (pull images with retries before deploy):
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1`
 - Included services:
@@ -39,6 +41,27 @@ Production-ready modular monolith backend for an online guitar school.
   - `grafana` (dashboards UI, port `3000`).
 - Apply migrations after deploy:
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
+
+### Single-Site Runtime Profile (Reverse Proxy)
+
+- Compose bundle:
+  - `docker-compose.prod.yml` + `docker-compose.proxy.yml`
+- Public entrypoint:
+  - `http://localhost:${PROXY_PUBLIC_PORT:-8080}`
+- Canonical URLs behind proxy:
+  - root: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/`
+  - portal: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/portal`
+  - API: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/api/v1`
+  - docs: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/docs`
+  - health: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/health`
+  - readiness: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/ready`
+  - metrics: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/metrics`
+- Health checks:
+  - proxy container probes `/health` through upstream app.
+  - app service remains healthchecked on `http://localhost:8000/health` inside container.
+- Note:
+  - in proxy profile, host binding for `app:8000` is removed (`ports: []` override),
+    so external traffic should use proxy URL only.
 
 ## Migrations
 
@@ -164,5 +187,6 @@ Production-ready modular monolith backend for an online guitar school.
   - `powershell -ExecutionPolicy Bypass -File scripts/validate_ops_configs.ps1`
 - Validation includes:
   - `docker-compose.prod.yml` syntax,
+  - `docker-compose.prod.yml + docker-compose.proxy.yml` merged syntax,
   - Prometheus config and alert rules (`promtool`),
   - Alertmanager config (`amtool`).

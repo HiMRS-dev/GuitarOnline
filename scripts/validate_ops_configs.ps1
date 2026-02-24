@@ -11,6 +11,11 @@ try {
         throw "docker compose config validation failed"
     }
 
+    docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config -q
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose proxy profile validation failed"
+    }
+
     docker run --rm --entrypoint promtool -v "${repoRoot}/ops/prometheus:/etc/prometheus:ro" `
         prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
     if ($LASTEXITCODE -ne 0) {

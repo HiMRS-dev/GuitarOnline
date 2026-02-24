@@ -190,6 +190,11 @@ Production-ready modular monolith backend for an online guitar school.
 - Restore DB from backup file:
   - `powershell -ExecutionPolicy Bypass -File scripts/db_restore.ps1 -InputFile backups/manual.sql`
 
+## Release Checklist
+
+- End-to-end release runbook (deploy, migrate, smoke tests, rollback):
+  - `ops/release_checklist.md`
+
 ## Docker Network Mitigation
 
 - If Docker Hub pulls are unstable, pre-pull core runtime images with retries:

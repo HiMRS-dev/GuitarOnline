@@ -5,13 +5,18 @@ Use this checklist before promoting a build to a target environment.
 ## 1) Pre-Deploy
 
 - Confirm target commit/tag and change log.
-- Confirm environment variables are prepared (`.env`, secrets, proxy port override if used).
+- Confirm environment variables are prepared (preferred: `PROD_ENV_FILE_B64` GitHub secret for deploy workflow; fallback: manual `.env`).
+- If `.env` changed, refresh GitHub secret:
+  - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
+  - update repository secret `PROD_ENV_FILE_B64`.
 - If real on-call channels are required, render on-call Alertmanager config from env secrets:
   - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
 - Validate ops configuration:
   - `powershell -ExecutionPolicy Bypass -File scripts/validate_ops_configs.ps1`
 - Optional image warmup (unstable network):
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1`
+- Optional maintenance silence before deploy (warning alerts by default):
+  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release window"`
 - Confirm backup plan and write access to backup location.
 
 ## 2) Backup
@@ -19,9 +24,14 @@ Use this checklist before promoting a build to a target environment.
 - Create fresh DB backup:
   - `powershell -ExecutionPolicy Bypass -File scripts/db_backup.ps1`
 - Verify backup file exists and is readable.
+- Verify restore process against backup artifact:
+  - `bash scripts/verify_backup_restore.sh <backup.sql>`
 
 ## 3) Deploy
 
+- Preferred one-click path (GitHub Actions):
+  - run `.github/workflows/deploy.yml` (`workflow_dispatch`, confirm=`DEPLOY`).
+  - choose runtime profile (`standard` or `proxy`) and optional backup/smoke toggles.
 - Standard production stack:
   - `docker compose -f docker-compose.prod.yml up --build -d`
 - Single-site proxy profile:
@@ -67,6 +77,8 @@ Use this checklist before promoting a build to a target environment.
 - Confirm Grafana dashboard loads and reflects request traffic.
 - Confirm Alertmanager config is loaded and no route errors are present.
 - Confirm Alertmanager notifications for synthetic alerts are successful (no repeated notify failures in logs).
+- If maintenance silence was created, expire it after successful rollout:
+  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_expire_silence.ps1 -SilenceId <id>`
 
 ## 7) Rollback Procedure
 

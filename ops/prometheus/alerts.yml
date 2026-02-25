@@ -5,6 +5,7 @@ groups:
         expr: up{job="guitaronline-api"} == 0
         for: 2m
         labels:
+          service: guitaronline-api
           severity: critical
         annotations:
           summary: "GuitarOnline API is down"
@@ -19,6 +20,7 @@ groups:
           ) > 0.05
         for: 5m
         labels:
+          service: guitaronline-api
           severity: warning
         annotations:
           summary: "High 5xx error ratio"
@@ -32,6 +34,7 @@ groups:
           ) > 1
         for: 10m
         labels:
+          service: guitaronline-api
           severity: warning
         annotations:
           summary: "High API latency"

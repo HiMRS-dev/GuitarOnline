@@ -93,7 +93,10 @@ if ($hasEmail) {
     $routes += @(
         '    - receiver: email-warning',
         '      matchers:',
-        '        - severity="warning"'
+        '        - severity="warning"',
+        '      group_wait: 60s',
+        '      group_interval: 10m',
+        '      repeat_interval: 6h'
     )
 }
 
@@ -102,14 +105,20 @@ if ($hasSlack) {
         $routes += @(
             '    - receiver: slack-warning',
             '      matchers:',
-            '        - severity="warning"'
+            '        - severity="warning"',
+            '      group_wait: 60s',
+            '      group_interval: 10m',
+            '      repeat_interval: 6h'
         )
     }
 
     $routes += @(
         '    - receiver: slack-critical',
         '      matchers:',
-        '        - severity="critical"'
+        '        - severity="critical"',
+        '      group_wait: 15s',
+        '      group_interval: 5m',
+        '      repeat_interval: 1h'
     )
     if ($hasPagerDuty) {
         $routes += '      continue: true'
@@ -120,7 +129,10 @@ if ($hasPagerDuty) {
     $routes += @(
         '    - receiver: pagerduty-critical',
         '      matchers:',
-        '        - severity="critical"'
+        '        - severity="critical"',
+        '      group_wait: 15s',
+        '      group_interval: 5m',
+        '      repeat_interval: 1h'
     )
 }
 
@@ -194,11 +206,23 @@ global:
 
 route:
   receiver: default-log
-  group_by: ["alertname", "severity"]
+  group_by: ["service", "alertname", "severity"]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 2h
 $routesText
+
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ["alertname", "service"]
+  - source_matchers:
+      - alertname="GuitarOnlineApiDown"
+    target_matchers:
+      - alertname=~"GuitarOnlineApiHigh5xxRate|GuitarOnlineApiHighP95Latency"
+    equal: ["service"]
 
 receivers:
 $receiversText

@@ -47,6 +47,38 @@ Production-ready modular monolith backend for an online guitar school.
 - Apply migrations after deploy:
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
 
+### One-Click Deploy Pipeline
+
+- GitHub Actions workflow:
+  - `.github/workflows/deploy.yml`
+- Trigger:
+  - `workflow_dispatch` with required confirmation input `DEPLOY`.
+- Required GitHub repository secrets:
+  - `DEPLOY_HOST`
+  - `DEPLOY_PORT` (optional, defaults to `22`)
+  - `DEPLOY_USER`
+  - `DEPLOY_PATH`
+  - `DEPLOY_SSH_PRIVATE_KEY`
+  - `DEPLOY_KNOWN_HOSTS` (optional; when empty workflow runs `ssh-keyscan`)
+  - `PROD_ENV_FILE_B64` (base64-encoded production `.env`)
+- Build `PROD_ENV_FILE_B64` value from local `.env`:
+  - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
+  - copy output and set it as repository secret `PROD_ENV_FILE_B64`.
+- Runtime options:
+  - `ref` (branch/tag/SHA),
+  - `profile` (`standard` or `proxy`),
+  - `run_backup` (`true/false`),
+  - `run_smoke` (`true/false`).
+- Workflow behavior:
+  - uploads `.env` from `PROD_ENV_FILE_B64` to `${DEPLOY_PATH}/.env`,
+  - performs compose deploy and DB migrations,
+  - runs post-deploy smoke checks (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, auth flow),
+  - performs automatic rollback to previous git SHA when deploy/migrate/smoke fails.
+- Secret safety controls:
+  - `.env` is ignored by git (`.gitignore`),
+  - CI hard-fails if `.env` appears in tracked files,
+  - production `.env` is delivered from GitHub Secrets during deploy and is not stored in repository history.
+
 ### Single-Site Runtime Profile (Reverse Proxy)
 
 - Compose bundle:
@@ -74,6 +106,19 @@ Production-ready modular monolith backend for an online guitar school.
   - `poetry run alembic revision --autogenerate -m "init"`
 - Apply migrations:
   - `poetry run alembic upgrade head`
+
+## Secret Leak Prevention
+
+- CI guardrails:
+  - `.github/workflows/ci.yml` runs `python scripts/secret_guard.py --mode repo`,
+  - CI fails if `.env` is ever tracked in git.
+- Local pre-commit guardrails:
+  - install hooks once:
+    - `powershell -ExecutionPolicy Bypass -File scripts/install_git_hooks.ps1`
+  - hook path:
+    - `.githooks/pre-commit` (runs `scripts/secret_guard.py --mode staged`).
+- False-positive override (explicit and reviewable):
+  - add inline marker in the line: `secret-scan: allow`.
 
 ## Security Controls
 
@@ -177,9 +222,21 @@ Production-ready modular monolith backend for an online guitar school.
   - when SMTP email is configured: `warning` -> `email-warning`
   - when SMTP email is absent but Slack is configured: `warning` -> `slack-warning`
   - `critical` -> `slack-critical` (+ `pagerduty-critical` when PagerDuty key is configured)
+- Anti-noise controls:
+  - warning routes use slower repeat interval (`6h`),
+  - critical routes use faster repeat interval (`1h`),
+  - inhibition suppresses warning alerts when matching critical is active (`alertname + service`),
+  - `GuitarOnlineApiDown` inhibits `GuitarOnlineApiHigh5xxRate` / `GuitarOnlineApiHighP95Latency` for the same service.
 - Fire synthetic alerts for routing validation:
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
   - confirm delivery in at least one real target channel (Slack/PagerDuty/Email).
+- Maintenance silence baseline:
+  - create temporary silence (warning by default):
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release window"`
+  - include critical alerts in silence (optional):
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 30 -IncludeCritical -Comment "planned maintenance"`
+  - expire silence by ID:
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_expire_silence.ps1 -SilenceId <id>`
 
 ## Admin Operations
 
@@ -212,6 +269,14 @@ Production-ready modular monolith backend for an online guitar school.
   - `powershell -ExecutionPolicy Bypass -File scripts/db_backup.ps1 -OutputFile backups/manual.sql`
 - Restore DB from backup file:
   - `powershell -ExecutionPolicy Bypass -File scripts/db_restore.ps1 -InputFile backups/manual.sql`
+- Verify backup restore reproducibly against a temporary DB:
+  - `bash scripts/verify_backup_restore.sh`
+- Verify restore against a specific backup artifact:
+  - `bash scripts/verify_backup_restore.sh backups/manual.sql`
+- Recurring remote verification workflow:
+  - `.github/workflows/backup-restore-verify.yml`
+  - schedule: every Monday at `03:00 UTC`,
+  - can also run manually via `workflow_dispatch` (`confirm=VERIFY`).
 
 ## Release Checklist
 

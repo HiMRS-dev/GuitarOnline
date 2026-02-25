@@ -3,10 +3,22 @@ global:
 
 route:
   receiver: default-log
-  group_by: ["alertname", "severity"]
+  group_by: ["service", "alertname", "severity"]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 2h
+
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ["alertname", "service"]
+  - source_matchers:
+      - alertname="GuitarOnlineApiDown"
+    target_matchers:
+      - alertname=~"GuitarOnlineApiHigh5xxRate|GuitarOnlineApiHighP95Latency"
+    equal: ["service"]
 
 receivers:
   - name: default-log

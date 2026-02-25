@@ -1,0 +1,111 @@
+name: deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (branch, tag, or commit SHA)"
+        required: true
+        default: "main"
+      profile:
+        description: "Compose runtime profile"
+        required: true
+        type: choice
+        options:
+          - standard
+          - proxy
+        default: standard
+      run_backup:
+        description: "Create pre-deploy DB backup"
+        required: true
+        type: boolean
+        default: true
+      run_smoke:
+        description: "Run post-deploy smoke checks"
+        required: true
+        type: boolean
+        default: true
+      confirm:
+        description: "Type DEPLOY to confirm"
+        required: true
+
+jobs:
+  deploy:
+    if: ${{ github.event.inputs.confirm == 'DEPLOY' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      PROD_ENV_FILE_B64: ${{ secrets.PROD_ENV_FILE_B64 }}
+      REF_NAME: ${{ github.event.inputs.ref }}
+      PROFILE: ${{ github.event.inputs.profile }}
+      RUN_BACKUP: ${{ github.event.inputs.run_backup }}
+      RUN_SMOKE: ${{ github.event.inputs.run_smoke }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+            PROD_ENV_FILE_B64
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Upload production env file
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+
+          mkdir -p .tmp
+          trap 'rm -f .tmp/prod.env' EXIT
+          printf '%s' "${PROD_ENV_FILE_B64}" | base64 -d > .tmp/prod.env
+
+          ssh -p "${port}" "${remote}" "mkdir -p '${DEPLOY_PATH}'"
+          scp -P "${port}" .tmp/prod.env "${remote}:${DEPLOY_PATH}/.env"
+          ssh -p "${port}" "${remote}" "chmod 600 '${DEPLOY_PATH}/.env'"
+
+      - name: Deploy, migrate, smoke, rollback on failure
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+
+          ssh -p "${port}" "${remote}" "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' PROFILE='${PROFILE}' RUN_BACKUP='${RUN_BACKUP}' RUN_SMOKE='${RUN_SMOKE}' bash -s" < scripts/deploy_remote.sh

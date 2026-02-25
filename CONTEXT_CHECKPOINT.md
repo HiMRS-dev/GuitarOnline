@@ -1,4 +1,4 @@
-# GuitarOnline Context Checkpoint (Updated 2026-02-23)
+﻿# GuitarOnline Context Checkpoint (Updated 2026-02-23)
 
 ## 1) Product Context
 - Project: backend for an online guitar learning platform (modular monolith).
@@ -680,11 +680,57 @@ Acceptance:
   - task 2 completed: explicit release checklist exists and was executed,
   - task 3 completed: stable release tagged (`v1.0.0`) with final checkpoint snapshot.
 
-## 15) Secrets Delivery Backlog
-1. Настроить безопасную доставку `.env` на сервер без хранения в репозитории:
-   - источник: CI/CD secrets,
-   - деплой: автоматическая запись `.env` на сервер перед `docker compose up`,
-   - контроль: `.env` не трекается в git и не попадает в историю коммитов.
+## 15) Post-MVP Hardening Backlog
+Execution order:
+2 -> 3 -> 4 -> 5 -> 1
 
+2. One-click deploy pipeline (`Completed 2026-02-25`)
+   - workflow added: `.github/workflows/deploy.yml` (`workflow_dispatch`, confirm gate),
+   - automated remote deploy script added: `scripts/deploy_remote.sh`,
+   - post-deploy smoke checks extracted: `scripts/deploy_smoke_check.py`,
+   - docs updated: `README.md`, `ops/release_checklist.md`.
+
+3. Repository secret leak prevention (`Completed 2026-02-25`)
+   - CI guardrails added in `.github/workflows/ci.yml`:
+     - tracked `.env` hard-fail check,
+     - repository secret scan via `scripts/secret_guard.py --mode repo`,
+   - local pre-commit guardrails added:
+     - `.githooks/pre-commit`,
+     - `scripts/install_git_hooks.ps1`,
+   - docs updated: `README.md`.
+
+4. Monitoring noise control and routing hardening (`Completed 2026-02-25`)
+   - alert labeling hardened in `ops/prometheus/alerts.yml` (`service=guitaronline-api`),
+   - baseline and generated Alertmanager configs now include inhibit rules and tuned warning/critical repeat behavior:
+     - `ops/alertmanager/alertmanager.yml`,
+     - `scripts/render_alertmanager_oncall_config.ps1`,
+   - maintenance silence baseline added:
+     - `scripts/alertmanager_create_silence.ps1`,
+     - `scripts/alertmanager_expire_silence.ps1`,
+   - docs/runbook updated and validated:
+     - `README.md`,
+     - `ops/release_checklist.md`,
+     - `scripts/validate_ops_configs.ps1` run passed.
+
+5. Backup/restore verification automation (`Completed 2026-02-25`)
+   - reproducible restore verification scripts added:
+     - `scripts/verify_backup_restore.sh` (artifact-aware local/host verification),
+     - `scripts/verify_backup_remote.sh` (remote orchestration wrapper),
+   - recurring automation added:
+     - `.github/workflows/backup-restore-verify.yml` (scheduled + manual verify),
+   - runbook/docs updated:
+     - `README.md`,
+     - `ops/release_checklist.md`.
+
+1. Secure `.env` delivery to server without storing secrets in git (`Completed 2026-02-25`)
+   - source: CI/CD secrets,
+   - deploy: write `.env` on target host before compose up,
+   - control: `.env` never tracked in git history,
+   - implemented via:
+     - one-click deploy upload from `PROD_ENV_FILE_B64` in `.github/workflows/deploy.yml`,
+     - tracked `.env` CI guard in `.github/workflows/ci.yml`,
+     - helper for secret preparation: `scripts/encode_env_base64.ps1`,
+     - docs updates in `README.md` and `ops/release_checklist.md`.
 ## 16) MVP Closure Status
 - Checkpoint status: MVP closed (2026-02-25).
+

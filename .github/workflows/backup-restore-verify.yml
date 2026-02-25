@@ -1,0 +1,82 @@
+name: backup-restore-verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to verify on server"
+        required: true
+        default: "main"
+      keep_backup:
+        description: "Keep generated verification backup on server"
+        required: true
+        type: boolean
+        default: true
+      confirm:
+        description: "Type VERIFY to confirm"
+        required: true
+  schedule:
+    - cron: "0 3 * * 1"
+
+jobs:
+  verify:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'VERIFY' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
+      KEEP_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.keep_backup || 'true' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Verify backup restore on target host
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+
+          ssh -p "${port}" "${remote}" "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' KEEP_BACKUP='${KEEP_BACKUP}' bash -s" < scripts/verify_backup_remote.sh

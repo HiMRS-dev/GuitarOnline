@@ -1,4 +1,4 @@
-﻿# GuitarOnline Context Checkpoint (Updated 2026-02-23)
+﻿# GuitarOnline Context Checkpoint (Updated 2026-02-25)
 
 ## 1) Product Context
 - Project: backend for an online guitar learning platform (modular monolith).
@@ -734,3 +734,147 @@ Execution order:
 ## 16) MVP Closure Status
 - Checkpoint status: MVP closed (2026-02-25).
 
+
+## 17) Next Session Handover (Priority Plan For 2026-02-26)
+
+Objective for next session:
+- Complete first successful remote GitHub Actions cycle:
+  1. `deploy` workflow success,
+  2. `backup-restore-verify` workflow success on same ref.
+
+Current confirmed state before stopping:
+- branch: `main`,
+- latest commit with hardening backlog: `63f00fc`,
+- push status: `origin/main` updated,
+- local working tree was clean after push,
+- workflows and scripts are already in repository:
+  - `.github/workflows/deploy.yml`,
+  - `.github/workflows/backup-restore-verify.yml`,
+  - `scripts/deploy_remote.sh`,
+  - `scripts/deploy_smoke_check.py`,
+  - `scripts/verify_backup_remote.sh`,
+  - `scripts/verify_backup_restore.sh`,
+  - `scripts/secret_guard.py`.
+
+### P0 (Highest Priority): Secrets + SSH Preconditions
+
+Do this first, otherwise workflows will fail immediately.
+
+Required GitHub repository secrets for `deploy`:
+- `DEPLOY_HOST`:
+  - purpose: target server host/IP for SSH,
+  - expected format: `144.31.77.239`.
+- `DEPLOY_USER`:
+  - purpose: SSH user used by Actions runner,
+  - expected format: linux account name, e.g. `deploy` / `ubuntu`.
+- `DEPLOY_PATH`:
+  - purpose: absolute project path on server where `.git` exists,
+  - expected format: `/opt/guitaronline`.
+- `DEPLOY_SSH_PRIVATE_KEY`:
+  - purpose: private SSH key for authentication,
+  - expected format: full multiline OpenSSH private key (`-----BEGIN OPENSSH PRIVATE KEY----- ...`).
+- `PROD_ENV_FILE_B64`:
+  - purpose: production `.env` payload uploaded during deploy,
+  - expected format: base64 string generated from `.env`.
+
+Required GitHub repository secrets for `backup-restore-verify`:
+- `DEPLOY_HOST`,
+- `DEPLOY_USER`,
+- `DEPLOY_PATH`,
+- `DEPLOY_SSH_PRIVATE_KEY`.
+
+Optional but recommended:
+- `DEPLOY_PORT`:
+  - default fallback is `22`,
+  - set only if SSH runs on a non-standard port.
+- `DEPLOY_KNOWN_HOSTS`:
+  - recommended for host key pinning,
+  - if absent, workflow uses `ssh-keyscan`.
+
+Host-side prerequisites to verify once:
+1. `DEPLOY_PATH` exists on server and is a valid git repo (`.git` directory present).
+2. SSH public key (from `DEPLOY_SSH_PRIVATE_KEY`) is in `~/.ssh/authorized_keys` for `DEPLOY_USER`.
+3. `DEPLOY_USER` can run `docker compose` on target host.
+4. Repo at `DEPLOY_PATH` has correct `origin` remote and access to fetch target ref.
+
+### P1: Run Deploy Workflow
+
+Workflow start:
+1. GitHub -> `Actions` -> `deploy` -> `Run workflow`.
+2. Inputs:
+   - `ref=main`,
+   - `profile=standard` (or `proxy` if reverse-proxy profile is needed),
+   - `run_backup=true`,
+   - `run_smoke=true`,
+   - `confirm=DEPLOY`.
+
+Expected behavior:
+1. Validates required secrets.
+2. Connects via SSH.
+3. Decodes `PROD_ENV_FILE_B64` and writes `${DEPLOY_PATH}/.env`.
+4. Runs remote deploy script:
+   - `git fetch/checkout`,
+   - optional pre-deploy DB backup,
+   - `docker compose up --build -d`,
+   - `alembic upgrade head`,
+   - smoke tests.
+5. If failure occurs after checkout, rollback trap attempts return to previous SHA.
+
+Deploy success criteria:
+- workflow job status `Success`,
+- step `Deploy, migrate, smoke, rollback on failure` is green,
+- logs contain `Deployment completed successfully.`.
+
+### P2: Run Backup/Restore Verification Workflow
+
+Run only after successful deploy:
+1. GitHub -> `Actions` -> `backup-restore-verify` -> `Run workflow`.
+2. Inputs:
+   - `ref` same as deploy ref,
+   - `keep_backup=true` (or `false` if no artifact retention needed),
+   - `confirm=VERIFY`.
+
+Expected behavior:
+- connects to same host/path,
+- executes `scripts/verify_backup_restore.sh`,
+- creates verification DB, restores backup, checks public tables count,
+- reports pass/fail in workflow logs.
+
+Verification success criteria:
+- workflow job status `Success`,
+- logs contain `Backup/restore verification passed.`.
+
+### P3: Post-Run Evidence Capture (Do Not Skip)
+
+After both workflows are green, record in this checkpoint:
+1. deploy workflow run URL/id and timestamp,
+2. backup-restore-verify run URL/id and timestamp,
+3. deployed ref/SHA,
+4. profile used (`standard` or `proxy`),
+5. whether `keep_backup` was true/false.
+
+### Fast Failure Triage Map (Use In Order)
+
+If error is `Missing required repository secret: DEPLOY_HOST`:
+- add/update secret `DEPLOY_HOST` in repo Actions secrets.
+
+If error is `Permission denied (publickey)`:
+- wrong/missing private key in `DEPLOY_SSH_PRIVATE_KEY`,
+- public key not installed for `DEPLOY_USER`,
+- wrong `DEPLOY_USER`.
+
+If error is `Target path is not a git repository`:
+- wrong `DEPLOY_PATH`,
+- repo not cloned on server.
+
+If error is `docker compose: command not found` or permission issues:
+- docker/compose missing on host or user lacks docker permissions.
+
+If smoke checks fail:
+- inspect service logs on host (`app`, `db`, `outbox-worker`),
+- rerun deploy after fix (rollback already attempted by script).
+
+### Resume Shortcut (Tomorrow First 3 Actions)
+1. Verify secrets in GitHub UI (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_PRIVATE_KEY`, `PROD_ENV_FILE_B64`).
+2. Run `deploy` workflow with `confirm=DEPLOY`.
+3. If green, run `backup-restore-verify` with `confirm=VERIFY`.

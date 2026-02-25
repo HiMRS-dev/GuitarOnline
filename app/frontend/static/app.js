@@ -113,6 +113,12 @@ function clearSession() {
   }
 }
 
+function moveToAuthState(message = "Сессия истекла. Выполните вход снова.") {
+  clearSession();
+  showAuthMode();
+  setGlobalStatus(message, "error");
+}
+
 function showAuthMode() {
   elements.dashboardPanel.hidden = true;
   elements.logoutButton.hidden = true;
@@ -1031,7 +1037,6 @@ async function refreshSession() {
     persistTokens(tokenPair);
     return true;
   } catch (_) {
-    clearSession();
     return false;
   }
 }
@@ -1087,6 +1092,13 @@ async function apiRequest(
         retryOnUnauthorized: false,
       });
     }
+    moveToAuthState("Сессия истекла. Выполните вход снова.");
+    throw new Error("Сессия истекла. Выполните вход снова.");
+  }
+
+  if (response.status === 401 && auth) {
+    moveToAuthState("Сессия истекла. Выполните вход снова.");
+    throw new Error("Сессия истекла. Выполните вход снова.");
   }
 
   if (!response.ok) {

@@ -472,7 +472,7 @@ Status: completed (2026-02-23).
 Execution rule:
 - Start each next step only after previous step is fully completed and committed.
 
-### Queue 1: Frontend MVP functional completion (Implemented, browser acceptance pending)
+### Queue 1: Frontend MVP functional completion (Completed 2026-02-24)
 Goal:
 - Finish core user flow directly in `/portal` UI.
 
@@ -493,7 +493,7 @@ Acceptance:
   registration/login -> hold -> confirm -> cancel/reschedule works.
 - No console JS errors in browser during basic flow.
 
-### Queue 2: Frontend security/session hardening (Pending)
+### Queue 2: Frontend security/session hardening (Completed 2026-02-24)
 Goal:
 - Make portal session behavior reliable and safe.
 
@@ -548,7 +548,7 @@ Tasks:
 Acceptance:
 - Fresh DB + seed -> portal can be shown without manual data creation.
 
-### Queue 6: External alert receivers onboarding (Blocked by secrets)
+### Queue 6: External alert receivers onboarding (Completed 2026-02-25)
 Goal:
 - Close monitoring stack gap with real incident channels.
 
@@ -560,7 +560,7 @@ Tasks:
 Acceptance:
 - Test alert is delivered to at least one real target channel.
 
-### Queue 7: Release hardening and MVP closure (In progress)
+### Queue 7: Release hardening and MVP closure (Completed 2026-02-25)
 Goal:
 - Finish project with release-grade baseline and handoff.
 
@@ -573,12 +573,15 @@ Acceptance:
 - Release checklist executed successfully on target environment.
 - Checkpoint status switched to MVP closed.
 
-## 13) Progress Update (2026-02-24)
+## 13) Progress Update (2026-02-25)
 - Queue 1 implementation delivered in portal frontend:
   - booking actions in UI (`hold`, `confirm`, `cancel`, `reschedule`),
   - role-aware tabs and sections for `student` / `teacher` / `admin`,
   - Russian-oriented API error rendering with validation path translation.
   - commits: `88cdc81`, `e72fbd6`.
+- Queue 1 browser acceptance confirmed:
+  - manual portal scenario completed: `registration/login -> hold -> confirm -> cancel/reschedule`,
+  - no console JS errors reported during basic flow.
 - Queue 3 delivered:
   - static assets routing tests added for:
     - `/portal/static/styles.css`,
@@ -604,3 +607,84 @@ Acceptance:
     - `ops/release_checklist.md`,
   - linked in `README.md`.
   - commit: `7138711`.
+- Queue 2 completion and hardening finalization:
+  - one-time token refresh retry on `401` is in portal API client,
+  - terminal auth failure now forces clean auth-mode transition (`clearSession + showAuthMode`),
+  - repeated click double-submit guard is applied to mutation buttons,
+  - logout clears all local portal state and tokens.
+- Queue 6 onboarding automation delivered:
+  - added on-call Alertmanager config generator from env secrets:
+    - `scripts/render_alertmanager_oncall_config.ps1`,
+  - added alerting compose override profile:
+    - `docker-compose.alerting.yml`,
+  - added synthetic alert trigger script:
+    - `scripts/alertmanager_fire_synthetic.ps1`,
+  - updated docs/runbooks and env template for required `ALERTMANAGER_*` settings.
+- Queue 6 acceptance confirmed (2026-02-25):
+  - local `ALERTMANAGER_SLACK_WEBHOOK_URL` / `ALERTMANAGER_SLACK_CHANNEL` configured,
+  - on-call Alertmanager config generated and loaded after restart,
+  - synthetic alerts were delivered to Slack with working `<!channel>` mention.
+- Queue 7 docs/runbook final-pass progress:
+  - clarified README release/alerting paths (baseline, proxy, alerting overrides),
+  - extended release checklist with synthetic alert delivery validation step,
+  - ops config validation now checks alerting override when generated on-call config exists.
+- Queue 7 completion confirmed (2026-02-25):
+  - final docs/runbook pass completed:
+    - alert routing description in `README.md` synchronized with generator fallback behavior,
+    - release backup/restore scripts fixed (`scripts/db_backup.ps1`, `scripts/db_restore.ps1`).
+  - release checklist executed on local target environment:
+    - stack up with `docker-compose.prod.yml` + `docker-compose.alerting.yml`,
+    - migration check: `alembic current` => `20260219_0001 (head)`,
+    - smoke checks passed for `/health`, `/ready`, `/docs`, `/metrics`, `/portal`,
+      `/portal/static/app.js`, `/portal/static/styles.css`,
+      and auth flow `register -> login -> /api/v1/identity/users/me`,
+    - synthetic alert routing validated with unique run id `df50ebde5753`
+      and Slack notifications counter increase (`2 -> 4`),
+    - backup created and verified readable:
+      `backups/guitaronline-20260225-120853.sql`,
+    - ops config validation passed (`promtool`, `amtool`, compose config checks).
+  - first stable release tag target set: `v1.0.0`.
+
+## 14) Queue Verification Audit (2026-02-25)
+- Queue 1 (`Completed`):
+  - portal student booking actions are implemented in `app/frontend/static/app.js`:
+    `hold`, `confirm`, `cancel`, `reschedule`,
+  - role-aware sections and Russian error rendering are implemented,
+  - manual browser acceptance marked as confirmed in this checkpoint update.
+- Queue 2 (`Completed`):
+  - token-expiration handling is implemented (`refresh` retry once),
+  - terminal auth failure returns UI to auth mode without stale session state,
+  - request concurrency guard exists via disabled action buttons during in-flight operations,
+  - logout clears local session/tokens and resets portal state.
+- Queue 3 (`Completed 2026-02-24`):
+  - portal static route tests exist: `tests/test_portal_page.py`,
+  - portal auth sequence integration tests exist: `tests/test_portal_auth_flow_integration.py`,
+  - latest local checks:
+    - `py -m poetry run pytest -q tests/test_portal_page.py` => `3 passed`,
+    - `py -m poetry run pytest -q -rs tests/test_portal_auth_flow_integration.py` => `2 skipped` (local integration stack unavailable at `http://localhost:8000/health`).
+- Queue 4 (`Completed 2026-02-24`):
+  - proxy profile and config present: `docker-compose.proxy.yml`, `ops/nginx/default.conf`,
+  - docs and validation flow are present in `README.md` and `scripts/validate_ops_configs.ps1`.
+- Queue 5 (`Completed 2026-02-24`):
+  - idempotent seed script present: `scripts/seed_demo_data.py`,
+  - demo runbook and credentials documented in `README.md`.
+- Queue 6 (`Completed 2026-02-25`):
+  - onboarding automation exists:
+    - `scripts/render_alertmanager_oncall_config.ps1`,
+    - `docker-compose.alerting.yml`,
+    - `scripts/alertmanager_fire_synthetic.ps1`,
+  - receiver template exists: `ops/alertmanager/alertmanager.receivers.example.yml`,
+  - severity routing and synthetic alert delivery were verified against Slack channel in local environment.
+- Queue 7 (`Completed 2026-02-25`):
+  - task 1 completed: final docs/runbooks pass done and stale ambiguity removed,
+  - task 2 completed: explicit release checklist exists and was executed,
+  - task 3 completed: stable release tagged (`v1.0.0`) with final checkpoint snapshot.
+
+## 15) Secrets Delivery Backlog
+1. Настроить безопасную доставку `.env` на сервер без хранения в репозитории:
+   - источник: CI/CD secrets,
+   - деплой: автоматическая запись `.env` на сервер перед `docker compose up`,
+   - контроль: `.env` не трекается в git и не попадает в историю коммитов.
+
+## 16) MVP Closure Status
+- Checkpoint status: MVP closed (2026-02-25).

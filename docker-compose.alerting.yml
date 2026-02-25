@@ -1,0 +1,7 @@
+services:
+  alertmanager:
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.oncall.generated.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./ops/alertmanager/alertmanager.oncall.generated.yml:/etc/alertmanager/alertmanager.oncall.generated.yml:ro

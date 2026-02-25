@@ -29,6 +29,11 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml up --build -d`
 - Optional single-site reverse-proxy profile (one public entrypoint):
   - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml up --build -d`
+- Optional real on-call routing profile (requires rendered on-call Alertmanager config):
+  - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
+  - `docker compose -f docker-compose.prod.yml -f docker-compose.alerting.yml up --build -d`
+- Optional single-site + on-call profile:
+  - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml -f docker-compose.alerting.yml up --build -d`
 - Optional warmup for flaky networks (pull images with retries before deploy):
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1`
 - Included services:
@@ -152,11 +157,29 @@ Production-ready modular monolith backend for an online guitar school.
 ## Alert Receiver Onboarding
 
 - Current Alertmanager baseline receiver is local (`default-log`) and safe by default.
-- For real on-call routing, use template:
-  - `ops/alertmanager/alertmanager.receivers.example.yml`
-- Add required receiver blocks to:
-  - `ops/alertmanager/alertmanager.yml`
-- Then update Alertmanager `route`/`routes` to map severities (`warning`/`critical`) to your real receivers.
+- Real on-call config is generated from environment secrets:
+  - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
+- Generated file (ignored by git):
+  - `ops/alertmanager/alertmanager.oncall.generated.yml`
+- Compose override for generated config:
+  - `docker-compose.alerting.yml`
+- Required env secrets:
+  - `ALERTMANAGER_SLACK_WEBHOOK_URL`
+  - `ALERTMANAGER_SLACK_CHANNEL`
+  - `ALERTMANAGER_PAGERDUTY_ROUTING_KEY`
+  - `ALERTMANAGER_SMTP_SMARTHOST`
+  - `ALERTMANAGER_SMTP_FROM`
+  - `ALERTMANAGER_SMTP_TO`
+  - `ALERTMANAGER_SMTP_AUTH_USERNAME`
+  - `ALERTMANAGER_SMTP_AUTH_PASSWORD`
+  - `ALERTMANAGER_SMTP_REQUIRE_TLS`
+- Severity routing in generated config:
+  - when SMTP email is configured: `warning` -> `email-warning`
+  - when SMTP email is absent but Slack is configured: `warning` -> `slack-warning`
+  - `critical` -> `slack-critical` (+ `pagerduty-critical` when PagerDuty key is configured)
+- Fire synthetic alerts for routing validation:
+  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
+  - confirm delivery in at least one real target channel (Slack/PagerDuty/Email).
 
 ## Admin Operations
 
@@ -212,5 +235,7 @@ Production-ready modular monolith backend for an online guitar school.
 - Validation includes:
   - `docker-compose.prod.yml` syntax,
   - `docker-compose.prod.yml + docker-compose.proxy.yml` merged syntax,
+  - `docker-compose.prod.yml + docker-compose.alerting.yml` merged syntax (when generated on-call config exists),
   - Prometheus config and alert rules (`promtool`),
-  - Alertmanager config (`amtool`).
+  - baseline Alertmanager config (`amtool`),
+  - on-call Alertmanager config (`amtool`, when generated on-call config exists).

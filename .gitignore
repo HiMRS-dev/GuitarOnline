@@ -7,3 +7,5 @@ __pycache__/
 .mypy_cache/
 .coverage
 htmlcov/
+ops/alertmanager/alertmanager.oncall.generated.yml
+backups/

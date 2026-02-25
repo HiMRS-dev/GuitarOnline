@@ -1,6 +1,10 @@
-# Example extension file for real on-call routing.
-# Merge the receiver blocks below into ops/alertmanager/alertmanager.yml
-# and update `route.receiver` / `routes` as needed.
+# Example receiver values for real on-call routing.
+# Preferred workflow:
+# 1) Put values into .env (ALERTMANAGER_* vars).
+# 2) Generate config with:
+#    powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1
+# 3) Start compose with docker-compose.alerting.yml override.
+# Manual merge into ops/alertmanager/alertmanager.yml is possible but not recommended.
 
 receivers:
   - name: slack-critical
@@ -9,7 +13,7 @@ receivers:
         channel: "#ops-alerts"
         send_resolved: true
         title: "{{ .CommonLabels.alertname }} ({{ .Status }})"
-        text: "{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.description }}"
+        text: "<!channel> \U0001F6A8 {{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.description }}"
 
   - name: pagerduty-critical
     pagerduty_configs:

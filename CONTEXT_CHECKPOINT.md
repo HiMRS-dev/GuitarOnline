@@ -854,6 +854,25 @@ After both workflows are green, record in this checkpoint:
 4. profile used (`standard` or `proxy`),
 5. whether `keep_backup` was true/false.
 
+Execution evidence (recorded 2026-02-26, UTC):
+- deploy:
+  - run id: `22431343056`,
+  - run URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22431343056`,
+  - created: `2026-02-26T06:55:34Z`,
+  - completed: `2026-02-26T06:55:52Z`,
+  - conclusion: `success`.
+- backup-restore-verify:
+  - run id: `22431359500`,
+  - run URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22431359500`,
+  - created: `2026-02-26T06:56:11Z`,
+  - completed: `2026-02-26T06:56:29Z`,
+  - conclusion: `success`.
+- deployed ref/SHA:
+  - `ref=main`,
+  - `sha=760559859fe05934fe4f604b192d5b87c376b4fe`.
+- deploy profile: `standard`.
+- backup verification `keep_backup=true`.
+
 ### Fast Failure Triage Map (Use In Order)
 
 If error is `Missing required repository secret: DEPLOY_HOST`:

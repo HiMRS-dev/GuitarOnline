@@ -47,11 +47,24 @@ jobs:
       PROFILE: ${{ github.event.inputs.profile }}
       RUN_BACKUP: ${{ github.event.inputs.run_backup }}
       RUN_SMOKE: ${{ github.event.inputs.run_smoke }}
+      REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.ref }}
+
+      - name: Print deployment context
+        run: |
+          set -euo pipefail
+          echo "Repository URL: ${REPO_URL}"
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Requested ref: ${REF_NAME}"
+          echo "Requested profile: ${PROFILE}"
+          echo "Run backup: ${RUN_BACKUP}"
+          echo "Run smoke: ${RUN_SMOKE}"
+          echo "Bootstrap mode: auto (repo initialized if ${DEPLOY_PATH} has no .git)"
 
       - name: Validate required secrets
         run: |
@@ -69,6 +82,14 @@ jobs:
               exit 1
             fi
           done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+          if [[ "${PROFILE}" != "standard" && "${PROFILE}" != "proxy" ]]; then
+            echo "::error::Unsupported profile input: ${PROFILE}"
+            exit 1
+          fi
 
       - name: Setup SSH key
         uses: webfactory/ssh-agent@v0.9.0
@@ -108,4 +129,4 @@ jobs:
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           port="${DEPLOY_PORT:-22}"
 
-          ssh -p "${port}" "${remote}" "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' PROFILE='${PROFILE}' RUN_BACKUP='${RUN_BACKUP}' RUN_SMOKE='${RUN_SMOKE}' bash -s" < scripts/deploy_remote.sh
+          ssh -p "${port}" "${remote}" "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' PROFILE='${PROFILE}' RUN_BACKUP='${RUN_BACKUP}' RUN_SMOKE='${RUN_SMOKE}' REPO_URL='${REPO_URL}' bash -s" < scripts/deploy_remote.sh

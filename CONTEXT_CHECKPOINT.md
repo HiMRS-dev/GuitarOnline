@@ -792,10 +792,10 @@ Optional but recommended:
   - if absent, workflow uses `ssh-keyscan`.
 
 Host-side prerequisites to verify once:
-1. `DEPLOY_PATH` exists on server and is a valid git repo (`.git` directory present).
+1. `DEPLOY_PATH` exists (or can be created) and is writable by `DEPLOY_USER`.
 2. SSH public key (from `DEPLOY_SSH_PRIVATE_KEY`) is in `~/.ssh/authorized_keys` for `DEPLOY_USER`.
 3. `DEPLOY_USER` can run `docker compose` on target host.
-4. Repo at `DEPLOY_PATH` has correct `origin` remote and access to fetch target ref.
+4. `git` is installed on host; workflow bootstrap will initialize repo metadata and configure `origin` automatically when `.git` is missing.
 
 ### P1: Run Deploy Workflow
 
@@ -813,6 +813,7 @@ Expected behavior:
 2. Connects via SSH.
 3. Decodes `PROD_ENV_FILE_B64` and writes `${DEPLOY_PATH}/.env`.
 4. Runs remote deploy script:
+   - bootstrap repo metadata when target path has no `.git`,
    - `git fetch/checkout`,
    - optional pre-deploy DB backup,
    - `docker compose up --build -d`,
@@ -863,9 +864,9 @@ If error is `Permission denied (publickey)`:
 - public key not installed for `DEPLOY_USER`,
 - wrong `DEPLOY_USER`.
 
-If error is `Target path is not a git repository`:
-- wrong `DEPLOY_PATH`,
-- repo not cloned on server.
+If error is `Deploy path is not writable`:
+- wrong owner/permissions for `DEPLOY_PATH`,
+- `DEPLOY_USER` cannot write to target directory.
 
 If error is `docker compose: command not found` or permission issues:
 - docker/compose missing on host or user lacks docker permissions.

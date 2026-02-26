@@ -7,8 +7,13 @@ Use this checklist before promoting a build to a target environment.
 - Confirm target commit/tag and change log.
 - Confirm environment variables are prepared (preferred: `PROD_ENV_FILE_B64` GitHub secret for deploy workflow; fallback: manual `.env`).
 - If `.env` changed, refresh GitHub secret:
-  - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
-  - update repository secret `PROD_ENV_FILE_B64`.
+  - preferred one-command sync:
+    - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1`
+  - if production env source of truth is on server:
+    - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1 -RemoteHost 144.31.77.239 -RemoteUser deploy -RemoteEnvPath /opt/guitaronline/.env`
+  - fallback manual method:
+    - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
+    - update repository secret `PROD_ENV_FILE_B64`.
 - If real on-call channels are required, render on-call Alertmanager config from env secrets:
   - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
 - Validate ops configuration:
@@ -96,3 +101,5 @@ Use this checklist before promoting a build to a target environment.
 - Record deployed commit/tag, timestamp, and operator.
 - Record smoke-test results and any follow-up actions.
 - Update checkpoint/report status in project docs.
+- For ongoing reliability controls, run:
+  - `ops/production_hardening_checklist.md`

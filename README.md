@@ -57,19 +57,27 @@ Production-ready modular monolith backend for an online guitar school.
   - `DEPLOY_HOST`
   - `DEPLOY_PORT` (optional, defaults to `22`)
   - `DEPLOY_USER`
-  - `DEPLOY_PATH`
+  - `DEPLOY_PATH` (absolute target path, e.g. `/opt/guitaronline`)
   - `DEPLOY_SSH_PRIVATE_KEY`
   - `DEPLOY_KNOWN_HOSTS` (optional; when empty workflow runs `ssh-keyscan`)
   - `PROD_ENV_FILE_B64` (base64-encoded production `.env`)
 - Build `PROD_ENV_FILE_B64` value from local `.env`:
   - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
   - copy output and set it as repository secret `PROD_ENV_FILE_B64`.
+- Recommended one-command secret sync helper:
+  - local env file -> GitHub secret:
+    - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1`
+  - remote server env -> GitHub secret:
+    - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1 -RemoteHost 144.31.77.239 -RemoteUser deploy -RemoteEnvPath /opt/guitaronline/.env`
+  - auth requirements:
+    - either run `gh auth login` once, or set `GH_TOKEN`/`GITHUB_TOKEN` for current shell.
 - Runtime options:
   - `ref` (branch/tag/SHA),
   - `profile` (`standard` or `proxy`),
   - `run_backup` (`true/false`),
   - `run_smoke` (`true/false`).
 - Workflow behavior:
+  - bootstraps repository metadata on target host when `${DEPLOY_PATH}` has no `.git` (no manual pre-clone required),
   - uploads `.env` from `PROD_ENV_FILE_B64` to `${DEPLOY_PATH}/.env`,
   - performs compose deploy and DB migrations,
   - runs post-deploy smoke checks (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, auth flow),
@@ -276,12 +284,15 @@ Production-ready modular monolith backend for an online guitar school.
 - Recurring remote verification workflow:
   - `.github/workflows/backup-restore-verify.yml`
   - schedule: every Monday at `03:00 UTC`,
-  - can also run manually via `workflow_dispatch` (`confirm=VERIFY`).
+  - can also run manually via `workflow_dispatch` (`confirm=VERIFY`),
+  - includes the same repository bootstrap logic for empty `${DEPLOY_PATH}`.
 
 ## Release Checklist
 
 - End-to-end release runbook (deploy, migrate, smoke tests, rollback):
   - `ops/release_checklist.md`
+- Reliability hardening runbook (health checks, log retention, monitoring, rollback drills):
+  - `ops/production_hardening_checklist.md`
 
 ## Docker Network Mitigation
 

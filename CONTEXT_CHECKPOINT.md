@@ -1,4 +1,4 @@
-﻿# GuitarOnline Context Checkpoint (Updated 2026-02-25)
+﻿# GuitarOnline Context Checkpoint (Updated 2026-02-26)
 
 ## 1) Product Context
 - Project: backend for an online guitar learning platform (modular monolith).
@@ -890,6 +890,32 @@ Auto-deploy follow-up evidence (recorded 2026-02-26, UTC):
   - conclusion: `success`,
   - deployed sha: `979fbd796d034c5c12d975519e6ae5e9b1dc1a0a`.
 
+Reality reconciliation (validated 2026-02-26, UTC):
+- original "next session" handover objective is completed.
+- latest push-triggered deploy run:
+  - run id: `22431967798`,
+  - run URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22431967798`,
+  - event: `push`,
+  - created: `2026-02-26T07:18:59Z`,
+  - completed: `2026-02-26T07:19:16Z`,
+  - conclusion: `success`,
+  - deployed sha: `708e94976801f21023dba113aad7ef3a746507e7`.
+- latest backup-restore verification run:
+  - run id: `22431359500`,
+  - run URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22431359500`,
+  - event: `workflow_dispatch`,
+  - created: `2026-02-26T06:56:11Z`,
+  - completed: `2026-02-26T06:56:29Z`,
+  - conclusion: `success`.
+- server runtime verification snapshot:
+  - host git state: `main` at `708e94976801f21023dba113aad7ef3a746507e7`,
+  - core services (`app`, `db`, `redis`, `outbox-worker`, `prometheus`, `alertmanager`, `grafana`) are `Up`,
+  - health/readiness checks: `/health=ok`, `/ready=ready`,
+  - `scripts/deploy_smoke_check.py` passed on host.
+- remaining actionable items in this checkpoint:
+  - no mandatory unfinished execution items,
+  - only non-blocking risks/technical debt listed in section 6.
+
 ### Fast Failure Triage Map (Use In Order)
 
 If error is `Missing required repository secret: DEPLOY_HOST`:
@@ -911,7 +937,8 @@ If smoke checks fail:
 - inspect service logs on host (`app`, `db`, `outbox-worker`),
 - rerun deploy after fix (rollback already attempted by script).
 
-### Resume Shortcut (Tomorrow First 3 Actions)
+### Resume Shortcut (Historical, Completed 2026-02-26)
 1. Verify secrets in GitHub UI (`DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_PRIVATE_KEY`, `PROD_ENV_FILE_B64`).
 2. Run `deploy` workflow with `confirm=DEPLOY`.
 3. If green, run `backup-restore-verify` with `confirm=VERIFY`.
+

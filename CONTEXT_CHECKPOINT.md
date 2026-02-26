@@ -873,6 +873,23 @@ Execution evidence (recorded 2026-02-26, UTC):
 - deploy profile: `standard`.
 - backup verification `keep_backup=true`.
 
+Auto-deploy follow-up evidence (recorded 2026-02-26, UTC):
+- auto mode control:
+  - repository secret `AUTO_DEPLOY_ENABLED=true` configured.
+- first push-triggered run after enabling auto mode:
+  - run id: `22431491059`,
+  - run URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22431491059`,
+  - event: `push`,
+  - conclusion: `failure` (workflow-definition issue; no jobs started).
+- corrected push-triggered run after guard fix:
+  - run id: `22431548611`,
+  - run URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22431548611`,
+  - event: `push`,
+  - created: `2026-02-26T07:03:22Z`,
+  - completed: `2026-02-26T07:03:46Z`,
+  - conclusion: `success`,
+  - deployed sha: `979fbd796d034c5c12d975519e6ae5e9b1dc1a0a`.
+
 ### Fast Failure Triage Map (Use In Order)
 
 If error is `Missing required repository secret: DEPLOY_HOST`:

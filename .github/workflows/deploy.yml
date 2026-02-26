@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'DEPLOY') || (github.event_name == 'push' && secrets.AUTO_DEPLOY_ENABLED == 'true') }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'DEPLOY') || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -50,6 +50,7 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
       PROD_ENV_FILE_B64: ${{ secrets.PROD_ENV_FILE_B64 }}
+      AUTO_DEPLOY_ENABLED: ${{ secrets.AUTO_DEPLOY_ENABLED }}
       REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.sha }}
       PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.profile || 'standard' }}
       RUN_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_backup || 'true' }}
@@ -62,7 +63,20 @@ jobs:
         with:
           ref: ${{ env.REF_NAME }}
 
+      - name: Evaluate auto-deploy guard
+        id: auto_deploy_guard
+        run: |
+          set -euo pipefail
+          if [ "${TRIGGER_SOURCE}" = "push" ] && [ "${AUTO_DEPLOY_ENABLED:-}" != "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Auto deploy skipped: AUTO_DEPLOY_ENABLED is not true."
+            exit 0
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "Auto deploy guard passed."
+
       - name: Print deployment context
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |
           set -euo pipefail
           echo "Trigger source: ${TRIGGER_SOURCE}"
@@ -76,6 +90,7 @@ jobs:
           echo "Bootstrap mode: auto (repo initialized if ${DEPLOY_PATH} has no .git)"
 
       - name: Validate required secrets
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |
           set -euo pipefail
           required=(
@@ -101,11 +116,13 @@ jobs:
           fi
 
       - name: Setup SSH key
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
       - name: Configure known hosts
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
@@ -119,6 +136,7 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       - name: Upload production env file
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |
           set -euo pipefail
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
@@ -133,6 +151,7 @@ jobs:
           ssh -p "${port}" "${remote}" "chmod 600 '${DEPLOY_PATH}/.env'"
 
       - name: Deploy, migrate, smoke, rollback on failure
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |
           set -euo pipefail
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"

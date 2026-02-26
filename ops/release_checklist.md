@@ -37,6 +37,9 @@ Use this checklist before promoting a build to a target environment.
 - Preferred one-click path (GitHub Actions):
   - run `.github/workflows/deploy.yml` (`workflow_dispatch`, confirm=`DEPLOY`).
   - choose runtime profile (`standard` or `proxy`) and optional backup/smoke toggles.
+- Optional auto-deploy mode:
+  - set repository secret `AUTO_DEPLOY_ENABLED=true` to deploy automatically on push to `main`.
+  - for manual-only mode, remove this secret or set any value other than `true`.
 - Standard production stack:
   - `docker compose -f docker-compose.prod.yml up --build -d`
 - Single-site proxy profile:

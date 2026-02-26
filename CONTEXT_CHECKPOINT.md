@@ -685,7 +685,7 @@ Execution order:
 2 -> 3 -> 4 -> 5 -> 1
 
 2. One-click deploy pipeline (`Completed 2026-02-25`)
-   - workflow added: `.github/workflows/deploy.yml` (`workflow_dispatch`, confirm gate),
+   - workflow added: `.github/workflows/deploy.yml` (`workflow_dispatch`, confirm gate; optional push-to-main auto mode with `AUTO_DEPLOY_ENABLED=true`),
    - automated remote deploy script added: `scripts/deploy_remote.sh`,
    - post-deploy smoke checks extracted: `scripts/deploy_smoke_check.py`,
    - docs updated: `README.md`, `ops/release_checklist.md`.

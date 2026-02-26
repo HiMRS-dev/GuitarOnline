@@ -1,6 +1,9 @@
 name: deploy
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       ref:
@@ -29,9 +32,13 @@ on:
         description: "Type DEPLOY to confirm"
         required: true
 
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    if: ${{ github.event.inputs.confirm == 'DEPLOY' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'DEPLOY') || (github.event_name == 'push' && secrets.AUTO_DEPLOY_ENABLED == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -43,20 +50,22 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
       PROD_ENV_FILE_B64: ${{ secrets.PROD_ENV_FILE_B64 }}
-      REF_NAME: ${{ github.event.inputs.ref }}
-      PROFILE: ${{ github.event.inputs.profile }}
-      RUN_BACKUP: ${{ github.event.inputs.run_backup }}
-      RUN_SMOKE: ${{ github.event.inputs.run_smoke }}
+      REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.sha }}
+      PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.profile || 'standard' }}
+      RUN_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_backup || 'true' }}
+      RUN_SMOKE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_smoke || 'true' }}
+      TRIGGER_SOURCE: ${{ github.event_name }}
       REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref }}
+          ref: ${{ env.REF_NAME }}
 
       - name: Print deployment context
         run: |
           set -euo pipefail
+          echo "Trigger source: ${TRIGGER_SOURCE}"
           echo "Repository URL: ${REPO_URL}"
           echo "Deploy host: ${DEPLOY_HOST}"
           echo "Deploy path: ${DEPLOY_PATH}"

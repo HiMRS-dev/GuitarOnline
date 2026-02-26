@@ -53,6 +53,7 @@ Production-ready modular monolith backend for an online guitar school.
   - `.github/workflows/deploy.yml`
 - Trigger:
   - `workflow_dispatch` with required confirmation input `DEPLOY`.
+  - `push` to `main` when repository secret `AUTO_DEPLOY_ENABLED=true`.
 - Required GitHub repository secrets:
   - `DEPLOY_HOST`
   - `DEPLOY_PORT` (optional, defaults to `22`)
@@ -61,6 +62,10 @@ Production-ready modular monolith backend for an online guitar school.
   - `DEPLOY_SSH_PRIVATE_KEY`
   - `DEPLOY_KNOWN_HOSTS` (optional; when empty workflow runs `ssh-keyscan`)
   - `PROD_ENV_FILE_B64` (base64-encoded production `.env`)
+- Optional GitHub repository secrets:
+  - `AUTO_DEPLOY_ENABLED`:
+    - set to `true` to enable automatic deploy on every push to `main`,
+    - keep unset or non-`true` to keep deploy in manual-only mode.
 - Build `PROD_ENV_FILE_B64` value from local `.env`:
   - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
   - copy output and set it as repository secret `PROD_ENV_FILE_B64`.
@@ -76,6 +81,11 @@ Production-ready modular monolith backend for an online guitar school.
   - `profile` (`standard` or `proxy`),
   - `run_backup` (`true/false`),
   - `run_smoke` (`true/false`).
+- Push-mode defaults (when triggered by `push`):
+  - `ref=${GITHUB_SHA}`,
+  - `profile=standard`,
+  - `run_backup=true`,
+  - `run_smoke=true`.
 - Workflow behavior:
   - bootstraps repository metadata on target host when `${DEPLOY_PATH}` has no `.git` (no manual pre-clone required),
   - uploads `.env` from `PROD_ENV_FILE_B64` to `${DEPLOY_PATH}/.env`,

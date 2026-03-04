@@ -942,3 +942,972 @@ If smoke checks fail:
 2. Run `deploy` workflow with `confirm=DEPLOY`.
 3. If green, run `backup-restore-verify` with `confirm=VERIFY`.
 
+## 18) Backlog Intake: Admin+Calendar First (Received 2026-03-04)
+
+Intake source:
+- user-provided `Backlog v1 (Admin+Calendar first)`, items `A1`-`A10`.
+
+Review status labels:
+- `ready` = aligns with current codebase, low migration risk.
+- `partial` = base already exists, needs extension/hardening.
+- `decision_required` = meaningful conflict/breaking-change risk; resolve first.
+
+### A1. Base admin API contract DTOs + UTC timestamp naming
+Status: `decision_required`
+- Existing DTOs already cover `Teacher`, `Slot`, `Booking`, `Package`, `Lesson`, and `Student` via `identity.UserRead`.
+- Current field naming uses `start_at`, `end_at`, `created_at`, `updated_at`, etc., not strict `*_at_utc`.
+- Renaming response fields to `*_at_utc` can break:
+  - frontend portal consumer (`app/frontend/static/app.js`),
+  - integration tests that assert current payload keys.
+- `docs/ADMIN_API.md` does not exist yet and can be added.
+
+### A2. Standardized API errors
+Status: `partial`
+- Global error envelope already exists as `{ "error": { "code": "...", "message": "..." } }`.
+- Missing target format part: `details`.
+- Validation error shape from FastAPI should be explicitly normalized into the same contract.
+
+### A3. Strict RBAC rules
+Status: `decision_required`
+- `/api/v1/admin/*` is currently admin-only at service layer.
+- Strict requirement "all teacher endpoints only teacher / all student endpoints only student" conflicts with current behavior:
+  - teacher profile operations allow `admin` or owner,
+  - lesson operations allow `admin` + `teacher`,
+  - some booking operations are accessible by role-context owner/admin.
+- Explicit 401/403 endpoint tests for deny paths are not yet a dedicated suite.
+
+### A4. CORS + frontend env
+Status: `decision_required`
+- CORS middleware is not configured in `app/main.py`.
+- `DATABASE_URL` already exists.
+- Requested `JWT_SECRET` conflicts with current canonical `SECRET_KEY` usage in config/security/tests.
+- Safe path likely requires alias/backward compatibility rather than direct rename.
+
+### A5. Dev seed data
+Status: `partial`
+- Existing script: `scripts/seed_demo_data.py` (idempotent, documented in README).
+- Current baseline generates demo users and slots/packages, but not requested exact distribution:
+  - requested: `1 admin, 3 teacher, 5 student, 2 package, 10 slots`.
+- Requires expanding existing seeder, not greenfield creation.
+
+### A6. OpenAPI/Swagger admin-friendly polish
+Status: `partial`
+- Tags/descriptions already present across routers.
+- Examples are limited and can be enriched.
+- API endpoints are documented; intentionally hidden non-API routes (`/`, `/portal`, `/metrics`) are out of schema.
+
+### A7. Audit log for admin actions
+Status: `partial`
+- `audit_logs` and `admin_actions` tables/services already exist.
+- Additional coverage required for explicit events:
+  - verify teacher,
+  - bulk-create slots,
+  - block slot,
+  - cancel booking.
+- Some of these imply new endpoints/use-cases (e.g., bulk-create slots, block slot) before audit wiring.
+
+### A8. Validate all dates in UTC
+Status: `partial`
+- `ensure_utc(dt)` already exists in `app/shared/utils.py`.
+- It is already used in key services (`scheduling`, `billing`, `lessons`), but not yet enforced as a formal cross-module rule.
+- Edge-case timezone tests should be added (naive datetimes, non-UTC offsets, boundary cases).
+
+### A9. Normalize statuses as enums
+Status: `decision_required`
+- Already normalized enums exist: `Slot`, `Booking`, `Package`, `Payment`, `Lesson`.
+- Gap: no `TeacherStatusEnum`; teacher profile currently uses boolean `is_approved`.
+- Introducing `TeacherStatusEnum` requires migration + schema/API updates + data mapping.
+
+### A10. Single source of truth for Slot/Booking/Lesson
+Status: `ready`
+- Current implementation already aligns with target domain model:
+  - `Slot` = availability,
+  - `Booking` = reservation against slot,
+  - `Lesson` = fact entity tied to booking lifecycle.
+- Formalization file `docs/DOMAIN_RULES.md` is not present and can be added.
+
+Execution note:
+- Before implementation, resolve three architecture decisions to avoid rework:
+  1. timestamp contract migration strategy (`*_at_utc` vs backward-compatible aliases),
+  2. strict RBAC model boundaries (especially teacher/admin overlaps),
+  3. teacher status model (`is_approved` boolean vs enum) and env naming (`SECRET_KEY`/`JWT_SECRET`).
+
+## 19) Backlog v1.1 (Approved Rewrite, 2026-03-04)
+
+Scope:
+- rewrite conflict-prone items from `Backlog v1` into backward-compatible implementation tasks.
+
+### A1 (rewritten): Admin API contracts + UTC field naming without breaking existing clients
+- Introduce admin DTO contracts for `/api/v1/admin/*` with time fields in `*_at_utc` format (ISO8601 UTC).
+- Do not rename existing `*_at` fields in already shipped endpoints at this stage.
+- Add `docs/ADMIN_API.md` with:
+  - example payloads,
+  - field mapping table (`*_at` -> `*_at_utc`),
+  - deprecation/migration plan.
+
+### A3 (rewritten): RBAC matrix with explicit admin override
+- Enforce:
+  - `/admin/**` -> `admin` only.
+  - teacher scenarios -> `teacher` (own resources) + explicit `admin` override.
+  - student scenarios -> `student` (own resources) + explicit `admin` support path.
+- Add endpoint-level HTTP tests for:
+  - `401` (missing/invalid token),
+  - `403` (role/resource forbidden),
+  - `200/201` (allowed path).
+
+### A4 (rewritten): CORS + env compatibility strategy
+- Add CORS configuration using `FRONTEND_ADMIN_ORIGIN` (default `http://localhost:5173`).
+- Keep `SECRET_KEY` as canonical JWT signing secret.
+- Add `JWT_SECRET` as backward-compatible alias:
+  - when set, it has priority over `SECRET_KEY`,
+  - document precedence and migration guidance.
+- Keep `DATABASE_URL` unchanged.
+
+### A9 (rewritten): Teacher status migration in phases
+- Keep current status enums for slot/booking/package/payment/lesson as-is.
+- Introduce `TeacherStatusEnum` via phased migration:
+  - add enum column for teacher status,
+  - backfill mapping from `is_approved`:
+    - `true` -> `verified`,
+    - `false` -> `pending`,
+  - keep `is_approved` backward-compatible during transition,
+  - remove legacy boolean only after client migration completion.
+
+### Governance
+- Create ADR records before coding for A1/A3/A4/A9 to lock:
+  - contract migration strategy,
+  - RBAC boundaries,
+  - secret key env precedence,
+  - teacher status transition plan.
+
+## 20) Epic B Intake: Scheduling Hardening (Received 2026-03-04)
+
+Intake source:
+- user-provided `Epic B — Scheduling (слоты) железно`, items `B1`-`B14`.
+
+Review status labels:
+- `ready` = aligns with current codebase, low migration risk.
+- `partial` = base already exists, needs extension/hardening.
+- `decision_required` = meaningful conflict/breaking-change risk; resolve first.
+
+### B1. `GET /admin/teachers?status=&verified=&q=&tag=`
+Status: `decision_required`
+- Current admin module has no teacher-list endpoint.
+- Existing teacher model has `is_approved`, but no `tags` and no dedicated `teacher_status` yet.
+- Search by name/email is implementable, but depends on final status/tag model from A9 follow-up.
+
+### B2. `GET /admin/teachers/{id}` (tags/status/verified)
+Status: `decision_required`
+- Current data model supports `verified` (`is_approved`) only.
+- `tags` and explicit `status` are not yet modeled.
+
+### B3. `POST /admin/teachers/{id}/verify` and `/disable` + audit
+Status: `decision_required`
+- Verify can map to `is_approved=true` today.
+- Disable behavior is ambiguous in current model:
+  - disable account via `users.is_active=false`, or
+  - disable teacher capability via dedicated teacher status.
+- Audit logging infrastructure exists, but action semantics must be finalized first.
+
+### B4. `GET /admin/slots?teacher_id=&from_utc=&to_utc=` + aggregated booking status
+Status: `partial`
+- Current scheduling API exposes only open slots (`/scheduling/slots/open`) and no UTC range filter.
+- New admin endpoint is feasible, but requires explicit mapping rules for aggregated status
+  (`open/held/confirmed`) from `slot.status` + optional linked booking state.
+
+### B5. `POST /admin/slots` (single slot create with strict validation)
+Status: `partial`
+- Existing `/scheduling/slots` already validates:
+  - `start < end`,
+  - not in the past,
+  - admin-only access.
+- Missing pieces:
+  - minimum duration rule,
+  - dedicated admin contract/path,
+  - overlap guard integration.
+
+### B6. `DELETE /admin/slots/{slot_id}` with confirmed-booking safeguard
+Status: `decision_required`
+- Current DB schema uses `bookings.slot_id` foreign key with `ondelete=RESTRICT`.
+- Hard delete is blocked when any booking row references slot (not only confirmed).
+- Requirement "forbidden only for CONFIRMED booking" conflicts with current relational constraints.
+
+### B7. `POST /admin/slots/{slot_id}/block` with reason + audit
+Status: `decision_required`
+- Current slot statuses: `open/hold/booked/canceled`; no explicit `blocked` status.
+- No dedicated `block_reason` field in slot model.
+- Need decision:
+  - treat block as `canceled` + reason in audit payload, or
+  - introduce explicit blocked status/metadata via migration.
+
+### B8. `POST /admin/slots/bulk-create` (base)
+Status: `partial`
+- No bulk-create endpoint exists yet.
+- Core generation is feasible; needs overlap checks, deterministic skip reasons, and bounded transaction handling.
+
+### B9. Bulk-create exceptions (`exclude_dates[]`, `exclude_time_ranges[]`)
+Status: `partial`
+- Natural extension of B8; no current implementation conflict.
+- Requires clear UTC normalization and precedence rules (base ranges vs exclusions).
+
+### B10. Service-level anti-overlap in transaction
+Status: `partial`
+- No anti-overlap guard exists now.
+- Implementable in service layer with transactional create flow and conflict reporting.
+
+### B11. DB-level anti-overlap (constraint or locking)
+Status: `decision_required`
+- No overlap constraint currently exists in schema/migrations.
+- Requires design choice:
+  - PostgreSQL exclusion constraint (higher rigor, heavier migration complexity), or
+  - interval locking strategy (`SELECT ... FOR UPDATE`) as pragmatic fallback.
+
+### B12. `GET /admin/slots/stats?from_utc&to_utc`
+Status: `decision_required`
+- Requested statuses: `open/held/confirmed/completed/cancelled` (canonical backend token: `canceled`).
+- Current model spans multiple entities:
+  - slot: `open/hold/booked/canceled`,
+  - booking: `hold/confirmed/canceled/expired`,
+  - lesson: `scheduled/completed/canceled`.
+- Need explicit counting semantics to avoid inconsistent dashboards.
+
+### B13. Automatic HOLD cleanup worker
+Status: `partial`
+- Manual expiration endpoint already exists: `POST /api/v1/booking/holds/expire` (admin-gated).
+- No periodic hold-cleanup worker exists yet (only notifications outbox worker is deployed).
+- Requires decision on execution identity and wiring:
+  - system job path without user actor, or
+  - technical admin actor strategy.
+
+### B14. Integration test: bulk-create + no-overlap
+Status: `ready`
+- No direct conflict; depends on B8/B10/B11 contract finalization.
+
+Cross-cutting risks to resolve before coding Epic B:
+1. Teacher taxonomy for admin filters/cards (`status`, `verified`, `tags`) is not finalized.
+2. Slot lifecycle semantics (`blocked` vs `canceled`) is not finalized.
+3. Slot hard-delete policy conflicts with current `ondelete=RESTRICT` behavior.
+4. Overlap strategy choice (service-only vs DB-backed) affects API guarantees and migration scope.
+5. Existing schema constraint `bookings.slot_id` unique can block re-booking of the same slot after cancellation; this should be reviewed in scheduling lifecycle decisions.
+
+## 21) Epic B v1.1 (Approved Decisions, 2026-03-04)
+
+Decision scope:
+- lock key architecture/contract choices for `B1`-`B14` before implementation.
+
+1. Teacher identity key in admin scheduling flows:
+- use `teacher_id = users.id` for admin endpoints and slot operations (not `teacher_profiles.id`).
+
+2. Teacher status model:
+- introduce `TeacherStatusEnum` with values: `pending`, `verified`, `disabled`.
+- keep `is_approved` temporarily for backward compatibility during migration window.
+
+3. Teacher tags model:
+- store tags in dedicated relational table (`teacher_profile_tags`) instead of free-text/JSON blob.
+
+4. Admin teacher list/details filters:
+- in `GET /admin/teachers`, implement `q` over `teacher_profiles.display_name` + `users.email`.
+- implement filters via joins for `status`, `verified`, `tag`.
+
+5. Verify/disable semantics:
+- `POST /admin/teachers/{id}/verify`:
+  - set `teacher_status=verified`,
+  - set `is_approved=true`.
+- `POST /admin/teachers/{id}/disable`:
+  - set `teacher_status=disabled`,
+  - set `users.is_active=false`.
+- both actions must write audit records in `audit_logs`.
+
+6. Slot deletion policy:
+- `DELETE /admin/slots/{slot_id}` is allowed only when slot has no related booking rows.
+- if slot has any booking row, return `409` and require `POST /admin/slots/{slot_id}/block`.
+
+7. Slot block semantics:
+- introduce explicit slot status `blocked`.
+- add slot metadata fields:
+  - `block_reason`,
+  - `blocked_at`,
+  - `blocked_by_admin_id`.
+
+8. Re-booking and active-booking uniqueness strategy:
+- replace current unconditional `bookings.slot_id` uniqueness with active-state uniqueness policy,
+  allowing re-booking after terminal statuses (`canceled`, `expired`).
+- target behavior: only active booking states (`hold`, `confirmed`) must be unique per slot.
+
+9. Anti-overlap protection strategy:
+- apply two-layer protection:
+  - service-layer overlap validation in transaction with deterministic conflict reasons,
+  - locking with `SELECT ... FOR UPDATE` on candidate teacher interval range.
+- DB exclusion constraint remains optional second-phase hardening.
+
+10. Slot stats semantics (`GET /admin/slots/stats`):
+- use single-final-bucket counting per slot with priority:
+  - `completed > canceled > confirmed > held > open`.
+- avoid double counting across slot/booking/lesson entities.
+
+11. Automatic HOLD cleanup execution model:
+- add dedicated periodic worker `booking_holds_expirer`.
+- worker invokes system-level expiration path (`expire_holds_system()`), not user-token flow.
+
+12. Integration guarantee for bulk create:
+- keep mandatory integration scenario:
+  - bulk-create schedule,
+  - assert no overlapping intervals per teacher remain in DB.
+
+## 22) Epic C Intake: Booking + 24h Policy (Received 2026-03-04)
+
+Intake source:
+- user-provided `Epic C — Booking (бронь) + правила 24 часа`, items `C1`-`C12`.
+- items already fully covered by existing tests are intentionally excluded from checkpoint execution scope
+  (`C11`, `C12`).
+- notes in this intake section reflect pre-Epic-D accounting assumptions; for final booking/package
+  accounting model, section `25) Epic D v1.1` is authoritative.
+
+Review status labels:
+- `ready` = aligns with current codebase, low migration risk.
+- `partial` = base already exists, needs extension/hardening.
+- `decision_required` = meaningful conflict/breaking-change risk; resolve first.
+
+### C1. `GET /admin/bookings?teacher_id&student_id&status&from_utc&to_utc`
+Status: `partial`
+- Current booking API provides role-scoped listing only: `GET /booking/my`.
+- Admin can currently list all bookings only indirectly via role behavior, without explicit admin endpoint/filters/range.
+
+### C2. `POST /admin/bookings/{id}/cancel` (reason + who canceled + 24h policy)
+Status: `partial`
+- Core cancel logic and 24h refund behavior already exist in `BookingService.cancel_booking`.
+- Missing dedicated admin endpoint and explicit actor trace (`who canceled`) in booking-facing contract;
+  actor trace can be solved via audit log and/or model field decision.
+
+### C3. `POST /admin/bookings/{id}/reschedule` (atomic cancel + new confirmed)
+Status: `decision_required`
+- Current reschedule flow already performs `cancel + hold + confirm` in one request transaction.
+- But admin-initiated reschedule is blocked by current role guard:
+  - `reschedule_booking` calls `hold_booking`,
+  - `hold_booking` currently allows only `student`.
+- Needs explicit admin/system reschedule path.
+
+### C4. HOLD 10 minutes enforce + concurrency tests
+Status: `partial`
+- HOLD expiry is already enforced (`hold_expires_at = now + BOOKING_HOLD_MINUTES`).
+- Slot is moved to `HOLD` at booking hold creation.
+- Missing explicit concurrency test coverage for parallel HOLD attempts on same slot.
+
+### C5. Confirm booking: reserve consumption and transaction
+Status: `partial`
+- Confirm path already checks package existence and `lessons_left > 0`, and consumes one lesson
+  (current implementation baseline; target accounting model is superseded by section `25`).
+- Booking is already linked to `package_id` from HOLD stage.
+- Runs in request transaction, but no explicit documented transaction boundary for this business invariant yet.
+
+### C6. No booking/reschedule in the past
+Status: `partial`
+- Hold flow already blocks past slots (`slot.start_at <= now`).
+- Reschedule reuses hold flow, so past-slot check applies transitively.
+- Should be explicitly documented/tested as a cross-flow invariant (including admin path once added).
+
+### C7. Unified 24h policy function + boundary tests
+Status: `partial`
+- 24h decision is currently inline in `cancel_booking` via `hours_before_lesson > BOOKING_REFUND_WINDOW_HOURS`.
+- No dedicated helper `can_refund_by_policy(now_utc, slot_start_utc)` yet.
+- Boundary tests around exactly `24:00:00` are not isolated as policy-unit coverage.
+
+### C8. Audit log for cancel/reschedule admin actions
+Status: `partial`
+- Current flow emits outbox events (`booking.canceled`, `booking.rescheduled`), but not explicit admin action audit entries for these operations.
+
+### C9. Add `NO_SHOW` status
+Status: `decision_required`
+- No `NO_SHOW` status exists in current booking/lesson enums.
+- Needs domain decision:
+  - apply to booking, lesson, or both,
+  - define billing/package consequence (legacy note referenced confirm-time consumption baseline).
+
+### C10. Consistency: `slot_status` vs `booking_status`
+Status: `decision_required`
+- Current model stores lifecycle state in both slot and booking.
+- Existing known risk remains: unconditional `bookings.slot_id` uniqueness can block re-booking after terminal states.
+- Consistency rule should be finalized together with Epic B slot lifecycle decisions.
+
+Cross-cutting notes for Epic C:
+1. Endpoint naming mismatch to resolve in API contract:
+   - current public prefix is `/booking/*`,
+   - intake text uses `/bookings/*`.
+2. Admin booking operations in C2/C3 should align with approved RBAC matrix (`admin` only for `/admin/**`).
+3. C9/C10 should be decided in one design step with Epic B slot lifecycle and uniqueness policy to avoid double migration.
+
+## 23) Epic C v1.1 (Approved Decisions, 2026-03-04)
+
+Decision scope:
+- lock implementation direction for unresolved Epic C items (`C1`-`C10`).
+- explicitly exclude already covered test-only items (`C11`, `C12`) from checkpoint execution scope.
+
+1. Booking endpoint contract split:
+- keep public/user flows under existing prefix `/booking/*`.
+- introduce admin-only booking operations under `/admin/bookings/*`.
+
+2. Admin booking list endpoint (`C1`):
+- implement `GET /admin/bookings` with pagination and filters:
+  - `teacher_id`,
+  - `student_id`,
+  - `status`,
+  - `from_utc`,
+  - `to_utc`.
+- filtering logic should be repository-level to keep service deterministic and testable.
+
+3. Admin cancel endpoint (`C2`):
+- implement `POST /admin/bookings/{id}/cancel` as admin wrapper over booking cancel core.
+- require explicit `reason`.
+- persist admin trace in audit layer (`admin_id`, `booking_id`, `reason`, effective refund decision).
+
+4. Admin reschedule endpoint (`C3`):
+- implement dedicated admin reschedule path (must not depend on student-only hold permission).
+- execute atomically as one service transaction:
+  - cancel old booking,
+  - hold target slot,
+  - confirm new booking,
+  - set `rescheduled_from_booking_id`.
+
+5. Unified 24h policy helper (`C7`):
+- extract policy into:
+  - `can_refund_by_policy(now_utc, slot_start_utc) -> bool`.
+- use this helper from all cancel flows (student/admin/system).
+- add strict boundary tests:
+  - `23:59:59`,
+  - `24:00:00`,
+  - `24:00:01`.
+
+6. HOLD concurrency hardening (`C4`):
+- enforce slot-level concurrency control during HOLD creation (row lock on slot candidate).
+- add integration scenario for concurrent HOLD attempts on same slot:
+  - first HOLD succeeds,
+  - second HOLD fails deterministically.
+
+7. Confirm consistency and transaction invariants (`C5`, `C6`):
+- keep invariant checks in confirm flow:
+  - slot not in the past,
+  - package active,
+  - available package capacity > 0 (`lessons_left - lessons_reserved > 0` once Epic D accounting model is applied).
+- keep confirm side-effects in same request transaction boundary.
+
+8. Admin audit for cancel/reschedule (`C8`):
+- add explicit admin audit actions:
+  - `admin.booking.cancel`,
+  - `admin.booking.reschedule`.
+- include structured payload (`booking_id`, `old_slot_id`, `new_slot_id`, `reason`, actor id).
+
+9. `NO_SHOW` domain placement (`C9`):
+- add `NO_SHOW` to `LessonStatus` (not `BookingStatus`) to avoid booking lifecycle ambiguity.
+- admin operation marks lesson as no-show; package consequence remains "lesson consumed" (no refund).
+
+10. Slot vs booking consistency rule (`C10`):
+- canonical rule:
+  - slot is `open` only when there is no active booking (`hold`/`confirmed`) and slot is not blocked.
+- align with Epic B active-booking uniqueness strategy to prevent contradictory states.
+
+## 24) Epic D Intake: Billing Packages + Consumption (Received 2026-03-04)
+
+Intake source:
+- user-provided `Epic D — Billing: пакеты и списания`, items `D1`-`D12`.
+
+Review status labels:
+- `ready` = aligns with current codebase, low migration risk.
+- `partial` = base already exists, needs extension/hardening.
+- `decision_required` = meaningful conflict/breaking-change risk; resolve first.
+
+### D1. Package statuses `ACTIVE/EXPIRED/DEPLETED`
+Status: `decision_required`
+- Current `PackageStatusEnum` is `ACTIVE/EXPIRED/CANCELED`.
+- `DEPLETED` is not present; `CANCELED` is currently used across schemas/admin KPI counts.
+- Requires enum migration and compatibility decision (`replace` vs `add`).
+
+### D2. `GET /admin/packages?student_id&status`
+Status: `partial`
+- Current package listing is student-scoped (`/billing/packages/students/{student_id}`).
+- No global admin list endpoint with status filter yet.
+
+### D3. `POST /admin/packages` (manual create: lessons_total, price, expires_at) + audit
+Status: `decision_required`
+- Admin package creation already exists (`/billing/packages`) with audit logging.
+- Current package model has no `price` field; pricing currently lives in `payments`.
+- Requires data-model decision for where package price is stored in manual/no-payment mode.
+
+### D4. Consume lesson on lesson completion (double-charge safe)
+Status: `decision_required`
+- Current logic consumes lesson on booking confirm (`confirm_booking`), not on completion.
+- Switching to completion-based consumption affects:
+  - booking flow invariants,
+  - cancellation/refund behavior,
+  - existing integration/unit tests expecting confirm-time decrement.
+
+### D5. `POST /lessons/{id}/complete` (teacher/admin) triggers consumption
+Status: `partial`
+- Lessons can already be marked via `PATCH /lessons/{id}` status update.
+- No dedicated complete endpoint and no billing side-effect on lesson completion.
+
+### D6. Scheduled package expiration worker/cron
+Status: `partial`
+- Manual admin endpoint already exists: `POST /billing/packages/expire`.
+- No dedicated daily scheduler worker yet; can be wired as cron/system job.
+
+### D7. Confirm without package must fail with clear error
+Status: `partial`
+- Confirm path already checks `booking.package_id` and raises clear business error if missing.
+- Hold flow requires package, so this is mostly defensive path; explicit contract test can be added.
+
+### D8. Idempotent consumption (`complete` called twice)
+Status: `decision_required`
+- No completion-based consumption currently exists, so idempotency behavior is undefined.
+- Depends on D4/D5 accounting model decision.
+
+### D9. Payment provider abstraction v1 (`create_payment`, `handle_webhook`, manual_paid)
+Status: `partial`
+- Payment CRUD/status flow exists in billing service.
+- No provider abstraction layer and no webhook handler contract yet.
+
+### D10. Payments table ready for webhooks (`unique(provider_payment_id)`)
+Status: `decision_required`
+- Current `payments` table has no `provider_payment_id` column.
+- Requires migration + uniqueness constraint + integration contract for provider mapping.
+
+### D11. KPI package sales `GET /admin/kpi/sales?from_utc&to_utc`
+Status: `partial`
+- Existing admin KPI endpoint exposes aggregate payment/package metrics without time-range filtering.
+- Sales KPI endpoint with date range is not implemented.
+
+### D12. Integration test: confirm reserves, complete consumes
+Status: `decision_required`
+- Current tested behavior is different: confirm already decrements `lessons_left`.
+- New test expectation implies accounting model change and coordinated refactor of booking/billing/lessons flows.
+
+Cross-cutting risks to resolve before Epic D implementation:
+1. Accounting source of truth must be decided first:
+   - consume at `confirm` (current), or
+   - reserve at `confirm` + consume at `complete` (requested direction).
+2. If switching to reserve/consume model, add explicit reservation state (or counters) to avoid balance drift.
+3. Any D4/D12 model change will require synchronized updates to existing integration tests and refund semantics.
+
+## 25) Epic D v1.1 (Auto-Resolved Tasks, 2026-03-04)
+
+Decision scope:
+- resolve Epic D conflicts into implementation-ready tasks.
+
+1. Package status migration strategy (`D1`):
+- extend package lifecycle to include `DEPLETED` while keeping `CANCELED` as backward-compatible transitional status.
+- target status set for v1.1 runtime:
+  - `ACTIVE`,
+  - `EXPIRED`,
+  - `DEPLETED`,
+  - `CANCELED` (legacy transitional; deprecate later).
+- add migration + mapping rules in docs.
+
+2. Admin package listing (`D2`):
+- add `GET /admin/packages` with filters:
+  - `student_id`,
+  - `status`,
+  - pagination.
+- keep existing student endpoint unchanged for portal compatibility.
+
+3. Admin manual package creation with price snapshot (`D3`):
+- add admin endpoint `POST /admin/packages` as explicit admin contract.
+- package payload includes:
+  - `student_id`,
+  - `lessons_total`,
+  - `expires_at`,
+  - `price_amount`,
+  - `price_currency`.
+- store price as package snapshot fields (not only in payments).
+- write `audit_logs` action `admin.package.create`.
+
+4. Accounting model shift to reserve/consume (`D4`, `D12`):
+- move to two-step lesson accounting:
+  - on booking confirm: reserve lesson capacity (no direct consume),
+  - on lesson complete: consume lesson (`lessons_left` decrement).
+- add reservation state to package model:
+  - `lessons_reserved` (integer, default `0`).
+- available capacity rule:
+  - `available = lessons_left - lessons_reserved`.
+- all confirm/hold validation uses available capacity.
+
+5. Lesson completion endpoint (`D5`):
+- add `POST /lessons/{id}/complete` (teacher/admin access).
+- endpoint sets lesson status to `COMPLETED` and triggers one-time consumption.
+- keep `PATCH /lessons/{id}` for generic updates.
+
+6. Idempotent consumption guarantee (`D8`):
+- add lesson-level consumption marker:
+  - `consumed_at` (nullable UTC timestamp) or equivalent idempotency flag.
+- completion flow must be idempotent:
+  - repeated `complete` call does not decrement package twice.
+
+7. Cancellation/refund adaptation for reserve model (`D4`, `D7`):
+- confirm without package remains hard-fail with explicit business error.
+- cancel confirmed booking:
+  - `>24h`: release reservation only (`lessons_reserved - 1`),
+  - `<=24h`: burn lesson (`lessons_reserved - 1` and `lessons_left - 1`).
+- policy logic must call shared helper from Epic C:
+  - `can_refund_by_policy(now_utc, slot_start_utc)`.
+
+8. Package expiration scheduling (`D6`):
+- keep existing `POST /billing/packages/expire` business logic as expiration core.
+- add daily scheduler path (worker or cron) invoking system/admin expiration task.
+
+9. Payment provider abstraction v1 (`D9`):
+- introduce provider interface:
+  - `create_payment(...)`,
+  - `handle_webhook(...)`.
+- add `manual_paid` provider implementation for current phase.
+- billing service routes provider operations through abstraction, not direct branch logic.
+
+10. Payments webhook readiness (`D10`):
+- add payment provider identity fields:
+  - `provider_name`,
+  - `provider_payment_id`.
+- enforce uniqueness with partial unique index:
+  - unique `provider_payment_id` when not null.
+
+11. Sales KPI endpoint (`D11`):
+- add `GET /admin/kpi/sales?from_utc&to_utc`.
+- metric basis:
+  - succeeded payments amount,
+  - refunded amount,
+  - net amount,
+  - packages created count and paid conversion counters (where applicable).
+
+12. Integration contract updates (`D12`):
+- add integration scenario:
+  - confirm booking reserves capacity,
+  - lesson complete consumes lesson,
+  - verify `lessons_left` and `lessons_reserved` transitions.
+- update legacy confirm-decrement assertions to new reserve/consume behavior.
+
+## 26) Epic E v1.1 (Auto-Resolved Tasks, 2026-03-04)
+
+Decision scope:
+- convert Epic E into implementation-ready tasks.
+- keep already working invariant `booking confirm -> lesson exists (1:1)`; focus on missing capabilities.
+
+1. Lesson creation invariant (`E1`):
+- keep current behavior as canonical:
+  - lesson is guaranteed on booking confirm,
+  - one lesson per booking via unique `lessons.booking_id`.
+- no contract migration required; only regression coverage expansion in `E10`.
+
+2. Teacher lessons list endpoint (`E2`):
+- add `GET /teacher/lessons?from_utc&to_utc&limit&offset`.
+- endpoint is teacher-scoped and returns only teacher-owned lessons.
+- implement UTC range filters at repository query level.
+
+3. Teacher report endpoint (`E3`):
+- add `POST /teacher/lessons/{id}/report` with payload:
+  - `notes`,
+  - `homework`,
+  - `links` (list of URLs).
+- enforce teacher ownership and reuse role guards from lessons domain.
+
+4. Meeting URL support (`E4`):
+- add lesson field `meeting_url` (nullable).
+- support two assignment modes:
+  - manual URL input,
+  - template-based generation from admin-configured template.
+- store resolved final URL in lesson record.
+
+5. Student lessons endpoint contract (`E5`):
+- keep existing `GET /lessons/my` runtime behavior.
+- add contract alias `GET /me/lessons` mapped to same service logic for frontend contract stability.
+
+6. Access boundaries (`E6`):
+- teacher endpoints (`/teacher/lessons*`) must return only teacher-owned lessons.
+- student endpoints (`/me/lessons` and `/lessons/my`) must return only student-owned lessons.
+- admin access remains explicit only on admin routes or admin-capable lesson actions.
+
+7. Recording URL v2-ready (`E7`):
+- add nullable lesson field `recording_url`.
+- expose in lesson read DTO and update/report flows with validation.
+
+8. Minimal link moderation (`E8`):
+- add simple content guard for report payload fields (`notes`, `homework`, `links`):
+  - reject obvious contact patterns (phone/email/messenger handles/contact keywords),
+  - return clear business validation error.
+- keep heuristic lightweight and documented as baseline moderation.
+
+9. Report change audit (`E9`):
+- write audit log for report updates:
+  - action: `lesson.report.update`,
+  - include actor id, lesson id, and changed fields metadata (without storing sensitive raw diffs when avoidable).
+
+10. Integration regression for lesson creation (`E10`):
+- add integration test:
+  - booking confirm creates lesson record,
+  - lesson has correct linkage (`booking_id`, `teacher_id`, `student_id`),
+  - repeated confirm remains idempotent for lesson creation.
+
+## 27) Epic F v1.1 (Auto-Resolved Tasks, 2026-03-04)
+
+Decision scope:
+- implement minimal useful notifications on top of existing outbox/worker baseline.
+
+1. Notification template contract (`F1`):
+- introduce template keys:
+  - `booking_confirmed`,
+  - `booking_canceled`,
+  - `lesson_reminder_24h`.
+- keep template registry code-based for v1 (no DB template editor yet).
+- accept legacy alias `booking_cancelled` as backward-compatible template token during transition.
+
+2. Email delivery stub strategy (`F2`):
+- keep delivery mode as stub:
+  - worker writes delivery result to application logs,
+  - notification records remain persisted in `notifications` table as delivery journal.
+- no separate `notification_outbox` table in v1 (reuse existing domain outbox + notifications log).
+
+3. Worker processing baseline (`F3`):
+- keep and harden existing `outbox_notifications_worker` loop as primary processor.
+- standardize config env vars and error logging for deterministic operations.
+
+4. Trigger mapping (`F4`):
+- map booking domain events to templates:
+  - `booking.confirmed` -> `booking_confirmed`,
+  - `booking.canceled` -> `booking_canceled`,
+  - `booking.rescheduled` -> `booking_canceled` + optional new-booking confirmation message.
+- centralize event-to-template mapping in notifications worker service.
+
+5. Admin notification log endpoint (`F5`):
+- add `GET /admin/notifications` with filters:
+  - recipient user id,
+  - channel,
+  - status,
+  - template key,
+  - created range.
+- endpoint is admin-only and uses paginated output.
+
+6. Reminder 24h worker (`F6`):
+- add periodic reminder job (hourly preferred):
+  - scans lessons starting in next 24h window,
+  - creates `lesson_reminder_24h` notifications.
+- add idempotency key (`lesson_id + reminder_type + date`) to prevent duplicate reminders.
+
+7. Test scope note (`F7`):
+- generation tests already partially covered in current suite for confirm/cancel outbox emission.
+- add focused reminder-generation test only (new behavior), without duplicating existing coverage.
+
+8. Telegram extensibility doc (`F8`):
+- add `docs/NOTIFICATIONS_INTEGRATIONS.md` with provider interface contract:
+  - `send(message)`,
+  - channel-specific payload adapter,
+  - retry/error handling expectations.
+
+## 28) Epic G v1.1 (Auto-Resolved Tasks, 2026-03-04)
+
+Decision scope:
+- bootstrap `web-admin` frontend in phased mode with backend-contract alignment.
+
+1. App bootstrap (`G1`):
+- create `web-admin/` using `Vite + React + TypeScript`.
+- include baseline tooling:
+  - ESLint,
+  - Prettier,
+  - env `VITE_API_BASE_URL`.
+
+2. Auth flow contract (`G2`):
+- login uses backend identity endpoint:
+  - `POST {VITE_API_BASE_URL}/identity/auth/login`.
+- v1 token storage:
+  - `localStorage` for access/refresh,
+  - migration path to httpOnly cookies documented for v2.
+
+3. Protected routing (`G3`):
+- enforce token presence and admin role gate for all admin routes.
+- on missing/invalid token -> redirect to login.
+
+4. App layout/navigation (`G4`):
+- main sections:
+  - Teachers,
+  - Calendar,
+  - Students,
+  - Packages,
+  - KPI.
+
+5. API client core (`G5`):
+- implement typed HTTP client with:
+  - auth header injection,
+  - refresh-token flow,
+  - normalized backend error handling.
+
+6. Teachers pages (`G6`, `G7`):
+- list/detail pages integrate with Epic B admin teacher endpoints.
+- until Epic B endpoints are live, show deterministic “endpoint unavailable” state instead of silent failure.
+
+7. Calendar features (`G8`, `G9`, `G10`, `G11`, `G12`):
+- use FullCalendar week view with teacher filter.
+- status legend follows canonical backend status mapping.
+- slot create/block/bulk-create modals bind to Epic B endpoints.
+
+8. Bookings flow UI (`G13`, `G14`):
+- bookings table + reschedule modal integrate with Epic C admin booking endpoints.
+
+9. Students/packages/KPI pages (`G15`, `G16`, `G17`):
+- students/packages pages consume Epic D endpoints.
+- KPI page uses existing `/admin/kpi/overview` and future `/admin/kpi/sales`.
+
+10. Build/deploy option (`G18`):
+- add optional `web-admin/Dockerfile`.
+- add compose profile `admin-ui` with reverse-proxy/static serving integration.
+
+11. UX persistence baseline (`G9`, `H9` dependency):
+- persist selected `teacher_id` and common filters in browser storage for fast operator workflow.
+
+## 29) Epic H v1.1 (Auto-Resolved Tasks, 2026-03-04)
+
+Decision scope:
+- finalize launch-readiness polish using existing platform baseline.
+
+1. Smoke script expansion (`H1`):
+- extend smoke checks to include:
+  - login,
+  - teacher list retrieval (admin endpoint),
+  - slot creation,
+  - hold,
+  - confirm.
+- keep script deterministic and CI-friendly.
+
+2. Runbook documentation refresh (`H2`):
+- update `README.md` with:
+  - dev setup,
+  - migrations,
+  - seed,
+  - worker runs,
+  - web-admin local run.
+
+3. Health/metrics validation (`H3`):
+- keep existing `/health` and `/metrics` baseline; add explicit verification step in smoke/ops runbook.
+
+4. Security checklist gate (`H4`):
+- verify and document:
+  - CORS policy,
+  - auth rate limits,
+  - response field minimization.
+- add automated regression checks where possible.
+
+5. PII exposure constraints (`H5`):
+- add API contract tests ensuring role-based field visibility (e.g., no cross-role email leakage).
+
+6. Production config baseline (`H6`):
+- consolidate required env/secrets matrix and precedence rules in docs.
+
+7. Backup minimum strategy (`H7`):
+- keep existing `pg_dump` scripts as canonical baseline and reference them in release checklist.
+
+8. Load sanity scenario (`H8`):
+- add reproducible sanity script/test:
+  - generate ~1000 weekly slots,
+  - query admin calendar/list endpoint,
+  - assert non-failure and acceptable response envelope.
+
+9. Admin UX polish (`H9`):
+- ensure quick filters and persisted `teacher_id` selection in web-admin workflow.
+
+10. Release cut (`H10`):
+- after passing smoke + sanity + security checks:
+  - create new release tag,
+  - publish release notes with migration and rollback notes.
+
+## 30) Implementation Order (Corrected, 2026-03-04)
+
+Execution priority for implementation phase:
+1. Section `19` (`Backlog v1.1`, Epic A rewritten tasks) — mandatory foundation before domain/UI epics.
+2. Section `21` (`Epic B v1.1`) — scheduling/admin calendar core.
+3. Section `23` (`Epic C v1.1`) — booking admin flows + policy hardening.
+4. Section `25` (`Epic D v1.1`) — billing/accounting model migration.
+5. Section `26` (`Epic E v1.1`) — lessons reports/materials.
+6. Section `27` (`Epic F v1.1`) — notifications baseline.
+7. Section `28` (`Epic G v1.1`) — web-admin UI.
+8. Section `29` (`Epic H v1.1`) — launch polish and release.
+
+Gate note:
+- `B/C/D` implementation must not start before completing `A` contract/security/RBAC baseline from section `19`.
+
+## 31) Epic A Implementation Progress (Started 2026-03-04)
+
+Implemented in codebase:
+
+1. `A2` unified error envelope:
+- `app/shared/exceptions.py` now returns:
+  - `{ "error": { "code": "...", "message": "...", "details": ... } }`
+  for:
+  - domain exceptions,
+  - FastAPI HTTP exceptions,
+  - request validation errors,
+  - unhandled exceptions.
+
+2. `A3` RBAC hardening:
+- role dependencies moved to endpoint boundary for core paths:
+  - `/admin/**` -> admin only,
+  - teacher profile endpoints -> teacher/admin,
+  - student hold endpoint -> student only,
+  - explicit role guards added for booking/billing/lessons sensitive actions.
+- stricter teacher ownership rule enforced in teacher service:
+  - only `teacher-owner` or `admin` can create/update teacher profile.
+
+3. `A4` env + CORS:
+- added settings:
+  - `FRONTEND_ADMIN_ORIGIN`,
+  - `JWT_SECRET` (alias with priority over `SECRET_KEY`),
+  - existing `DATABASE_URL` remains canonical DB DSN.
+- enabled CORS middleware in `app/main.py` with configured origins.
+
+3.1 `A4` env stability hotfix (`DEBUG=release`):
+- observed inherited process env collision:
+  - parent `codex.exe` process injects `DEBUG=release` into child shells.
+- this conflicted with strict boolean parsing for `Settings.debug`.
+- mitigation implemented in config parser:
+  - `debug=release|prod|production` -> `False`,
+  - `debug=debug|dev|development` -> `True`.
+- validation coverage added in `tests/test_config_security.py`.
+
+4. `A5` dev seeding baseline:
+- `scripts/seed_demo_data.py` rewritten as idempotent target seed:
+  - 1 admin,
+  - 3 teachers (+ verified teacher profiles),
+  - 5 students,
+  - 2 active packages,
+  - 10 future slots (distributed across demo teachers).
+
+5. `A6` OpenAPI/admin readability:
+- added OpenAPI tag descriptions in `app/main.py`.
+- added admin schema examples in `app/modules/admin/schemas.py`.
+
+6. `A7` admin audit baseline:
+- added audit writes for:
+  - admin teacher moderation (`verify/disable` via profile status changes),
+  - admin slot creation,
+  - admin booking cancel/reschedule.
+- audit infrastructure reused from existing `audit_logs`.
+
+7. `A8` UTC normalization:
+- schema-level UTC normalization added for incoming datetimes:
+  - scheduling slot create,
+  - package create,
+  - lesson create.
+
+8. `A9` status enum normalization:
+- introduced `TeacherStatusEnum` (`pending/verified/disabled`).
+- model and schema updated with backward-compatible `is_approved`.
+- alembic migration added:
+  - `20260304_0002_teacher_status_enum.py`
+  with backfill from `is_approved`.
+
+9. `A1` and `A10` docs/contracts:
+- added admin contract DTOs:
+  - `app/modules/admin/contracts.py` with `*_at_utc` fields.
+- added docs:
+  - `docs/ADMIN_API.md`,
+  - `docs/DOMAIN_RULES.md`.
+
+Verification tasks added/updated:
+- tests:
+  - `tests/test_error_contract.py`,
+  - `tests/test_utc_validation.py`,
+  - `tests/test_rbac_access_integration.py`,
+  - `tests/test_config_security.py` extended for new settings behavior.
+

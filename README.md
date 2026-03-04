@@ -7,6 +7,8 @@ Production-ready modular monolith backend for an online guitar school.
 1. Copy env file:
    - `cp .env.example .env`
    - in production, set a non-placeholder `SECRET_KEY` (startup rejects `change-me*`)
+   - optional alias: `JWT_SECRET` (if set, it overrides `SECRET_KEY`)
+   - set admin frontend CORS origin in `FRONTEND_ADMIN_ORIGIN` (default `http://localhost:5173`)
    - choose auth limiter backend:
      - recommended production mode: `AUTH_RATE_LIMIT_BACKEND=redis` with valid `REDIS_URL`
      - fallback mode: `AUTH_RATE_LIMIT_BACKEND=memory` + explicit
@@ -154,6 +156,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`
   - `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS` (comma-separated proxy IPs allowed to supply `X-Forwarded-For`)
   - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` (required only when `AUTH_RATE_LIMIT_BACKEND=memory` in production)
+- CORS env:
+  - `FRONTEND_ADMIN_ORIGIN` (comma-separated allowed origins for admin frontend)
 
 ## Workers
 
@@ -183,16 +187,33 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/seed_demo_data.py`
 - Script behavior:
   - idempotent and safe for repeated runs,
-  - creates/updates demo users and teacher profile,
-  - creates missing future teacher slots,
-  - ensures at least one active student package.
+  - creates/updates baseline users:
+    - 1 admin,
+    - 3 teachers,
+    - 5 students,
+  - creates/updates verified teacher profiles for all demo teachers,
+  - creates 10 future slots distributed across demo teachers,
+  - ensures 2 active student packages.
 - Safety:
   - by default script refuses to run when `APP_ENV` is `production`/`prod`,
   - override is possible only with explicit `--allow-production`.
 - Demo credentials (for local/demo environments only):
   - `demo-admin@guitaronline.dev / DemoPass123!`
-  - `demo-teacher@guitaronline.dev / DemoPass123!`
-  - `demo-student@guitaronline.dev / DemoPass123!`
+  - `demo-teacher-1@guitaronline.dev / DemoPass123!`
+  - `demo-teacher-2@guitaronline.dev / DemoPass123!`
+  - `demo-teacher-3@guitaronline.dev / DemoPass123!`
+  - `demo-student-1@guitaronline.dev / DemoPass123!`
+  - `demo-student-2@guitaronline.dev / DemoPass123!`
+  - `demo-student-3@guitaronline.dev / DemoPass123!`
+  - `demo-student-4@guitaronline.dev / DemoPass123!`
+  - `demo-student-5@guitaronline.dev / DemoPass123!`
+
+## Admin Contract Docs
+
+- Admin API contracts and DTO examples:
+  - `docs/ADMIN_API.md`
+- Domain source-of-truth rules for Slot/Booking/Lesson:
+  - `docs/DOMAIN_RULES.md`
 
 ## Delivery Observability
 

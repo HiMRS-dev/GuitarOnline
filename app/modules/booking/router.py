@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
+from app.core.enums import RoleEnum
 from app.modules.booking.schemas import (
     BookingCancelRequest,
     BookingHoldRequest,
@@ -13,7 +14,7 @@ from app.modules.booking.schemas import (
     BookingRescheduleRequest,
 )
 from app.modules.booking.service import BookingService, get_booking_service
-from app.modules.identity.service import get_current_user
+from app.modules.identity.service import require_roles
 from app.shared.pagination import Page, build_page, get_pagination_params
 
 router = APIRouter(prefix="/booking", tags=["booking"])
@@ -23,7 +24,7 @@ router = APIRouter(prefix="/booking", tags=["booking"])
 async def hold_booking(
     payload: BookingHoldRequest,
     service: BookingService = Depends(get_booking_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.STUDENT)),
 ) -> BookingRead:
     """Create booking in HOLD state."""
     booking = await service.hold_booking(payload, current_user)
@@ -34,7 +35,7 @@ async def hold_booking(
 async def confirm_booking(
     booking_id: UUID,
     service: BookingService = Depends(get_booking_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER, RoleEnum.STUDENT)),
 ) -> BookingRead:
     """Confirm booking from HOLD to CONFIRMED."""
     booking = await service.confirm_booking(booking_id, current_user)
@@ -46,7 +47,7 @@ async def cancel_booking(
     booking_id: UUID,
     payload: BookingCancelRequest,
     service: BookingService = Depends(get_booking_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER, RoleEnum.STUDENT)),
 ) -> BookingRead:
     """Cancel booking and apply refund policy."""
     booking = await service.cancel_booking(booking_id, payload, current_user)
@@ -58,7 +59,7 @@ async def reschedule_booking(
     booking_id: UUID,
     payload: BookingRescheduleRequest,
     service: BookingService = Depends(get_booking_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER, RoleEnum.STUDENT)),
 ) -> BookingRead:
     """Reschedule booking using cancel + new booking flow."""
     booking = await service.reschedule_booking(booking_id, payload, current_user)
@@ -68,7 +69,7 @@ async def reschedule_booking(
 @router.post("/holds/expire", response_model=int)
 async def expire_booking_holds(
     service: BookingService = Depends(get_booking_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> int:
     """Expire stale holds (admin task endpoint)."""
     return await service.expire_holds(current_user)
@@ -78,7 +79,7 @@ async def expire_booking_holds(
 async def list_my_bookings(
     pagination=Depends(get_pagination_params),
     service: BookingService = Depends(get_booking_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER, RoleEnum.STUDENT)),
 ) -> Page[BookingRead]:
     """List bookings for current user."""
     items, total = await service.list_bookings(current_user, pagination.limit, pagination.offset)

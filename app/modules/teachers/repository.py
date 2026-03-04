@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.enums import TeacherStatusEnum
 from app.modules.teachers.models import TeacherProfile
 
 
@@ -22,12 +23,15 @@ class TeachersRepository:
         display_name: str,
         bio: str,
         experience_years: int,
+        status: TeacherStatusEnum,
     ) -> TeacherProfile:
         profile = TeacherProfile(
             user_id=user_id,
             display_name=display_name,
             bio=bio,
             experience_years=experience_years,
+            status=status,
+            is_approved=status == TeacherStatusEnum.VERIFIED,
         )
         self.session.add(profile)
         await self.session.flush()

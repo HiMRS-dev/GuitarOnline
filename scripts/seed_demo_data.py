@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
 
 from sqlalchemy import select
@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, close_engine
-from app.core.enums import PackageStatusEnum, RoleEnum
+from app.core.enums import PackageStatusEnum, RoleEnum, TeacherStatusEnum
 from app.core.security import hash_password, verify_password
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.models import LessonPackage
@@ -29,15 +29,25 @@ from app.modules.teachers.models import TeacherProfile
 
 DEMO_PASSWORD = "DemoPass123!"
 
-DEMO_ADMIN_EMAIL = "demo-admin@guitaronline.dev"
-DEMO_TEACHER_EMAIL = "demo-teacher@guitaronline.dev"
-DEMO_STUDENT_EMAIL = "demo-student@guitaronline.dev"
+DEMO_ADMIN_EMAILS = ("demo-admin@guitaronline.dev",)
+DEMO_TEACHER_EMAILS = (
+    "demo-teacher-1@guitaronline.dev",
+    "demo-teacher-2@guitaronline.dev",
+    "demo-teacher-3@guitaronline.dev",
+)
+DEMO_STUDENT_EMAILS = (
+    "demo-student-1@guitaronline.dev",
+    "demo-student-2@guitaronline.dev",
+    "demo-student-3@guitaronline.dev",
+    "demo-student-4@guitaronline.dev",
+    "demo-student-5@guitaronline.dev",
+)
 
 DEMO_SLOT_DAY_OFFSETS = (1, 2, 3, 4, 5)
 DEMO_SLOT_START_HOURS = (12, 18)
 DEMO_SLOT_DURATION_MINUTES = 60
 
-DEMO_PACKAGE_LESSONS_TOTAL = 12
+DEMO_PACKAGE_LESSONS_TOTAL = (10, 16)
 DEMO_PACKAGE_EXPIRES_IN_DAYS = 90
 
 
@@ -46,10 +56,11 @@ class SeedStats:
     roles_created: int = 0
     users_created: int = 0
     users_updated: int = 0
-    teacher_profile_created: bool = False
+    teacher_profiles_created: int = 0
+    teacher_profiles_updated: int = 0
     slots_created: int = 0
-    package_created: bool = False
-    package_id: str | None = None
+    packages_created: int = 0
+    package_ids: list[str] = field(default_factory=list)
 
 
 async def _ensure_roles(session: AsyncSession) -> int:
@@ -103,32 +114,37 @@ async def _ensure_user(
     return user, created
 
 
-async def _ensure_teacher_profile(session: AsyncSession, teacher_user: User) -> bool:
+async def _ensure_teacher_profile(
+    session: AsyncSession,
+    *,
+    teacher_user: User,
+    display_name: str,
+    experience_years: int,
+) -> bool:
     profile = await session.scalar(
         select(TeacherProfile).where(TeacherProfile.user_id == teacher_user.id),
+    )
+    bio = (
+        f"{display_name}. Demo teacher profile for scheduling, booking and reporting flows."
     )
     if profile is None:
         profile = TeacherProfile(
             user_id=teacher_user.id,
-            display_name="Demo Guitar Teacher",
-            bio=(
-                "Преподаватель для демо-сценариев. "
-                "Фокус: основы, ритм, аккорды и разбор песен."
-            ),
-            experience_years=8,
+            display_name=display_name,
+            bio=bio,
+            experience_years=experience_years,
             is_approved=True,
+            status=TeacherStatusEnum.VERIFIED,
         )
         session.add(profile)
         await session.flush()
         return True
 
-    profile.display_name = "Demo Guitar Teacher"
-    profile.bio = (
-        "Преподаватель для демо-сценариев. "
-        "Фокус: основы, ритм, аккорды и разбор песен."
-    )
-    profile.experience_years = 8
+    profile.display_name = display_name
+    profile.bio = bio
+    profile.experience_years = experience_years
     profile.is_approved = True
+    profile.status = TeacherStatusEnum.VERIFIED
     await session.flush()
     return False
 
@@ -148,13 +164,21 @@ async def _ensure_demo_slots(
     session: AsyncSession,
     *,
     admin_user: User,
-    teacher_user: User,
+    teacher_users: list[User],
 ) -> int:
-    scheduling_service = SchedulingService(SchedulingRepository(session))
+    if not teacher_users:
+        return 0
+
+    scheduling_service = SchedulingService(
+        repository=SchedulingRepository(session),
+        audit_repository=AuditRepository(session),
+    )
     created = 0
     now = datetime.now(UTC)
+    slot_ranges = _build_demo_slot_ranges(now)
 
-    for start_at, end_at in _build_demo_slot_ranges(now):
+    for idx, (start_at, end_at) in enumerate(slot_ranges):
+        teacher_user = teacher_users[idx % len(teacher_users)]
         existing = await session.scalar(
             select(AvailabilitySlot).where(
                 AvailabilitySlot.teacher_id == teacher_user.id,
@@ -184,6 +208,7 @@ async def _ensure_student_package(
     *,
     admin_user: User,
     student_user: User,
+    lessons_total: int,
 ) -> tuple[LessonPackage, bool]:
     now = datetime.now(UTC)
     existing_active = await session.scalar(
@@ -206,7 +231,7 @@ async def _ensure_student_package(
     package = await billing_service.create_package(
         PackageCreate(
             student_id=student_user.id,
-            lessons_total=DEMO_PACKAGE_LESSONS_TOTAL,
+            lessons_total=lessons_total,
             expires_at=now + timedelta(days=DEMO_PACKAGE_EXPIRES_IN_DAYS),
         ),
         admin_user,
@@ -230,41 +255,77 @@ async def _run_seed(*, allow_production: bool) -> SeedStats:
         try:
             stats.roles_created = await _ensure_roles(session)
 
-            admin_user, admin_created = await _ensure_user(
-                session,
-                email=DEMO_ADMIN_EMAIL,
-                role_name=RoleEnum.ADMIN,
-                timezone="UTC",
-            )
-            teacher_user, teacher_created = await _ensure_user(
-                session,
-                email=DEMO_TEACHER_EMAIL,
-                role_name=RoleEnum.TEACHER,
-                timezone="UTC",
-            )
-            student_user, student_created = await _ensure_user(
-                session,
-                email=DEMO_STUDENT_EMAIL,
-                role_name=RoleEnum.STUDENT,
-                timezone="UTC",
-            )
+            admin_users: list[User] = []
+            for email in DEMO_ADMIN_EMAILS:
+                user, created = await _ensure_user(
+                    session,
+                    email=email,
+                    role_name=RoleEnum.ADMIN,
+                    timezone="UTC",
+                )
+                admin_users.append(user)
+                if created:
+                    stats.users_created += 1
+                else:
+                    stats.users_updated += 1
 
-            stats.users_created = sum([admin_created, teacher_created, student_created])
-            stats.users_updated = 3 - stats.users_created
+            teacher_users: list[User] = []
+            for email in DEMO_TEACHER_EMAILS:
+                user, created = await _ensure_user(
+                    session,
+                    email=email,
+                    role_name=RoleEnum.TEACHER,
+                    timezone="UTC",
+                )
+                teacher_users.append(user)
+                if created:
+                    stats.users_created += 1
+                else:
+                    stats.users_updated += 1
 
-            stats.teacher_profile_created = await _ensure_teacher_profile(session, teacher_user)
+            student_users: list[User] = []
+            for email in DEMO_STUDENT_EMAILS:
+                user, created = await _ensure_user(
+                    session,
+                    email=email,
+                    role_name=RoleEnum.STUDENT,
+                    timezone="UTC",
+                )
+                student_users.append(user)
+                if created:
+                    stats.users_created += 1
+                else:
+                    stats.users_updated += 1
+
+            for idx, teacher_user in enumerate(teacher_users, start=1):
+                created = await _ensure_teacher_profile(
+                    session,
+                    teacher_user=teacher_user,
+                    display_name=f"Demo Guitar Teacher {idx}",
+                    experience_years=5 + idx,
+                )
+                if created:
+                    stats.teacher_profiles_created += 1
+                else:
+                    stats.teacher_profiles_updated += 1
+
             stats.slots_created = await _ensure_demo_slots(
                 session,
-                admin_user=admin_user,
-                teacher_user=teacher_user,
+                admin_user=admin_users[0],
+                teacher_users=teacher_users,
             )
-            package, package_created = await _ensure_student_package(
-                session,
-                admin_user=admin_user,
-                student_user=student_user,
-            )
-            stats.package_created = package_created
-            stats.package_id = str(package.id)
+
+            for idx, lessons_total in enumerate(DEMO_PACKAGE_LESSONS_TOTAL):
+                student_user = student_users[idx]
+                package, created = await _ensure_student_package(
+                    session,
+                    admin_user=admin_users[0],
+                    student_user=student_user,
+                    lessons_total=lessons_total,
+                )
+                stats.package_ids.append(str(package.id))
+                if created:
+                    stats.packages_created += 1
 
             await session.commit()
         except Exception:
@@ -277,8 +338,8 @@ async def _run_seed(*, allow_production: bool) -> SeedStats:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Seed idempotent demo data for GuitarOnline (users, teacher profile, "
-            "open slots, active student package)."
+            "Seed idempotent demo data for GuitarOnline: "
+            "1 admin, 3 teachers, 5 students, 2 packages, 10 slots."
         ),
     )
     parser.add_argument(
@@ -294,15 +355,22 @@ def _print_summary(stats: SeedStats) -> None:
     print(f"- Roles created: {stats.roles_created}")
     print(f"- Users created: {stats.users_created}")
     print(f"- Users updated: {stats.users_updated}")
-    print(f"- Teacher profile created: {stats.teacher_profile_created}")
+    print(f"- Teacher profiles created: {stats.teacher_profiles_created}")
+    print(f"- Teacher profiles updated: {stats.teacher_profiles_updated}")
     print(f"- Slots created: {stats.slots_created}")
-    print(f"- Student active package created: {stats.package_created}")
-    print(f"- Student active package id: {stats.package_id}")
+    print(f"- Packages created: {stats.packages_created}")
+    print(f"- Package ids: {stats.package_ids}")
     print("")
     print("Demo credentials (non-production only):")
-    print(f"- admin:   {DEMO_ADMIN_EMAIL} / {DEMO_PASSWORD}")
-    print(f"- teacher: {DEMO_TEACHER_EMAIL} / {DEMO_PASSWORD}")
-    print(f"- student: {DEMO_STUDENT_EMAIL} / {DEMO_PASSWORD}")
+    print("- admins:")
+    for email in DEMO_ADMIN_EMAILS:
+        print(f"  - {email} / {DEMO_PASSWORD}")
+    print("- teachers:")
+    for email in DEMO_TEACHER_EMAILS:
+        print(f"  - {email} / {DEMO_PASSWORD}")
+    print("- students:")
+    for email in DEMO_STUDENT_EMAILS:
+        print(f"  - {email} / {DEMO_PASSWORD}")
 
 
 def main() -> int:

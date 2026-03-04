@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.enums import RoleEnum, SlotStatusEnum
+from app.modules.audit.repository import AuditRepository
 from app.modules.identity.models import User
 from app.modules.scheduling.models import AvailabilitySlot
 from app.modules.scheduling.repository import SchedulingRepository
@@ -20,8 +21,13 @@ from app.shared.utils import ensure_utc, utc_now
 class SchedulingService:
     """Scheduling domain service."""
 
-    def __init__(self, repository: SchedulingRepository) -> None:
+    def __init__(
+        self,
+        repository: SchedulingRepository,
+        audit_repository: AuditRepository,
+    ) -> None:
         self.repository = repository
+        self.audit_repository = audit_repository
 
     async def create_slot(self, payload: SlotCreate, actor: User) -> AvailabilitySlot:
         """Create teacher availability slot (admin only)."""
@@ -36,7 +42,19 @@ class SchedulingService:
         if start_at <= utc_now():
             raise BusinessRuleException("Slot start_at must be in the future")
 
-        return await self.repository.create_slot(payload.teacher_id, actor.id, start_at, end_at)
+        slot = await self.repository.create_slot(payload.teacher_id, actor.id, start_at, end_at)
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="admin.slot.create",
+            entity_type="availability_slot",
+            entity_id=str(slot.id),
+            payload={
+                "teacher_id": str(slot.teacher_id),
+                "start_at_utc": slot.start_at.isoformat(),
+                "end_at_utc": slot.end_at.isoformat(),
+            },
+        )
+        return slot
 
     async def list_open_slots(
         self,
@@ -77,4 +95,7 @@ async def get_scheduling_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> SchedulingService:
     """Dependency provider for scheduling service."""
-    return SchedulingService(SchedulingRepository(session))
+    return SchedulingService(
+        repository=SchedulingRepository(session),
+        audit_repository=AuditRepository(session),
+    )

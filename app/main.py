@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -32,6 +33,17 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 _FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 _FRONTEND_STATIC_DIR = _FRONTEND_DIR / "static"
+_OPENAPI_TAGS = [
+    {"name": "identity", "description": "Authentication and current-user identity endpoints."},
+    {"name": "teachers", "description": "Teacher profile management endpoints."},
+    {"name": "scheduling", "description": "Teacher availability slot endpoints."},
+    {"name": "booking", "description": "Booking hold/confirm/cancel/reschedule endpoints."},
+    {"name": "billing", "description": "Lesson package and payment endpoints."},
+    {"name": "lessons", "description": "Lesson lifecycle endpoints."},
+    {"name": "notifications", "description": "Notification delivery endpoints."},
+    {"name": "admin", "description": "Admin-only KPI and operational endpoints."},
+    {"name": "audit", "description": "Audit log and outbox administration endpoints."},
+]
 
 
 def _landing_page_html() -> str:
@@ -152,6 +164,14 @@ app = FastAPI(
     title=settings.app_name,
     debug=settings.debug,
     lifespan=lifespan,
+    openapi_tags=_OPENAPI_TAGS,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.frontend_admin_origin),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 app.middleware("http")(instrument_http_request)
 app.mount("/portal/static", StaticFiles(directory=_FRONTEND_STATIC_DIR), name="portal-static")

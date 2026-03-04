@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.enums import TeacherStatusEnum
+
 
 class TeacherProfileCreate(BaseModel):
     """Create teacher profile request."""
@@ -24,6 +26,7 @@ class TeacherProfileUpdate(BaseModel):
     bio: str | None = Field(default=None, max_length=5000)
     experience_years: int | None = Field(default=None, ge=0, le=80)
     is_approved: bool | None = None
+    status: TeacherStatusEnum | None = None
 
 
 class TeacherProfileRead(BaseModel):
@@ -37,5 +40,6 @@ class TeacherProfileRead(BaseModel):
     bio: str
     experience_years: int
     is_approved: bool
+    status: TeacherStatusEnum
     created_at: datetime
     updated_at: datetime

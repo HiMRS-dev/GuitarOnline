@@ -12,6 +12,17 @@ from pydantic import BaseModel, ConfigDict, Field
 class AdminActionCreate(BaseModel):
     """Create admin action request."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "action": "admin.teacher.verify",
+                "target_type": "teacher_profile",
+                "target_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
+                "payload": {"reason": "manual_review_passed"},
+            },
+        },
+    )
+
     action: str = Field(min_length=1, max_length=128)
     target_type: str = Field(min_length=1, max_length=128)
     target_id: str | None = Field(default=None, max_length=128)
@@ -21,7 +32,21 @@ class AdminActionCreate(BaseModel):
 class AdminActionRead(BaseModel):
     """Admin action response schema."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "eb4fbb69-951f-4f4f-aaf6-ebfff510db5b",
+                "admin_id": "8a937f92-0132-4691-b735-c224078afaef",
+                "action": "admin.teacher.verify",
+                "target_type": "teacher_profile",
+                "target_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
+                "payload": {"reason": "manual_review_passed"},
+                "created_at": "2026-03-04T11:00:00+00:00",
+                "updated_at": "2026-03-04T11:00:00+00:00",
+            },
+        },
+    )
 
     id: UUID
     admin_id: UUID

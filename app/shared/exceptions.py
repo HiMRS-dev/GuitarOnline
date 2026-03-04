@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
@@ -16,8 +17,9 @@ class AppException(Exception):
     status_code = 400
     code = "app_error"
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, details: dict | list | None = None) -> None:
         self.message = message
+        self.details = details
         super().__init__(message)
 
 
@@ -60,15 +62,66 @@ async def app_exception_handler(_: Request, exc: AppException) -> JSONResponse:
     """Handle custom domain exceptions."""
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": {"code": exc.code, "message": exc.message}},
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details,
+            },
+        },
     )
 
 
 async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse:
     """Handle FastAPI HTTP exceptions in unified shape."""
+    status_code_map = {
+        400: "bad_request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+        422: "validation_error",
+    }
+    code = status_code_map.get(exc.status_code, "http_error")
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": {"code": "http_error", "message": str(exc.detail)}},
+        content={
+            "error": {
+                "code": code,
+                "message": str(exc.detail),
+                "details": {"detail": exc.detail},
+            },
+        },
+    )
+
+
+def _normalize_validation_errors(errors: list[dict]) -> list[dict]:
+    normalized: list[dict] = []
+    for item in errors:
+        normalized.append(
+            {
+                "loc": [str(part) for part in item.get("loc", ())],
+                "message": item.get("msg"),
+                "type": item.get("type"),
+            },
+        )
+    return normalized
+
+
+async def request_validation_exception_handler(
+    _: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    """Handle request validation exceptions in unified error shape."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "validation_error",
+                "message": "Request validation failed",
+                "details": {"errors": _normalize_validation_errors(exc.errors())},
+            },
+        },
     )
 
 
@@ -77,7 +130,13 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONRespons
     logger.exception("Unhandled error: %s", exc)
     return JSONResponse(
         status_code=500,
-        content={"error": {"code": "internal_error", "message": "Internal server error"}},
+        content={
+            "error": {
+                "code": "internal_error",
+                "message": "Internal server error",
+                "details": None,
+            },
+        },
     )
 
 
@@ -85,4 +144,5 @@ def register_exception_handlers(app) -> None:
     """Register global exception handlers."""
     app.add_exception_handler(AppException, app_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
+from app.core.enums import RoleEnum
 from app.modules.billing.schemas import (
     PackageCreate,
     PackageRead,
@@ -14,7 +15,7 @@ from app.modules.billing.schemas import (
     PaymentUpdateStatus,
 )
 from app.modules.billing.service import BillingService, get_billing_service
-from app.modules.identity.service import get_current_user
+from app.modules.identity.service import require_roles
 from app.shared.pagination import Page, build_page, get_pagination_params
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/billing", tags=["billing"])
 async def create_package(
     payload: PackageCreate,
     service: BillingService = Depends(get_billing_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> PackageRead:
     """Create a lesson package (admin only)."""
     package = await service.create_package(payload, current_user)
@@ -36,7 +37,7 @@ async def list_student_packages(
     student_id: UUID,
     pagination=Depends(get_pagination_params),
     service: BillingService = Depends(get_billing_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.STUDENT)),
 ) -> Page[PackageRead]:
     """List packages for a specific student."""
     items, total = await service.list_student_packages(
@@ -53,7 +54,7 @@ async def list_student_packages(
 async def create_payment(
     payload: PaymentCreate,
     service: BillingService = Depends(get_billing_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.STUDENT)),
 ) -> PaymentRead:
     """Create payment record."""
     payment = await service.create_payment(payload, current_user)
@@ -65,7 +66,7 @@ async def update_payment_status(
     payment_id: UUID,
     payload: PaymentUpdateStatus,
     service: BillingService = Depends(get_billing_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> PaymentRead:
     """Update payment status (admin)."""
     payment = await service.update_payment_status(payment_id, payload.status, current_user)
@@ -75,7 +76,7 @@ async def update_payment_status(
 @router.post("/packages/expire", response_model=int)
 async def expire_packages(
     service: BillingService = Depends(get_billing_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> int:
     """Expire outdated active lesson packages (admin)."""
     return await service.expire_packages(current_user)

@@ -6,7 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from app.modules.identity.service import get_current_user
+from app.core.enums import RoleEnum
+from app.modules.identity.service import require_roles
 from app.modules.teachers.schemas import (
     TeacherProfileCreate,
     TeacherProfileRead,
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/teachers", tags=["teachers"])
 async def create_profile(
     payload: TeacherProfileCreate,
     service: TeachersService = Depends(get_teachers_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.TEACHER, RoleEnum.ADMIN)),
 ) -> TeacherProfileRead:
     """Create teacher profile."""
     profile = await service.create_profile(payload, current_user)
@@ -34,7 +35,7 @@ async def update_profile(
     profile_id: UUID,
     payload: TeacherProfileUpdate,
     service: TeachersService = Depends(get_teachers_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.TEACHER, RoleEnum.ADMIN)),
 ) -> TeacherProfileRead:
     """Update teacher profile."""
     profile = await service.update_profile(profile_id, payload, current_user)
@@ -45,6 +46,7 @@ async def update_profile(
 async def list_profiles(
     pagination=Depends(get_pagination_params),
     service: TeachersService = Depends(get_teachers_service),
+    _=Depends(require_roles(RoleEnum.TEACHER, RoleEnum.ADMIN)),
 ) -> Page[TeacherProfileRead]:
     """List teacher profiles."""
     items, total = await service.list_profiles(pagination.limit, pagination.offset)

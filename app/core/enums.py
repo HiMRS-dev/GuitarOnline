@@ -29,6 +29,14 @@ class BookingStatusEnum(StrEnum):
     EXPIRED = "expired"
 
 
+class TeacherStatusEnum(StrEnum):
+    """Teacher profile moderation status."""
+
+    PENDING = "pending"
+    VERIFIED = "verified"
+    DISABLED = "disabled"
+
+
 class PackageStatusEnum(StrEnum):
     """Lesson package status."""
 

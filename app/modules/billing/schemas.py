@@ -6,9 +6,10 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import PackageStatusEnum, PaymentStatusEnum
+from app.shared.utils import ensure_utc
 
 
 class PackageCreate(BaseModel):
@@ -17,6 +18,12 @@ class PackageCreate(BaseModel):
     student_id: UUID
     lessons_total: int = Field(ge=1)
     expires_at: datetime
+
+    @field_validator("expires_at", mode="after")
+    @classmethod
+    def normalize_expires_at_to_utc(cls, value: datetime) -> datetime:
+        """Normalize package expiration datetime to UTC."""
+        return ensure_utc(value)
 
 
 class PackageRead(BaseModel):

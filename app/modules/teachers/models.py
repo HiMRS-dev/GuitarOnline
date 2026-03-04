@@ -5,9 +5,11 @@ from __future__ import annotations
 from uuid import UUID
 
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, BaseModelMixin
+from app.core.enums import TeacherStatusEnum
 
 
 class TeacherProfile(BaseModelMixin, Base):
@@ -24,5 +26,11 @@ class TeacherProfile(BaseModelMixin, Base):
     bio: Mapped[str] = mapped_column(Text, default="", nullable=False)
     experience_years: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[TeacherStatusEnum] = mapped_column(
+        SAEnum(TeacherStatusEnum, name="teacher_status_enum", native_enum=False),
+        default=TeacherStatusEnum.PENDING,
+        nullable=False,
+        index=True,
+    )
 
     user = relationship("User", back_populates="teacher_profile")

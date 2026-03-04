@@ -268,6 +268,18 @@ class BookingService:
                 "refund_returned": refund_returned,
             },
         )
+        if actor.role.name == RoleEnum.ADMIN:
+            await self.audit_repository.create_audit_log(
+                actor_id=actor.id,
+                action="admin.booking.cancel",
+                entity_type="booking",
+                entity_id=str(booking.id),
+                payload={
+                    "reason": payload.reason,
+                    "refund_returned": refund_returned,
+                    "booking_status": str(booking.status),
+                },
+            )
         await self._cancel_lesson_for_booking(booking, payload.reason)
 
         return booking
@@ -317,6 +329,17 @@ class BookingService:
                 "student_id": str(new_booking.student_id),
             },
         )
+        if actor.role.name == RoleEnum.ADMIN:
+            await self.audit_repository.create_audit_log(
+                actor_id=actor.id,
+                action="admin.booking.reschedule",
+                entity_type="booking",
+                entity_id=str(new_booking.id),
+                payload={
+                    "old_booking_id": str(old_booking.id),
+                    "new_booking_id": str(new_booking.id),
+                },
+            )
 
         return new_booking
 

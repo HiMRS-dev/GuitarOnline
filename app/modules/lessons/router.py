@@ -6,7 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
 
-from app.modules.identity.service import get_current_user
+from app.core.enums import RoleEnum
+from app.modules.identity.service import require_roles
 from app.modules.lessons.schemas import LessonCreate, LessonRead, LessonUpdate
 from app.modules.lessons.service import LessonsService, get_lessons_service
 from app.shared.pagination import Page, build_page, get_pagination_params
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/lessons", tags=["lessons"])
 async def create_lesson(
     payload: LessonCreate,
     service: LessonsService = Depends(get_lessons_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER)),
 ) -> LessonRead:
     """Create lesson."""
     lesson = await service.create_lesson(payload, current_user)
@@ -30,7 +31,7 @@ async def update_lesson(
     lesson_id: UUID,
     payload: LessonUpdate,
     service: LessonsService = Depends(get_lessons_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER)),
 ) -> LessonRead:
     """Update lesson."""
     lesson = await service.update_lesson(lesson_id, payload, current_user)
@@ -41,7 +42,7 @@ async def update_lesson(
 async def list_my_lessons(
     pagination=Depends(get_pagination_params),
     service: LessonsService = Depends(get_lessons_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER, RoleEnum.STUDENT)),
 ) -> Page[LessonRead]:
     """List lessons for current user."""
     items, total = await service.list_lessons(current_user, pagination.limit, pagination.offset)

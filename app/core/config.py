@@ -25,11 +25,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     secret_key: str = Field(default="change-me", min_length=8)
+    jwt_secret: str | None = Field(default=None, min_length=8)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 30
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline"
+    frontend_admin_origin: tuple[str, ...] = ("http://localhost:5173",)
 
     booking_hold_minutes: int = 10
     booking_refund_window_hours: int = 24
@@ -44,6 +46,18 @@ class Settings(BaseSettings):
     auth_rate_limit_redis_namespace: str = "auth_rate_limit"
     auth_rate_limit_trusted_proxy_ips: tuple[str, ...] = ("127.0.0.1", "::1")
     auth_rate_limit_allow_in_memory_in_production: bool = False
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def normalize_debug_flag(cls, value: object) -> object:
+        """Normalize common environment aliases for debug flag."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"debug", "dev", "development"}:
+                return True
+        return value
 
     @field_validator("auth_rate_limit_backend", mode="before")
     @classmethod
@@ -67,9 +81,28 @@ class Settings(BaseSettings):
             "AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS must be a comma-separated string or list",
         )
 
+    @field_validator("frontend_admin_origin", mode="before")
+    @classmethod
+    def parse_frontend_admin_origin(cls, value: object) -> tuple[str, ...]:
+        """Parse allowed admin frontend origins from env value."""
+        if value is None:
+            return ("http://localhost:5173",)
+        if isinstance(value, str):
+            origins = tuple(item.strip() for item in value.split(",") if item.strip())
+            return origins or ("http://localhost:5173",)
+        if isinstance(value, Sequence):
+            origins = tuple(str(item).strip() for item in value if str(item).strip())
+            return origins or ("http://localhost:5173",)
+        raise TypeError(
+            "FRONTEND_ADMIN_ORIGIN must be a comma-separated string or list",
+        )
+
     @model_validator(mode="after")
     def validate_security_for_environment(self) -> "Settings":
         """Block unsafe defaults in production-like environments."""
+        if self.jwt_secret and self.jwt_secret.strip():
+            self.secret_key = self.jwt_secret.strip()
+
         env_name = self.app_env.strip().lower()
 
         if self.auth_rate_limit_backend == "redis" and not self.redis_url:

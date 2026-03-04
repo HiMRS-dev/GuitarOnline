@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query, status
 
+from app.core.enums import RoleEnum
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminActionRead,
@@ -11,7 +12,7 @@ from app.modules.admin.schemas import (
     AdminOperationsOverviewRead,
 )
 from app.modules.admin.service import AdminService, get_admin_service
-from app.modules.identity.service import get_current_user
+from app.modules.identity.service import require_roles
 from app.shared.pagination import Page, build_page, get_pagination_params
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -21,7 +22,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def create_admin_action(
     payload: AdminActionCreate,
     service: AdminService = Depends(get_admin_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> AdminActionRead:
     """Create admin action log."""
     action = await service.create_action(payload, current_user)
@@ -32,7 +33,7 @@ async def create_admin_action(
 async def list_admin_actions(
     pagination=Depends(get_pagination_params),
     service: AdminService = Depends(get_admin_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> Page[AdminActionRead]:
     """List admin action logs."""
     items, total = await service.list_actions(current_user, pagination.limit, pagination.offset)
@@ -43,7 +44,7 @@ async def list_admin_actions(
 @router.get("/kpi/overview", response_model=AdminKpiOverviewRead)
 async def get_admin_kpi_overview(
     service: AdminService = Depends(get_admin_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> AdminKpiOverviewRead:
     """Get admin KPI overview snapshot."""
     return await service.get_kpi_overview(current_user)
@@ -53,7 +54,7 @@ async def get_admin_kpi_overview(
 async def get_admin_operations_overview(
     max_retries: int = Query(default=5, ge=1, le=100),
     service: AdminService = Depends(get_admin_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> AdminOperationsOverviewRead:
     """Get operational overview snapshot."""
     return await service.get_operations_overview(current_user, max_retries=max_retries)

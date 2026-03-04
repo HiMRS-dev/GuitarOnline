@@ -6,7 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.modules.identity.service import get_current_user
+from app.core.enums import RoleEnum
+from app.modules.identity.service import require_roles
 from app.modules.scheduling.schemas import SlotCreate, SlotRead
 from app.modules.scheduling.service import SchedulingService, get_scheduling_service
 from app.shared.pagination import Page, build_page, get_pagination_params
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/scheduling", tags=["scheduling"])
 async def create_slot(
     payload: SlotCreate,
     service: SchedulingService = Depends(get_scheduling_service),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> SlotRead:
     """Create availability slot."""
     slot = await service.create_slot(payload, current_user)

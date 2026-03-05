@@ -99,6 +99,17 @@ button[disabled] {
   margin: 0.4rem 0;
 }
 
+.link-btn {
+  display: inline-block;
+  margin-top: 0.7rem;
+  color: #0f4b84;
+  text-decoration: none;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
 code {
   background: #f2f6ff;
   border: 1px solid #d4deee;

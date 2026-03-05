@@ -3150,10 +3150,25 @@ Implemented in codebase:
 - migration path documented for v2:
   - `web-admin/README.md` now describes planned move to httpOnly cookies.
 
+3. `G3` protected routing:
+- app routing migrated to `react-router-dom`:
+  - `/login`,
+  - `/admin`,
+  - fallback redirect.
+- admin-route guard implemented:
+  - requires token pair presence,
+  - validates access token by calling `GET /identity/users/me`,
+  - enforces `role.name == "admin"` gate before rendering admin route.
+- missing/invalid token behavior:
+  - immediate redirect to `/login`,
+  - stored token pair is cleared on invalid/forbidden session checks.
+- protected-admin state includes deterministic loading state while session validation is in flight.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src web-admin/README.md` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/src/App.tsx web-admin/src/main.tsx web-admin/src/features/auth/api.ts web-admin/src/features/auth/types.ts web-admin/src/styles.css` -> no overlong lines found.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

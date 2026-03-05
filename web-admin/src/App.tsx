@@ -1,7 +1,7 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 
-import { API_BASE_URL } from "./config";
-import { login } from "./features/auth/api";
+import { getCurrentUser, login } from "./features/auth/api";
 import { clearTokenPair, loadTokenPair, saveTokenPair } from "./features/auth/storage";
 import type { TokenPair } from "./features/auth/types";
 
@@ -14,6 +14,45 @@ function maskToken(token: string): string {
 
 export function App() {
   const [tokens, setTokens] = useState<TokenPair | null>(() => loadTokenPair());
+
+  function handleSignedIn(tokenPair: TokenPair) {
+    saveTokenPair(tokenPair);
+    setTokens(tokenPair);
+  }
+
+  function handleSignOut() {
+    clearTokenPair();
+    setTokens(null);
+  }
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <LoginPage tokens={tokens} onSignedIn={handleSignedIn} onSignOut={handleSignOut} />
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <ProtectedAdminRoute tokens={tokens} onInvalidSession={handleSignOut}>
+            <AdminHome onSignOut={handleSignOut} />
+          </ProtectedAdminRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to={tokens ? "/admin" : "/login"} replace />} />
+    </Routes>
+  );
+}
+
+type LoginPageProps = {
+  tokens: TokenPair | null;
+  onSignedIn: (tokenPair: TokenPair) => void;
+  onSignOut: () => void;
+};
+
+function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
@@ -27,8 +66,7 @@ export function App() {
     setError(null);
     try {
       const tokenPair = await login({ email, password });
-      saveTokenPair(tokenPair);
-      setTokens(tokenPair);
+      onSignedIn(tokenPair);
       setPassword("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unexpected error");
@@ -38,8 +76,7 @@ export function App() {
   }
 
   function handleLogout() {
-    clearTokenPair();
-    setTokens(null);
+    onSignOut();
   }
 
   return (
@@ -48,8 +85,7 @@ export function App() {
         <p className="eyebrow">GuitarOnline</p>
         <h1>Admin Login Contract</h1>
         <p className="summary">
-          This screen authenticates via <code>POST {API_BASE_URL}/identity/auth/login</code> and
-          stores token pair in <code>localStorage</code> for v1.
+          Sign in to access protected admin routes. Missing or invalid session redirects here.
         </p>
       </section>
 
@@ -89,7 +125,7 @@ export function App() {
           </form>
         ) : (
           <div className="auth-state">
-            <p className="success-text">Authenticated. Tokens are stored for current browser.</p>
+            <p className="success-text">Authenticated. Open the protected admin route.</p>
             <p>
               <strong>access_token:</strong> <code>{maskToken(tokens.access_token)}</code>
             </p>
@@ -102,8 +138,93 @@ export function App() {
             <button type="button" onClick={handleLogout}>
               Sign out
             </button>
+            <Link className="link-btn" to="/admin">
+              Go to admin
+            </Link>
           </div>
         )}
+      </section>
+    </main>
+  );
+}
+
+type ProtectedAdminRouteProps = {
+  tokens: TokenPair | null;
+  onInvalidSession: () => void;
+  children: ReactNode;
+};
+
+function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAdminRouteProps) {
+  const [state, setState] = useState<"pending" | "granted" | "denied">("pending");
+
+  useEffect(() => {
+    if (!tokens) {
+      setState("denied");
+      return;
+    }
+
+    let active = true;
+    setState("pending");
+    getCurrentUser(tokens.access_token)
+      .then((currentUser) => {
+        if (!active) {
+          return;
+        }
+        if (currentUser.role.name !== "admin") {
+          onInvalidSession();
+          setState("denied");
+          return;
+        }
+        setState("granted");
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        onInvalidSession();
+        setState("denied");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [onInvalidSession, tokens]);
+
+  if (!tokens || state === "denied") {
+    return <Navigate to="/login" replace />;
+  }
+  if (state === "pending") {
+    return (
+      <main className="app-shell">
+        <section className="card">
+          <h2>Checking session...</h2>
+          <p className="summary">Validating token and admin role gate.</p>
+        </section>
+      </main>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+type AdminHomeProps = {
+  onSignOut: () => void;
+};
+
+function AdminHome({ onSignOut }: AdminHomeProps) {
+  return (
+    <main className="app-shell">
+      <section className="hero">
+        <p className="eyebrow">Admin Area</p>
+        <h1>Protected Route Active</h1>
+        <p className="summary">
+          Session token exists and admin role check passed via <code>/identity/users/me</code>.
+        </p>
+      </section>
+      <section className="card">
+        <button type="button" onClick={onSignOut}>
+          Sign out
+        </button>
       </section>
     </main>
   );

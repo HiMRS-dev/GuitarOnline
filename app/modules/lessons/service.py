@@ -124,6 +124,8 @@ class LessonsService:
                 meeting_url=changes.get("meeting_url"),
                 use_meeting_url_template=use_template,
             )
+        if "recording_url" in changes:
+            changes["recording_url"] = str(changes["recording_url"])
 
         return await self.repository.update_lesson(lesson, **changes)
 
@@ -153,6 +155,8 @@ class LessonsService:
                 meeting_url=changes.get("meeting_url"),
                 use_meeting_url_template=use_template,
             )
+        if "recording_url" in changes:
+            changes["recording_url"] = str(changes["recording_url"])
         return await self.repository.update_lesson(lesson, **changes)
 
     async def mark_no_show(self, lesson_id: UUID, actor: User) -> Lesson:

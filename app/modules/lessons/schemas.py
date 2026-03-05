@@ -38,6 +38,7 @@ class LessonUpdate(BaseModel):
     homework: str | None = None
     links: list[HttpUrl] | None = None
     meeting_url: HttpUrl | None = None
+    recording_url: HttpUrl | None = None
     use_meeting_url_template: bool | None = None
 
 
@@ -48,6 +49,7 @@ class TeacherLessonReportRequest(BaseModel):
     homework: str | None = None
     links: list[HttpUrl] = Field(default_factory=list, max_length=50)
     meeting_url: HttpUrl | None = None
+    recording_url: HttpUrl | None = None
     use_meeting_url_template: bool | None = None
 
 
@@ -69,5 +71,6 @@ class LessonRead(BaseModel):
     homework: str | None
     links: list[str] | None
     meeting_url: str | None
+    recording_url: str | None
     created_at: datetime
     updated_at: datetime

@@ -2814,6 +2814,18 @@ Implemented in codebase:
   - updated portal and booking/billing integration test paths to avoid implicit teacher access
     through student aliases.
 
+6. `E7` recording URL v2-ready support:
+- lesson persistence extended with nullable field:
+  - `lessons.recording_url`.
+- migration added:
+  - `alembic/versions/20260306_0014_lesson_recording_url.py`.
+- lesson API contract extended:
+  - `LessonRead` includes `recording_url`.
+- update/report flows support recording URL assignment with URL validation:
+  - `LessonUpdate.recording_url`,
+  - `TeacherLessonReportRequest.recording_url`,
+  - lessons service normalizes validated URL into persisted string value.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
@@ -2839,6 +2851,10 @@ Verification tasks added/updated:
   - integration helper/path updates:
     - `tests/test_booking_billing_integration.py` teacher lesson lookup switched to `/teacher/lessons`,
     - `tests/test_portal_auth_flow_integration.py` teacher sequence switched to `/teacher/lessons`.
+  - `tests/test_lesson_recording_url.py` added:
+    - recording URL update path,
+    - recording URL report path,
+    - invalid URL validation guards.
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2856,4 +2872,6 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_student_lessons_access.py tests/test_teacher_lessons_list.py tests/test_teacher_lesson_report.py tests/test_lesson_meeting_url.py` -> `14 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "me_lessons_alias_endpoint_returns_401_403_and_200_by_role or lessons_my_endpoint_returns_401_403_and_200_by_role or teacher_lesson_report_endpoint_returns_401_403_and_200_by_role"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_portal_auth_flow_integration.py -k portal_teacher_and_admin_sequences_for_role_specific_endpoints` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py alembic/versions/20260306_0014_lesson_recording_url.py tests/test_lesson_recording_url.py tests/test_teacher_lesson_report.py tests/test_lesson_meeting_url.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_lesson_recording_url.py tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py tests/test_student_lessons_access.py` -> `14 passed`.
 

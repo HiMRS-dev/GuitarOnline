@@ -48,3 +48,4 @@ class Lesson(BaseModelMixin, Base):
     homework: Mapped[str | None] = mapped_column(Text, nullable=True)
     links: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     meeting_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recording_url: Mapped[str | None] = mapped_column(Text, nullable=True)

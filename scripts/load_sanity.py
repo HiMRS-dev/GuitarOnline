@@ -248,7 +248,7 @@ def main() -> None:
                 "teacher_id": str(teacher_user["id"]),
                 "from_utc": from_utc.isoformat(),
                 "to_utc": to_utc.isoformat(),
-                "limit": 200,
+                "limit": 100,
                 "offset": 0,
             },
         )
@@ -261,7 +261,7 @@ def main() -> None:
         query = urlencode(
             {
                 "teacher_id": str(teacher_user["id"]),
-                "limit": 200,
+                "limit": 100,
                 "offset": 0,
             },
         )

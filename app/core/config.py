@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     booking_refund_window_hours: int = 24
     slot_min_duration_minutes: int = 30
     slot_bulk_create_max_slots: int = 1000
+    lesson_meeting_url_template: str | None = None
 
     redis_url: str | None = None
 

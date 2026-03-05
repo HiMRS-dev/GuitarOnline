@@ -47,3 +47,4 @@ class Lesson(BaseModelMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     homework: Mapped[str | None] = mapped_column(Text, nullable=True)
     links: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    meeting_url: Mapped[str | None] = mapped_column(Text, nullable=True)

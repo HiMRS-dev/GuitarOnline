@@ -2770,6 +2770,28 @@ Implemented in codebase:
 - report update path integrated with lessons service:
   - `LessonsService.report_lesson(...)` uses repository update with normalized links storage.
 
+3. `E4` meeting URL support (manual + template-based generation):
+- lesson persistence extended with new nullable field:
+  - `lessons.meeting_url`.
+- migration added:
+  - `alembic/versions/20260306_0013_lesson_meeting_url.py`.
+- meeting URL assignment supports two explicit modes in update/report flows:
+  - manual mode: pass `meeting_url`,
+  - template mode: pass `use_meeting_url_template=true`.
+- template source introduced as runtime config:
+  - `LESSON_MEETING_URL_TEMPLATE` (`Settings.lesson_meeting_url_template`),
+  - supported placeholders:
+    - `{lesson_id}`,
+    - `{booking_id}`,
+    - `{teacher_id}`,
+    - `{student_id}`.
+- service conflict handling added:
+  - rejects mixed mode (`meeting_url` + `use_meeting_url_template=true`),
+  - rejects template mode when template is not configured.
+- lesson API contract updated:
+  - `LessonRead` includes `meeting_url`,
+  - `LessonUpdate` and teacher report payload support meeting URL fields.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
@@ -2781,6 +2803,11 @@ Verification tasks added/updated:
     - role/404 guard coverage.
   - `tests/test_rbac_access_integration.py` extended with
     `/teacher/lessons/{lesson_id}/report` RBAC check (`401/403/200`).
+  - `tests/test_lesson_meeting_url.py` added:
+    - manual `meeting_url` assignment,
+    - template-based generation,
+    - template-missing guard,
+    - mixed manual+template conflict guard.
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2789,4 +2816,6 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py alembic/versions/20260306_0012_lesson_report_fields.py tests/test_teacher_lesson_report.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_teacher_lesson_report.py tests/test_teacher_lessons_list.py tests/test_lessons_complete.py tests/test_lessons_no_show.py` -> `20 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "teacher_lessons_endpoint_returns_401_403_and_200_by_role or teacher_lesson_report_endpoint_returns_401_403_and_200_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/core/config.py app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py alembic/versions/20260306_0013_lesson_meeting_url.py tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py tests/test_teacher_lessons_list.py tests/test_lessons_complete.py` -> `18 passed`.
 

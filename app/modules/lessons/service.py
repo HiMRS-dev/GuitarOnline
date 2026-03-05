@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.enums import LessonStatusEnum, RoleEnum
 from app.modules.billing.repository import BillingRepository
@@ -22,6 +23,8 @@ from app.shared.exceptions import (
     UnauthorizedException,
 )
 from app.shared.utils import ensure_utc, utc_now
+
+settings = get_settings()
 
 
 class LessonsService:
@@ -42,6 +45,36 @@ class LessonsService:
         if links is None:
             return None
         return [str(link) for link in links]
+
+    @staticmethod
+    def _generate_meeting_url_from_template(lesson: Lesson) -> str:
+        template = settings.lesson_meeting_url_template
+        if template is None or not template.strip():
+            raise BusinessRuleException("Meeting URL template is not configured")
+
+        return template.format(
+            lesson_id=str(lesson.id),
+            booking_id=str(lesson.booking_id),
+            teacher_id=str(lesson.teacher_id),
+            student_id=str(lesson.student_id),
+        )
+
+    def _resolve_meeting_url_change(
+        self,
+        *,
+        lesson: Lesson,
+        meeting_url,
+        use_meeting_url_template: bool,
+    ) -> str:
+        if meeting_url is not None and use_meeting_url_template:
+            raise BusinessRuleException(
+                "Provide either meeting_url or use_meeting_url_template, not both",
+            )
+        if use_meeting_url_template:
+            return self._generate_meeting_url_from_template(lesson)
+        if meeting_url is None:
+            raise BusinessRuleException("meeting_url is required when template mode is disabled")
+        return str(meeting_url)
 
     async def create_lesson(self, payload: LessonCreate, actor: User) -> Lesson:
         """Create lesson entity from booking data."""
@@ -84,6 +117,13 @@ class LessonsService:
         changes = payload.model_dump(exclude_none=True)
         if "links" in changes:
             changes["links"] = self._normalize_links(changes["links"])
+        use_template = bool(changes.pop("use_meeting_url_template", False))
+        if "meeting_url" in changes or use_template:
+            changes["meeting_url"] = self._resolve_meeting_url_change(
+                lesson=lesson,
+                meeting_url=changes.get("meeting_url"),
+                use_meeting_url_template=use_template,
+            )
 
         return await self.repository.update_lesson(lesson, **changes)
 
@@ -103,8 +143,16 @@ class LessonsService:
         if lesson.teacher_id != actor.id:
             raise UnauthorizedException("Teacher can report only own lessons")
 
-        changes = payload.model_dump()
-        changes["links"] = self._normalize_links(changes.get("links"))
+        changes = payload.model_dump(exclude_none=True)
+        if "links" in changes:
+            changes["links"] = self._normalize_links(changes.get("links"))
+        use_template = bool(changes.pop("use_meeting_url_template", False))
+        if "meeting_url" in changes or use_template:
+            changes["meeting_url"] = self._resolve_meeting_url_change(
+                lesson=lesson,
+                meeting_url=changes.get("meeting_url"),
+                use_meeting_url_template=use_template,
+            )
         return await self.repository.update_lesson(lesson, **changes)
 
     async def mark_no_show(self, lesson_id: UUID, actor: User) -> Lesson:

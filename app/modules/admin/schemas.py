@@ -6,7 +6,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.enums import (
     BookingStatusEnum,
@@ -276,6 +276,24 @@ class AdminSlotBlockRead(BaseModel):
     updated_at_utc: datetime
 
 
+class AdminSlotBulkExcludeTimeRange(BaseModel):
+    """Excluded time interval for bulk slot generation."""
+
+    start_time_utc: time
+    end_time_utc: time
+
+    @field_validator("start_time_utc", "end_time_utc", mode="after")
+    @classmethod
+    def normalize_time_precision(cls, value: time) -> time:
+        return value.replace(second=0, microsecond=0)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> AdminSlotBulkExcludeTimeRange:
+        if self.end_time_utc <= self.start_time_utc:
+            raise ValueError("exclude_time_ranges end_time_utc must be after start_time_utc")
+        return self
+
+
 class AdminSlotBulkCreateRequest(BaseModel):
     """Admin request schema for bulk slot generation."""
 
@@ -286,6 +304,11 @@ class AdminSlotBulkCreateRequest(BaseModel):
     start_time_utc: time
     end_time_utc: time
     slot_duration_minutes: int = Field(ge=1, le=720)
+    exclude_dates: list[date] = Field(default_factory=list, max_length=366)
+    exclude_time_ranges: list[AdminSlotBulkExcludeTimeRange] = Field(
+        default_factory=list,
+        max_length=24,
+    )
 
     @field_validator("weekdays", mode="after")
     @classmethod

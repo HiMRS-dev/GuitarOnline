@@ -90,6 +90,8 @@ class SchedulingService:
         start_time_utc: time,
         end_time_utc: time,
         slot_duration_minutes: int,
+        exclude_dates: list[date] | None,
+        exclude_time_ranges: list[tuple[time, time]] | None,
         actor: User,
     ) -> tuple[list[AvailabilitySlot], list[dict[str, object]]]:
         """Create multiple slots by weekly template with deterministic skip reasons."""
@@ -105,6 +107,8 @@ class SchedulingService:
             )
 
         weekdays_set = set(weekdays)
+        exclude_dates_set = set(exclude_dates or [])
+        exclude_time_ranges_list = exclude_time_ranges or []
         duration = timedelta(minutes=slot_duration_minutes)
         day_count = (date_to_utc - date_from_utc).days + 1
         candidates: list[tuple[datetime, datetime]] = []
@@ -127,6 +131,29 @@ class SchedulingService:
         created_slots: list[AvailabilitySlot] = []
         skipped: list[dict[str, object]] = []
         for start_at_utc, end_at_utc in candidates:
+            if start_at_utc.date() in exclude_dates_set:
+                skipped.append(
+                    {
+                        "start_at_utc": start_at_utc,
+                        "end_at_utc": end_at_utc,
+                        "reason": "excluded_date",
+                    },
+                )
+                continue
+            if self._overlaps_excluded_time_ranges(
+                start_at_utc=start_at_utc,
+                end_at_utc=end_at_utc,
+                exclude_time_ranges=exclude_time_ranges_list,
+            ):
+                skipped.append(
+                    {
+                        "start_at_utc": start_at_utc,
+                        "end_at_utc": end_at_utc,
+                        "reason": "excluded_time_range",
+                    },
+                )
+                continue
+
             try:
                 slot = await self.create_slot(
                     SlotCreate(
@@ -159,12 +186,34 @@ class SchedulingService:
                 "start_time_utc": start_time_utc.isoformat(),
                 "end_time_utc": end_time_utc.isoformat(),
                 "slot_duration_minutes": slot_duration_minutes,
+                "exclude_dates": sorted(item.isoformat() for item in exclude_dates_set),
+                "exclude_time_ranges": [
+                    {
+                        "start_time_utc": start.isoformat(),
+                        "end_time_utc": end.isoformat(),
+                    }
+                    for start, end in exclude_time_ranges_list
+                ],
                 "created_count": len(created_slots),
                 "skipped_count": len(skipped),
             },
         )
 
         return created_slots, skipped
+
+    @staticmethod
+    def _overlaps_excluded_time_ranges(
+        *,
+        start_at_utc: datetime,
+        end_at_utc: datetime,
+        exclude_time_ranges: list[tuple[time, time]],
+    ) -> bool:
+        for range_start, range_end in exclude_time_ranges:
+            excluded_start = datetime.combine(start_at_utc.date(), range_start, tzinfo=UTC)
+            excluded_end = datetime.combine(start_at_utc.date(), range_end, tzinfo=UTC)
+            if start_at_utc < excluded_end and end_at_utc > excluded_start:
+                return True
+        return False
 
     async def list_open_slots(
         self,

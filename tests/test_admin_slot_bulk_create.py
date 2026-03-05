@@ -118,6 +118,8 @@ async def test_admin_bulk_create_slots_creates_and_skips_with_summary_audit() ->
         start_time_utc=time(10, 0),
         end_time_utc=time(12, 0),
         slot_duration_minutes=60,
+        exclude_dates=[],
+        exclude_time_ranges=[],
         actor=admin,
     )
 
@@ -128,6 +130,60 @@ async def test_admin_bulk_create_slots_creates_and_skips_with_summary_audit() ->
     assert audit_repository.logs[-1]["action"] == "admin.slot.bulk_create"
     assert audit_repository.logs[-1]["payload"]["created_count"] == 1
     assert audit_repository.logs[-1]["payload"]["skipped_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_bulk_create_slots_skips_excluded_dates() -> None:
+    teacher_id = uuid4()
+    target_day = date.today() + timedelta(days=7)
+    repository = FakeSchedulingRepository()
+    audit_repository = FakeAuditRepository()
+    service = SchedulingService(repository=repository, audit_repository=audit_repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    created, skipped = await service.bulk_create_slots(
+        teacher_id=teacher_id,
+        date_from_utc=target_day,
+        date_to_utc=target_day,
+        weekdays=[target_day.weekday()],
+        start_time_utc=time(10, 0),
+        end_time_utc=time(12, 0),
+        slot_duration_minutes=60,
+        exclude_dates=[target_day],
+        exclude_time_ranges=[],
+        actor=admin,
+    )
+
+    assert created == []
+    assert len(skipped) == 2
+    assert all(item["reason"] == "excluded_date" for item in skipped)
+
+
+@pytest.mark.asyncio
+async def test_admin_bulk_create_slots_skips_excluded_time_ranges() -> None:
+    teacher_id = uuid4()
+    target_day = date.today() + timedelta(days=7)
+    repository = FakeSchedulingRepository()
+    audit_repository = FakeAuditRepository()
+    service = SchedulingService(repository=repository, audit_repository=audit_repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    created, skipped = await service.bulk_create_slots(
+        teacher_id=teacher_id,
+        date_from_utc=target_day,
+        date_to_utc=target_day,
+        weekdays=[target_day.weekday()],
+        start_time_utc=time(10, 0),
+        end_time_utc=time(12, 0),
+        slot_duration_minutes=60,
+        exclude_dates=[],
+        exclude_time_ranges=[(time(10, 30), time(11, 30))],
+        actor=admin,
+    )
+
+    assert created == []
+    assert len(skipped) == 2
+    assert all(item["reason"] == "excluded_time_range" for item in skipped)
 
 
 @pytest.mark.asyncio
@@ -147,6 +203,8 @@ async def test_admin_bulk_create_slots_requires_admin() -> None:
             start_time_utc=time(10, 0),
             end_time_utc=time(12, 0),
             slot_duration_minutes=60,
+            exclude_dates=[],
+            exclude_time_ranges=[],
             actor=student,
         )
 
@@ -170,6 +228,8 @@ async def test_admin_bulk_create_slots_validates_date_range() -> None:
             start_time_utc=time(10, 0),
             end_time_utc=time(12, 0),
             slot_duration_minutes=60,
+            exclude_dates=[],
+            exclude_time_ranges=[],
             actor=admin,
         )
 
@@ -197,5 +257,7 @@ async def test_admin_bulk_create_slots_enforces_candidate_limit(
             start_time_utc=time(10, 0),
             end_time_utc=time(12, 0),
             slot_duration_minutes=60,
+            exclude_dates=[],
+            exclude_time_ranges=[],
             actor=admin,
         )

@@ -193,6 +193,10 @@ async def bulk_create_admin_slots(
         start_time_utc=payload.start_time_utc,
         end_time_utc=payload.end_time_utc,
         slot_duration_minutes=payload.slot_duration_minutes,
+        exclude_dates=payload.exclude_dates,
+        exclude_time_ranges=[
+            (item.start_time_utc, item.end_time_utc) for item in payload.exclude_time_ranges
+        ],
         actor=current_user,
     )
     return AdminSlotBulkCreateRead(

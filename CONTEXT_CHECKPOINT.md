@@ -2058,9 +2058,22 @@ Implemented in codebase:
 - bulk operation writes summary audit entry:
   - `admin.slot.bulk_create`.
 
+10. `B9` bulk-create exceptions (`exclude_dates[]`, `exclude_time_ranges[]`):
+- extended `POST /api/v1/admin/slots/bulk-create` contract with:
+  - `exclude_dates` (list of UTC dates),
+  - `exclude_time_ranges` (list of UTC time intervals).
+- implemented exclusion precedence in bulk generation:
+  - `exclude_dates` has higher priority,
+  - then `exclude_time_ranges`,
+  - then regular slot validations.
+- each excluded candidate is returned in deterministic skip journal with explicit reason:
+  - `excluded_date`,
+  - `excluded_time_range`.
+- bulk audit summary now includes effective exclusion payload for traceability.
+
 Verification tasks added/updated:
 - tests:
-  - `tests/test_admin_slot_bulk_create.py` (service-level bulk create base flow + limit validation),
+  - `tests/test_admin_slot_bulk_create.py` (service-level bulk create base flow + limit/exclusions validation),
   - `tests/test_admin_slot_block.py` (service-level slot block flow + 403/404),
   - `tests/test_admin_slot_delete.py` (service-level delete policy: success/403/404/409),
   - `tests/test_admin_slot_create_rules.py` (service-level strict create validation + overlap),
@@ -2088,5 +2101,8 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_slots_endpoint_returns_401_403_and_200_by_role or admin_create_slot_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_delete_slot_endpoint_returns_401_403_and_204_without_bookings or admin_delete_slot_endpoint_returns_409_when_slot_has_related_booking or admin_block_slot_endpoint_returns_401_403_and_200_and_writes_audit"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_bulk_create_slots_endpoint_returns_401_403_and_200_by_role or admin_create_slot_endpoint_returns_401_403_and_201_by_role or admin_block_slot_endpoint_returns_401_403_and_200_and_writes_audit"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `101 passed, 21 skipped`.
+- `py -m poetry run ruff check app/modules/admin/schemas.py app/modules/admin/router.py app/modules/scheduling/service.py tests/test_admin_slot_bulk_create.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_slot_bulk_create.py tests/test_admin_slot_block.py tests/test_admin_slot_delete.py tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `37 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_bulk_create_slots_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `103 passed, 21 skipped`.
 

@@ -99,6 +99,7 @@ class AdminKpiOverviewRead(BaseModel):
     packages_total: int
     packages_active: int
     packages_expired: int
+    packages_depleted: int
     packages_canceled: int
 
 

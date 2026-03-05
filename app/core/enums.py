@@ -51,6 +51,7 @@ class PackageStatusEnum(StrEnum):
 
     ACTIVE = "active"
     EXPIRED = "expired"
+    DEPLETED = "depleted"
     CANCELED = "canceled"
 
 

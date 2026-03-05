@@ -2424,3 +2424,32 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "rebook_same_slot_after_cancel_succeeds_with_active_booking_uniqueness or concurrent_hold_attempts_on_same_slot_allow_only_one_success"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q tests/test_admin_slots_list.py tests/test_admin_bookings_list.py` -> `8 passed`.
 
+## 34) Epic D Implementation Progress (Started 2026-03-05)
+
+Implemented in codebase:
+
+1. `D1` package status lifecycle extension (`DEPLETED` + compatibility):
+- `PackageStatusEnum` extended with new runtime status:
+  - `depleted`.
+- migration added:
+  - `alembic/versions/20260305_0007_package_status_depleted.py`,
+    upgrades `package_status_enum` from
+    `active/expired/canceled` to `active/expired/depleted/canceled`.
+- downgrade compatibility mapping added:
+  - `depleted -> canceled` before enum rollback.
+- admin KPI read model updated for status expansion:
+  - `packages_depleted` counter added to `AdminKpiOverviewRead`,
+  - `packages_total` now includes `active + expired + depleted + canceled`.
+- conflict resolution for backward compatibility:
+  - `canceled` status retained unchanged as legacy transitional status
+    per Epic D v1.1 decision.
+
+Verification tasks added/updated:
+- tests:
+  - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
+    and explicit assertion.
+
+Latest local checks:
+- `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py tests/test_billing_payment_rules.py` -> `17 passed`.
+

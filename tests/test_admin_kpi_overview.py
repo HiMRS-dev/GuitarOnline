@@ -69,7 +69,8 @@ def make_snapshot() -> dict:
         "payments_net_amount": Decimal("400.00"),
         "packages_total": 7,
         "packages_active": 4,
-        "packages_expired": 2,
+        "packages_expired": 1,
+        "packages_depleted": 1,
         "packages_canceled": 1,
     }
 
@@ -84,6 +85,7 @@ async def test_admin_kpi_overview_returns_snapshot_and_traces_action() -> None:
 
     assert result.users_total == 12
     assert result.bookings_confirmed == 12
+    assert result.packages_depleted == 1
     assert result.payments_net_amount == Decimal("400.00")
     assert len(repository.actions) == 1
     assert repository.actions[0]["action"] == "admin.kpi.view"

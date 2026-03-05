@@ -553,6 +553,7 @@ class AdminRepository:
 
         packages_active = package_counts.get(PackageStatusEnum.ACTIVE, 0)
         packages_expired = package_counts.get(PackageStatusEnum.EXPIRED, 0)
+        packages_depleted = package_counts.get(PackageStatusEnum.DEPLETED, 0)
         packages_canceled = package_counts.get(PackageStatusEnum.CANCELED, 0)
 
         return {
@@ -582,9 +583,12 @@ class AdminRepository:
             "payments_succeeded_amount": payments_succeeded_amount,
             "payments_refunded_amount": payments_refunded_amount,
             "payments_net_amount": payments_succeeded_amount - payments_refunded_amount,
-            "packages_total": packages_active + packages_expired + packages_canceled,
+            "packages_total": (
+                packages_active + packages_expired + packages_depleted + packages_canceled
+            ),
             "packages_active": packages_active,
             "packages_expired": packages_expired,
+            "packages_depleted": packages_depleted,
             "packages_canceled": packages_canceled,
         }
 

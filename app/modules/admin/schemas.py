@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.core.enums import (
     BookingStatusEnum,
+    PackageStatusEnum,
     SlotBookingAggregateStatusEnum,
     SlotStatusEnum,
     TeacherStatusEnum,
@@ -226,6 +227,34 @@ class AdminBookingRescheduleRequest(BaseModel):
 
     new_slot_id: UUID
     reason: str = Field(min_length=1, max_length=512)
+
+
+class AdminPackageListItemRead(BaseModel):
+    """Admin package list item with lifecycle state and student linkage."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "package_id": "9f2b8758-beb8-4c8b-bd23-3615e7c05a23",
+                "student_id": "a46d9185-3369-4f6f-9506-5e01d5fdbd26",
+                "lessons_total": 10,
+                "lessons_left": 4,
+                "expires_at_utc": "2026-04-07T12:00:00+00:00",
+                "status": "active",
+                "created_at_utc": "2026-03-04T10:15:00+00:00",
+                "updated_at_utc": "2026-03-10T08:00:00+00:00",
+            },
+        },
+    )
+
+    package_id: UUID
+    student_id: UUID
+    lessons_total: int
+    lessons_left: int
+    expires_at_utc: datetime
+    status: PackageStatusEnum
+    created_at_utc: datetime
+    updated_at_utc: datetime
 
 
 class AdminSlotListItemRead(BaseModel):

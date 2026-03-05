@@ -2444,12 +2444,35 @@ Implemented in codebase:
   - `canceled` status retained unchanged as legacy transitional status
     per Epic D v1.1 decision.
 
+2. `D2` admin package listing endpoint with filters:
+- added admin-only endpoint:
+  - `GET /api/v1/admin/packages`.
+- filters implemented:
+  - `student_id`,
+  - `status`,
+  - pagination (`limit`, `offset`).
+- repository-level deterministic filtering added:
+  - `AdminRepository.list_packages(...)` with stable ordering by
+    `lesson_packages.created_at DESC`.
+- service-level admin gate and DTO serialization added:
+  - `AdminService.list_packages(...)`,
+  - response DTO: `AdminPackageListItemRead`.
+- compatibility preserved:
+  - existing student-scoped endpoint `GET /api/v1/billing/packages/students/{student_id}`
+    remains unchanged.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
     and explicit assertion.
+  - `tests/test_admin_packages_list.py` (service-level filtering, serialization, admin RBAC guard).
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/packages` RBAC check (`401/403/200`).
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py tests/test_billing_payment_rules.py` -> `17 passed`.
+- `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_packages_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_packages_list.py tests/test_admin_bookings_list.py tests/test_admin_kpi_overview.py` -> `9 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_packages_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

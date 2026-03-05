@@ -417,6 +417,43 @@ class AdminRepository:
             )
         return items, total
 
+    async def list_packages(
+        self,
+        *,
+        student_id: UUID | None,
+        status: PackageStatusEnum | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, object]], int]:
+        """List lesson packages for admin filters."""
+        base_stmt: Select[tuple[LessonPackage]] = select(LessonPackage)
+        if student_id is not None:
+            base_stmt = base_stmt.where(LessonPackage.student_id == student_id)
+        if status is not None:
+            base_stmt = base_stmt.where(LessonPackage.status == status)
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int((await self.session.scalar(count_stmt)) or 0)
+
+        stmt = base_stmt.order_by(LessonPackage.created_at.desc()).limit(limit).offset(offset)
+        rows = (await self.session.scalars(stmt)).all()
+
+        items: list[dict[str, object]] = []
+        for package in rows:
+            items.append(
+                {
+                    "package_id": package.id,
+                    "student_id": package.student_id,
+                    "lessons_total": package.lessons_total,
+                    "lessons_left": package.lessons_left,
+                    "expires_at_utc": package.expires_at,
+                    "status": package.status,
+                    "created_at_utc": package.created_at,
+                    "updated_at_utc": package.updated_at,
+                },
+            )
+        return items, total
+
     async def get_slot_by_id(self, slot_id: UUID) -> AvailabilitySlot | None:
         """Get slot by id for admin operations."""
         stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)

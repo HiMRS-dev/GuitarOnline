@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.core.enums import BookingStatusEnum, RoleEnum, TeacherStatusEnum
+from app.core.enums import BookingStatusEnum, PackageStatusEnum, RoleEnum, TeacherStatusEnum
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminActionRead,
@@ -16,6 +16,7 @@ from app.modules.admin.schemas import (
     AdminBookingRescheduleRequest,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminPackageListItemRead,
     AdminSlotBlockRead,
     AdminSlotBlockRequest,
     AdminSlotBulkCreateRead,
@@ -183,6 +184,25 @@ async def list_admin_bookings(
         status=status_filter,
         from_utc=from_utc,
         to_utc=to_utc,
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+    return build_page(items, total, pagination)
+
+
+@router.get("/packages", response_model=Page[AdminPackageListItemRead])
+async def list_admin_packages(
+    student_id: UUID | None = Query(default=None),
+    status_filter: PackageStatusEnum | None = Query(default=None, alias="status"),
+    pagination=Depends(get_pagination_params),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> Page[AdminPackageListItemRead]:
+    """List lesson packages for admin billing operations with filters."""
+    items, total = await service.list_packages(
+        current_user,
+        student_id=student_id,
+        status=status_filter,
         limit=pagination.limit,
         offset=pagination.offset,
     )

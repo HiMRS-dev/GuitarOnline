@@ -12,6 +12,7 @@ from app.core.database import get_db_session
 from app.core.enums import (
     BookingStatusEnum,
     LessonStatusEnum,
+    PackageStatusEnum,
     RoleEnum,
     SlotBookingAggregateStatusEnum,
     SlotStatusEnum,
@@ -24,6 +25,7 @@ from app.modules.admin.schemas import (
     AdminBookingListItemRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminPackageListItemRead,
     AdminSlotBlockRead,
     AdminSlotListItemRead,
     AdminSlotStatsRead,
@@ -255,6 +257,27 @@ class AdminService:
             offset=offset,
         )
         return [AdminBookingListItemRead.model_validate(item) for item in items], total
+
+    async def list_packages(
+        self,
+        actor: User,
+        *,
+        student_id: UUID | None,
+        status: PackageStatusEnum | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[AdminPackageListItemRead], int]:
+        """List packages for admin billing-management views."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can list packages")
+
+        items, total = await self.repository.list_packages(
+            student_id=student_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        return [AdminPackageListItemRead.model_validate(item) for item in items], total
 
     @staticmethod
     def _aggregate_slot_booking_status(

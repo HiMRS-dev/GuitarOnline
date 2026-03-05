@@ -3049,6 +3049,15 @@ Implemented in codebase:
 - lessons repository extended:
   - `list_scheduled_lessons_starting_between(...)` for reminder candidate scan.
 
+7. `F7` focused reminder-generation test:
+- added focused test for new reminder behavior only:
+  - `tests/test_lesson_reminder_worker.py::test_reminder_worker_generates_reminder_and_skips_duplicate_by_idempotency_key`.
+- test validates:
+  - reminder scan window (`now .. now+24h`) invocation,
+  - `lesson_reminder_24h` template key assignment,
+  - idempotency skip when key already exists,
+  - successful `sent` status for newly created reminder notification.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_notification_templates.py` added for:
@@ -3077,6 +3086,7 @@ Verification tasks added/updated:
     - admin-only access guard.
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/notifications` role check (`401/403/200`).
+  - `tests/test_lesson_reminder_worker.py` added as focused reminder-generation coverage for Epic F.
 
 Latest local checks:
 - `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).
@@ -3087,4 +3097,5 @@ Latest local checks:
 - `python -m compileall app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_notifications_list.py tests/test_rbac_access_integration.py` -> success.
 - `python -m compileall app/modules/notifications/models.py app/modules/notifications/repository.py app/modules/notifications/reminder_worker.py app/modules/lessons/repository.py app/workers/lesson_reminder_24h_worker.py alembic/versions/20260306_0016_notification_idempotency_key.py` -> success.
+- `python -m compileall tests/test_lesson_reminder_worker.py app/modules/notifications/reminder_worker.py app/workers/lesson_reminder_24h_worker.py` -> success.
 

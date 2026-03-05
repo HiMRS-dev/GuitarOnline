@@ -3325,10 +3325,26 @@ Implemented in codebase:
   - added `request_json(...)` wrapper for JSON parsing,
   - added `auth_headers(...)` helper for bearer auth reuse.
 
+2. `H2` runbook documentation refresh (`README.md`):
+- added consolidated developer runbook section:
+  - backend local setup,
+  - migrations flow,
+  - seed flow,
+  - worker run commands,
+  - `web-admin` local run.
+- updated worker docs to current runtime contract:
+  - canonical outbox env var documented:
+    - `NOTIFICATIONS_OUTBOX_WORKER_MODE`,
+  - legacy alias retained in docs for compatibility:
+    - `OUTBOX_WORKER_MODE`.
+- added missing reminder worker runbook commands:
+  - `python -m app.workers.lesson_reminder_24h_worker` (`once`/`loop`).
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
   - `python -m compileall scripts/deploy_smoke_check.py` -> success.
+  - `rg -n "Development Runbook|Backend local setup|Demo seed data|Workers local run|NOTIFICATIONS_OUTBOX_WORKER_MODE|lesson_reminder_24h_worker|web-admin local run" README.md` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

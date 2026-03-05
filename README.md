@@ -25,6 +25,38 @@ Production-ready modular monolith backend for an online guitar school.
    - readiness (DB-aware): `http://localhost:8000/ready`
    - metrics (Prometheus format): `http://localhost:8000/metrics`
 
+## Development Runbook
+
+- Backend local setup:
+  - `py -m poetry install`
+  - `cp .env.example .env`
+  - `docker compose up -d db redis`
+  - `py -m poetry run alembic upgrade head`
+  - `py -m poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload`
+- Migrations:
+  - create revision: `py -m poetry run alembic revision --autogenerate -m "change_name"`
+  - apply migrations: `py -m poetry run alembic upgrade head`
+- Demo seed data:
+  - local run: `py -m poetry run python scripts/seed_demo_data.py`
+  - docker run: `docker compose -f docker-compose.prod.yml exec -T app python scripts/seed_demo_data.py`
+- Workers local run:
+  - notifications outbox worker once:
+    - `py -m poetry run python -m app.workers.outbox_notifications_worker`
+  - notifications outbox worker loop:
+    - `NOTIFICATIONS_OUTBOX_WORKER_MODE=loop py -m poetry run python -m app.workers.outbox_notifications_worker`
+  - booking HOLD expirer worker loop:
+    - `BOOKING_HOLDS_EXPIRER_MODE=loop py -m poetry run python -m app.workers.booking_holds_expirer`
+  - packages expirer worker loop:
+    - `PACKAGES_EXPIRER_MODE=loop py -m poetry run python -m app.workers.packages_expirer`
+  - 24h lesson reminder worker loop:
+    - `LESSON_REMINDER_24H_WORKER_MODE=loop py -m poetry run python -m app.workers.lesson_reminder_24h_worker`
+- `web-admin` local run:
+  - `cd web-admin`
+  - `cp .env.example .env`
+  - `npm install`
+  - `npm run dev`
+  - open `http://localhost:5173` and ensure `VITE_API_BASE_URL` points to backend API.
+
 ## Deployment Baseline
 
 - Start production-oriented compose stack:
@@ -175,7 +207,8 @@ Production-ready modular monolith backend for an online guitar school.
 - Run notifications outbox worker once:
   - `poetry run python -m app.workers.outbox_notifications_worker`
 - Run in polling mode:
-  - `OUTBOX_WORKER_MODE=loop poetry run python -m app.workers.outbox_notifications_worker`
+  - `NOTIFICATIONS_OUTBOX_WORKER_MODE=loop poetry run python -m app.workers.outbox_notifications_worker`
+  - legacy env alias is still accepted: `OUTBOX_WORKER_MODE=loop`.
 - Run booking HOLD expiration worker once:
   - `poetry run python -m app.workers.booking_holds_expirer`
 - Run booking HOLD expiration worker in polling mode:
@@ -184,6 +217,10 @@ Production-ready modular monolith backend for an online guitar school.
   - `poetry run python -m app.workers.packages_expirer`
 - Run package expiration worker in polling mode:
   - `PACKAGES_EXPIRER_MODE=loop poetry run python -m app.workers.packages_expirer`
+- Run 24h lesson reminder worker once:
+  - `poetry run python -m app.workers.lesson_reminder_24h_worker`
+- Run 24h lesson reminder worker in polling mode:
+  - `LESSON_REMINDER_24H_WORKER_MODE=loop poetry run python -m app.workers.lesson_reminder_24h_worker`
 
 ## Frontend MVP Portal
 

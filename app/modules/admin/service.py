@@ -12,6 +12,7 @@ from app.core.database import get_db_session
 from app.core.enums import (
     BookingStatusEnum,
     LessonStatusEnum,
+    NotificationStatusEnum,
     PackageStatusEnum,
     RoleEnum,
     SlotBookingAggregateStatusEnum,
@@ -25,6 +26,7 @@ from app.modules.admin.schemas import (
     AdminBookingListItemRead,
     AdminKpiOverviewRead,
     AdminKpiSalesRead,
+    AdminNotificationListItemRead,
     AdminOperationsOverviewRead,
     AdminPackageListItemRead,
     AdminSlotBlockRead,
@@ -34,6 +36,7 @@ from app.modules.admin.schemas import (
     AdminTeacherListItemRead,
 )
 from app.modules.identity.models import User
+from app.modules.notifications.templates import normalize_template_key
 from app.shared.exceptions import (
     BusinessRuleException,
     ConflictException,
@@ -312,6 +315,57 @@ class AdminService:
             offset=offset,
         )
         return [AdminPackageListItemRead.model_validate(item) for item in items], total
+
+    async def list_notifications(
+        self,
+        actor: User,
+        *,
+        recipient_user_id: UUID | None,
+        channel: str | None,
+        status: NotificationStatusEnum | None,
+        template_key: str | None,
+        created_from_utc: datetime | None,
+        created_to_utc: datetime | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[AdminNotificationListItemRead], int]:
+        """List notification delivery journal records for admin operations."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can list notifications")
+
+        normalized_created_from_utc = (
+            ensure_utc(created_from_utc) if created_from_utc is not None else None
+        )
+        normalized_created_to_utc = (
+            ensure_utc(created_to_utc) if created_to_utc is not None else None
+        )
+        if (
+            normalized_created_from_utc is not None
+            and normalized_created_to_utc is not None
+            and normalized_created_from_utc > normalized_created_to_utc
+        ):
+            raise BusinessRuleException(
+                "created_from_utc must be less than or equal to created_to_utc",
+            )
+
+        normalized_template_key: str | None = None
+        if template_key is not None:
+            try:
+                normalized_template_key = normalize_template_key(template_key).value
+            except ValueError as exc:
+                raise BusinessRuleException(str(exc)) from exc
+
+        items, total = await self.repository.list_notifications(
+            recipient_user_id=recipient_user_id,
+            channel=channel,
+            status=status,
+            template_key=normalized_template_key,
+            created_from_utc=normalized_created_from_utc,
+            created_to_utc=normalized_created_to_utc,
+            limit=limit,
+            offset=offset,
+        )
+        return [AdminNotificationListItemRead.model_validate(item) for item in items], total
 
     @staticmethod
     def _aggregate_slot_booking_status(

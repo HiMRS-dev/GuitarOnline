@@ -3009,6 +3009,25 @@ Implemented in codebase:
   - persisted `notifications.template_key` is canonical template token.
 - booking event processing remains centralized in `NotificationsOutboxWorker` via dedicated helper methods.
 
+5. `F5` admin notification log endpoint:
+- added admin-only paginated endpoint:
+  - `GET /api/v1/admin/notifications`.
+- filters implemented:
+  - `recipient_user_id`,
+  - `channel`,
+  - `status`,
+  - `template_key`,
+  - `created_from_utc`,
+  - `created_to_utc`.
+- repository query path added for notifications journal:
+  - `AdminRepository.list_notifications(...)`.
+- service-layer validation/normalization added:
+  - UTC normalization for created range filters,
+  - range validation (`created_from_utc <= created_to_utc`),
+  - template-key normalization with legacy alias support (`booking_cancelled` -> `booking_canceled`).
+- response contract added:
+  - `AdminNotificationListItemRead` (`notification_id`, recipient, channel, template, status, sent/create/update timestamps).
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_notification_templates.py` added for:
@@ -3028,6 +3047,15 @@ Verification tasks added/updated:
     - template key assertions for `booking.confirmed` and `booking.canceled`,
     - `booking.rescheduled` emits two notifications by default (`canceled` + `confirmed`),
     - `booking.rescheduled` emits only cancel notification when optional confirm is disabled.
+  - `tests/test_admin_notifications_list.py` added for:
+    - service-level filter pass-through,
+    - UTC normalization,
+    - created-range validation,
+    - legacy template-key alias normalization,
+    - unknown template-key rejection,
+    - admin-only access guard.
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/notifications` role check (`401/403/200`).
 
 Latest local checks:
 - `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).
@@ -3036,4 +3064,5 @@ Latest local checks:
 - `python -m compileall app/modules/notifications/delivery.py app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> success.
 - `python -m compileall app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
+- `python -m compileall app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_notifications_list.py tests/test_rbac_access_integration.py` -> success.
 

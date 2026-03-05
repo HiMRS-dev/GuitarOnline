@@ -457,6 +457,57 @@ class AdminRepository:
             )
         return items, total
 
+    async def list_notifications(
+        self,
+        *,
+        recipient_user_id: UUID | None,
+        channel: str | None,
+        status: NotificationStatusEnum | None,
+        template_key: str | None,
+        created_from_utc: datetime | None,
+        created_to_utc: datetime | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, object]], int]:
+        """List notification journal records with admin filters."""
+        base_stmt: Select[tuple[Notification]] = select(Notification)
+        if recipient_user_id is not None:
+            base_stmt = base_stmt.where(Notification.user_id == recipient_user_id)
+        if channel is not None:
+            base_stmt = base_stmt.where(Notification.channel == channel)
+        if status is not None:
+            base_stmt = base_stmt.where(Notification.status == status)
+        if template_key is not None:
+            base_stmt = base_stmt.where(Notification.template_key == template_key)
+        if created_from_utc is not None:
+            base_stmt = base_stmt.where(Notification.created_at >= created_from_utc)
+        if created_to_utc is not None:
+            base_stmt = base_stmt.where(Notification.created_at <= created_to_utc)
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int((await self.session.scalar(count_stmt)) or 0)
+
+        stmt = base_stmt.order_by(Notification.created_at.desc()).limit(limit).offset(offset)
+        rows = (await self.session.scalars(stmt)).all()
+
+        items: list[dict[str, object]] = []
+        for notification in rows:
+            items.append(
+                {
+                    "notification_id": notification.id,
+                    "recipient_user_id": notification.user_id,
+                    "channel": notification.channel,
+                    "template_key": notification.template_key,
+                    "title": notification.title,
+                    "body": notification.body,
+                    "status": notification.status,
+                    "sent_at_utc": notification.sent_at,
+                    "created_at_utc": notification.created_at,
+                    "updated_at_utc": notification.updated_at,
+                },
+            )
+        return items, total
+
     async def get_slot_by_id(self, slot_id: UUID) -> AvailabilitySlot | None:
         """Get slot by id for admin operations."""
         stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)

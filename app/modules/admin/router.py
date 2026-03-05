@@ -7,7 +7,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.core.enums import BookingStatusEnum, PackageStatusEnum, RoleEnum, TeacherStatusEnum
+from app.core.enums import (
+    BookingStatusEnum,
+    NotificationStatusEnum,
+    PackageStatusEnum,
+    RoleEnum,
+    TeacherStatusEnum,
+)
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminActionRead,
@@ -16,6 +22,7 @@ from app.modules.admin.schemas import (
     AdminBookingRescheduleRequest,
     AdminKpiOverviewRead,
     AdminKpiSalesRead,
+    AdminNotificationListItemRead,
     AdminOperationsOverviewRead,
     AdminPackageCreateRead,
     AdminPackageCreateRequest,
@@ -208,6 +215,33 @@ async def list_admin_packages(
         current_user,
         student_id=student_id,
         status=status_filter,
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+    return build_page(items, total, pagination)
+
+
+@router.get("/notifications", response_model=Page[AdminNotificationListItemRead])
+async def list_admin_notifications(
+    recipient_user_id: UUID | None = Query(default=None),
+    channel: str | None = Query(default=None, min_length=1, max_length=32),
+    status_filter: NotificationStatusEnum | None = Query(default=None, alias="status"),
+    template_key: str | None = Query(default=None, min_length=1, max_length=64),
+    created_from_utc: datetime | None = Query(default=None),
+    created_to_utc: datetime | None = Query(default=None),
+    pagination=Depends(get_pagination_params),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> Page[AdminNotificationListItemRead]:
+    """List notification delivery journal with admin filters."""
+    items, total = await service.list_notifications(
+        current_user,
+        recipient_user_id=recipient_user_id,
+        channel=channel,
+        status=status_filter,
+        template_key=template_key,
+        created_from_utc=created_from_utc,
+        created_to_utc=created_to_utc,
         limit=pagination.limit,
         offset=pagination.offset,
     )

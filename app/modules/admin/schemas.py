@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.core.enums import (
     BookingStatusEnum,
+    NotificationStatusEnum,
     PackageStatusEnum,
     SlotBookingAggregateStatusEnum,
     SlotStatusEnum,
@@ -309,6 +310,21 @@ class AdminPackageCreateRead(BaseModel):
     price_currency: str | None
     expires_at_utc: datetime
     status: PackageStatusEnum
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
+class AdminNotificationListItemRead(BaseModel):
+    """Admin notifications log item with delivery metadata."""
+
+    notification_id: UUID
+    recipient_user_id: UUID
+    channel: str
+    template_key: str | None
+    title: str
+    body: str
+    status: NotificationStatusEnum
+    sent_at_utc: datetime | None
     created_at_utc: datetime
     updated_at_utc: datetime
 

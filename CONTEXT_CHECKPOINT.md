@@ -2009,8 +2009,19 @@ Implemented in codebase:
   - `created_at_utc`,
   - `updated_at_utc`.
 
+7. `B6` admin slot delete policy with booking safeguard:
+- added admin-only endpoint:
+  - `DELETE /api/v1/admin/slots/{slot_id}`.
+- deletion policy aligned with Epic B v1.1 decision:
+  - slot is deleted only when there are no related booking rows,
+  - if slot has any booking row, API returns `409` and explicit guidance to use:
+    - `POST /api/v1/admin/slots/{slot_id}/block`.
+- successful delete writes audit entry:
+  - `admin.slot.delete` in `audit_logs`.
+
 Verification tasks added/updated:
 - tests:
+  - `tests/test_admin_slot_delete.py` (service-level delete policy: success/403/404/409),
   - `tests/test_admin_slot_create_rules.py` (service-level strict create validation + overlap),
   - `tests/test_admin_teachers_list.py` (service-level behavior + admin role enforcement),
   - `tests/test_admin_teacher_detail.py` (service-level detail behavior + `404`/RBAC),
@@ -2022,14 +2033,16 @@ Verification tasks added/updated:
     `/admin/teachers/{teacher_id}/verify` and `/disable` RBAC checks and audit-log trace check,
   - `tests/test_rbac_access_integration.py` extended with:
     - `/admin/slots` RBAC check,
-    - `POST /admin/slots` RBAC check.
+    - `POST /admin/slots` RBAC check,
+    - `DELETE /admin/slots/{slot_id}` RBAC + conflict policy checks.
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/config.py app/modules/scheduling app/modules/admin tests/test_admin_slot_create_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
-- `py -m poetry run pytest -q tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `24 passed`.
+- `py -m poetry run pytest -q tests/test_admin_slot_delete.py tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `28 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_detail_endpoint or admin_teachers_endpoint"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_verify_endpoint or admin_teacher_disable_endpoint or admin_teacher_moderation_endpoints_write_audit_logs"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_slots_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_slots_endpoint_returns_401_403_and_200_by_role or admin_create_slot_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `90 passed, 17 skipped`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_delete_slot_endpoint_returns_401_403_and_204_without_bookings or admin_delete_slot_endpoint_returns_409_when_slot_has_related_booking"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `94 passed, 19 skipped`.
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.core.enums import RoleEnum, TeacherStatusEnum
 from app.modules.admin.schemas import (
@@ -150,6 +150,17 @@ async def list_admin_slots(
         offset=pagination.offset,
     )
     return build_page(items, total, pagination)
+
+
+@router.delete("/slots/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_admin_slot(
+    slot_id: UUID,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> Response:
+    """Delete slot when no related bookings exist."""
+    await service.delete_slot(current_user, slot_id=slot_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/kpi/overview", response_model=AdminKpiOverviewRead)

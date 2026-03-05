@@ -337,6 +337,35 @@ class AdminRepository:
             )
         return items, total
 
+    async def get_slot_by_id(self, slot_id: UUID) -> AvailabilitySlot | None:
+        """Get slot by id for admin operations."""
+        stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
+        return await self.session.scalar(stmt)
+
+    async def slot_has_bookings(self, slot_id: UUID) -> bool:
+        """Return True if slot has at least one related booking row."""
+        stmt = select(func.count(Booking.id)).where(Booking.slot_id == slot_id)
+        return int((await self.session.scalar(stmt)) or 0) > 0
+
+    async def delete_slot(self, *, slot: AvailabilitySlot, admin_id: UUID) -> None:
+        """Delete slot and write audit log entry."""
+        self.session.add(
+            AuditLog(
+                actor_id=admin_id,
+                action="admin.slot.delete",
+                entity_type="availability_slot",
+                entity_id=str(slot.id),
+                payload={
+                    "teacher_id": str(slot.teacher_id),
+                    "start_at_utc": slot.start_at.isoformat(),
+                    "end_at_utc": slot.end_at.isoformat(),
+                    "status": str(slot.status),
+                },
+            ),
+        )
+        await self.session.delete(slot)
+        await self.session.flush()
+
     async def get_kpi_overview(self) -> dict[str, datetime | int | Decimal]:
         role_counts = await self._count_users_by_role()
         booking_counts = await self._count_bookings_by_status()

@@ -375,6 +375,94 @@ async def test_admin_create_slot_endpoint_returns_401_403_and_201_by_role(
 
 
 @pytest.mark.asyncio
+async def test_admin_delete_slot_endpoint_returns_401_403_and_204_without_bookings(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    teacher = await _register_and_login(api_client, "teacher")
+    start_at = datetime.now(UTC) + timedelta(days=4, hours=1)
+    end_at = start_at + timedelta(hours=1)
+
+    create_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "teacher_id": str(teacher.id),
+            "start_at_utc": start_at.isoformat(),
+            "end_at_utc": end_at.isoformat(),
+        },
+    )
+    _assert_status(create_response, 201)
+    slot_id = create_response.json()["slot_id"]
+
+    no_token_response = await api_client.delete(f"/admin/slots/{slot_id}")
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.delete(
+        f"/admin/slots/{slot_id}",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.delete(
+        f"/admin/slots/{slot_id}",
+        headers=_auth_headers(admin.access_token),
+    )
+    _assert_status(admin_response, 204)
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_slot_endpoint_returns_409_when_slot_has_related_booking(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    teacher = await _register_and_login(api_client, "teacher")
+    student = await _register_and_login(api_client, "student")
+    package_response = await api_client.post(
+        "/billing/packages",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "student_id": str(student.id),
+            "lessons_total": 5,
+            "expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+        },
+    )
+    _assert_status(package_response, 201)
+    package_id = package_response.json()["id"]
+
+    start_at = datetime.now(UTC) + timedelta(days=5, hours=1)
+    end_at = start_at + timedelta(hours=1)
+    create_slot_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "teacher_id": str(teacher.id),
+            "start_at_utc": start_at.isoformat(),
+            "end_at_utc": end_at.isoformat(),
+        },
+    )
+    _assert_status(create_slot_response, 201)
+    slot_id = create_slot_response.json()["slot_id"]
+
+    hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={
+            "slot_id": slot_id,
+            "package_id": package_id,
+        },
+    )
+    _assert_status(hold_response, 200)
+
+    delete_response = await api_client.delete(
+        f"/admin/slots/{slot_id}",
+        headers=_auth_headers(admin.access_token),
+    )
+    _assert_status(delete_response, 409)
+
+
+@pytest.mark.asyncio
 async def test_teacher_profile_create_forbidden_for_student_and_allowed_for_teacher(
     api_client: httpx.AsyncClient,
 ) -> None:

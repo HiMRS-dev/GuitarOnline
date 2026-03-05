@@ -27,7 +27,12 @@ from app.modules.admin.schemas import (
     AdminTeacherListItemRead,
 )
 from app.modules.identity.models import User
-from app.shared.exceptions import BusinessRuleException, NotFoundException, UnauthorizedException
+from app.shared.exceptions import (
+    BusinessRuleException,
+    ConflictException,
+    NotFoundException,
+    UnauthorizedException,
+)
 from app.shared.utils import ensure_utc
 
 
@@ -223,6 +228,27 @@ class AdminService:
         if slot_status == SlotStatusEnum.HOLD or booking_status == BookingStatusEnum.HOLD:
             return SlotBookingAggregateStatusEnum.HELD
         return SlotBookingAggregateStatusEnum.OPEN
+
+    async def delete_slot(
+        self,
+        actor: User,
+        *,
+        slot_id: UUID,
+    ) -> None:
+        """Delete slot if it has no related bookings."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can delete slots")
+
+        slot = await self.repository.get_slot_by_id(slot_id)
+        if slot is None:
+            raise NotFoundException("Slot not found")
+
+        if await self.repository.slot_has_bookings(slot_id):
+            raise ConflictException(
+                "Slot has related bookings; use POST /api/v1/admin/slots/{slot_id}/block",
+            )
+
+        await self.repository.delete_slot(slot=slot, admin_id=actor.id)
 
 
 async def get_admin_service(session: AsyncSession = Depends(get_db_session)) -> AdminService:

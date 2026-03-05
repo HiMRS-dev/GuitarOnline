@@ -3387,6 +3387,13 @@ Implemented in codebase:
   - kept existing deploy section details,
   - added matrix as authoritative consolidated source instead of replacing historical runbook notes.
 
+7. `H7` backup minimum strategy baseline reaffirmed:
+- documentation now explicitly declares canonical release backup scripts:
+  - `scripts/db_backup.ps1`,
+  - `scripts/db_restore.ps1`.
+- `README.md` backup section now references release-checklist backup step as canonical execution path.
+- `ops/release_checklist.md` section `2) Backup` now starts with the same canonical script baseline.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
@@ -3400,6 +3407,7 @@ Verification tasks added/updated:
   - `rg -n ".{101}" tests/test_pii_field_visibility.py` -> no overlong lines found.
   - `rg -n "test_pii_field_visibility.py|PII|role-based PII|security regression gate" README.md ops/release_checklist.md` -> expected entries found.
   - `rg -n "Production Config Matrix|Runtime `.env` keys|CI/CD secrets|Precedence Rules|JWT_SECRET overrides|PROD_ENV_FILE_B64" README.md ops/release_checklist.md` -> expected entries found.
+  - `rg -n "Canonical minimum backup strategy|scripts/db_backup\\.ps1|scripts/db_restore\\.ps1|2\\) Backup" README.md ops/release_checklist.md` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

@@ -29,6 +29,9 @@ Use this checklist before promoting a build to a target environment.
 
 ## 2) Backup
 
+- Canonical minimum scripts for this step:
+  - backup: `scripts/db_backup.ps1`,
+  - restore: `scripts/db_restore.ps1`.
 - Create fresh DB backup:
   - `powershell -ExecutionPolicy Bypass -File scripts/db_backup.ps1`
 - Verify backup file exists and is readable.

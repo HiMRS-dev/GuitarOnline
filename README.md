@@ -420,6 +420,10 @@ Production-ready modular monolith backend for an online guitar school.
 
 ## Backup and Restore
 
+- Canonical minimum backup strategy for release operations:
+  - backup script: `scripts/db_backup.ps1`,
+  - restore script: `scripts/db_restore.ps1`,
+  - release execution checklist: `ops/release_checklist.md` (section `2) Backup`).
 - Create DB backup from dockerized PostgreSQL:
   - `powershell -ExecutionPolicy Bypass -File scripts/db_backup.ps1`
 - Create DB backup to a custom path:

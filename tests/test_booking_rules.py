@@ -610,6 +610,53 @@ async def test_confirm_rejects_past_slot_even_with_unexpired_hold(
 
 
 @pytest.mark.asyncio
+async def test_confirm_requires_package_with_clear_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=12),
+        end_at=fixed_now + timedelta(hours=13),
+        status=SlotStatusEnum.HOLD,
+    )
+    booking = FakeBooking(
+        id=booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=None,
+        status=BookingStatusEnum.HOLD,
+        hold_expires_at=fixed_now + timedelta(minutes=5),
+    )
+
+    service, _, billing_repo, _, lessons_repo, audit_repo = make_service(
+        slots={slot_id: slot},
+        packages={},
+        bookings={booking_id: booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    with pytest.raises(BusinessRuleException, match="Booking package is required"):
+        await service.confirm_booking(booking_id, actor)
+
+    assert booking.status == BookingStatusEnum.HOLD
+    assert billing_repo.reserve_calls == 0
+    assert billing_repo.consume_reserved_calls == 0
+    assert lessons_repo.create_calls == 0
+    assert audit_repo.events == []
+
+
+@pytest.mark.asyncio
 async def test_cancel_more_than_24h_returns_lesson(monkeypatch: pytest.MonkeyPatch) -> None:
     fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
     monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)

@@ -2548,6 +2548,15 @@ Implemented in codebase:
   - `.env.example` worker vars,
   - `README.md` workers list, worker run commands, operational runbook package-expirer note.
 
+7. `D7` confirm-without-package guard + reserve-model cancellation/refund adaptation:
+- reserve-model cancellation adaptation completed in `D4` and now explicitly tracked under `D7`:
+  - `>24h`: release reservation only,
+  - `<=24h`: burn reserved lesson.
+- confirm hard-fail without package preserved and verified:
+  - `BookingService.confirm_booking(...)` keeps explicit guard
+    `Booking package is required`.
+- regression coverage added for explicit confirm-without-package path.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2575,6 +2584,8 @@ Verification tasks added/updated:
   - `tests/test_billing_payment_rules.py` extended with
     `expire_packages_system(...)` coverage (no-actor system path + trigger audit).
   - `tests/test_packages_expirer_worker.py` (worker cycle uses system expiration path + commits tx).
+  - `tests/test_booking_rules.py` extended with
+    confirm-without-package clear-error assertion (`Booking package is required`).
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2593,4 +2604,6 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "lesson_complete_endpoint_returns_401_403_and_200_by_role or admin_create_package_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run ruff check app/modules/billing/service.py app/workers/packages_expirer.py tests/test_packages_expirer_worker.py tests/test_billing_payment_rules.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_billing_payment_rules.py tests/test_packages_expirer_worker.py tests/test_booking_holds_expirer_worker.py` -> `19 passed`.
+- `py -m poetry run ruff check tests/test_booking_rules.py app/modules/booking/service.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_billing_payment_rules.py` -> `37 passed`.
 

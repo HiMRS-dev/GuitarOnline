@@ -21,7 +21,7 @@ from app.modules.booking.schemas import (
     BookingRescheduleRequest,
 )
 from app.modules.booking.service import BookingService, settings
-from app.shared.exceptions import UnauthorizedException
+from app.shared.exceptions import BusinessRuleException, UnauthorizedException
 
 
 @dataclass
@@ -418,6 +418,61 @@ async def test_confirm_is_idempotent_for_already_confirmed_booking(
     assert lesson is not None
     assert lesson.status == LessonStatusEnum.SCHEDULED
     assert any(event["event_type"] == "lesson.created" for event in audit_repo.events)
+
+
+@pytest.mark.asyncio
+async def test_confirm_rejects_past_slot_even_with_unexpired_hold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+    booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now - timedelta(minutes=1),
+        end_at=fixed_now + timedelta(minutes=59),
+        status=SlotStatusEnum.HOLD,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=10),
+        lessons_total=8,
+        lessons_left=8,
+    )
+    booking = FakeBooking(
+        id=booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.HOLD,
+        hold_expires_at=fixed_now + timedelta(minutes=5),
+    )
+
+    service, _, billing_repo, _, lessons_repo, audit_repo = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+        bookings={booking_id: booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    with pytest.raises(BusinessRuleException, match="Cannot confirm booking for slot in the past"):
+        await service.confirm_booking(booking_id, actor)
+
+    assert booking.status == BookingStatusEnum.HOLD
+    assert billing_repo.consume_calls == 0
+    assert lessons_repo.create_calls == 0
+    assert len(audit_repo.events) == 0
 
 
 @pytest.mark.asyncio
@@ -833,6 +888,77 @@ async def test_admin_reschedule_uses_system_hold_and_writes_audit(
     assert reschedule_log["payload"]["reason"] == "Admin move"
     assert reschedule_log["payload"]["old_slot_id"] == str(old_slot_id)
     assert reschedule_log["payload"]["new_slot_id"] == str(new_slot_id)
+
+
+@pytest.mark.asyncio
+async def test_admin_reschedule_rejects_target_slot_in_past_before_cancel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    old_slot_id = uuid4()
+    new_slot_id = uuid4()
+    package_id = uuid4()
+    old_booking_id = uuid4()
+    admin_id = uuid4()
+
+    old_slot = FakeSlot(
+        id=old_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=30),
+        end_at=fixed_now + timedelta(hours=31),
+        status=SlotStatusEnum.BOOKED,
+    )
+    past_slot = FakeSlot(
+        id=new_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now - timedelta(minutes=5),
+        end_at=fixed_now + timedelta(minutes=55),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=10,
+        lessons_left=4,
+    )
+    old_booking = FakeBooking(
+        id=old_booking_id,
+        slot_id=old_slot_id,
+        slot=old_slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CONFIRMED,
+    )
+
+    service, _, billing_repo, _, lessons_repo, audit_repo = make_service(
+        slots={old_slot_id: old_slot, new_slot_id: past_slot},
+        packages={package_id: package},
+        bookings={old_booking_id: old_booking},
+    )
+    admin_actor = make_actor(admin_id, RoleEnum.ADMIN)
+
+    with pytest.raises(BusinessRuleException, match="Cannot book a slot in the past"):
+        await service.reschedule_booking(
+            old_booking_id,
+            BookingRescheduleRequest(new_slot_id=new_slot_id, reason="Admin move"),
+            admin_actor,
+        )
+
+    assert old_booking.status == BookingStatusEnum.CONFIRMED
+    assert old_slot.status == SlotStatusEnum.BOOKED
+    assert past_slot.status == SlotStatusEnum.OPEN
+    assert billing_repo.return_calls == 0
+    assert billing_repo.consume_calls == 0
+    assert lessons_repo.create_calls == 0
+    assert audit_repo.events == []
+    assert audit_repo.audit_logs == []
 
 
 @pytest.mark.asyncio

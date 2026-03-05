@@ -2270,6 +2270,25 @@ Implemented in codebase:
   - competing request fails with business-rule `422` (`Slot is not available`),
   - DB invariant: only one active booking (`hold`/`confirmed`) exists for target slot.
 
+5. `C5`/`C6` confirm consistency and no-past invariant hardening:
+- confirm-flow invariants tightened:
+  - `confirm_booking(...)` now rejects HOLD confirmation when slot start is in the past
+    (`Cannot confirm booking for slot in the past`),
+  - package activity/expiration/lessons checks remain in confirm core.
+- reschedule no-past behavior hardened:
+  - `reschedule_booking(...)` now validates target slot existence and "not in the past"
+    before cancellation step,
+  - this prevents invalid past-slot reschedule requests from mutating original booking state.
+- transaction semantics remain request-transaction scoped via existing session dependency
+  (`get_db_session` commit/rollback boundary unchanged).
+- coverage:
+  - unit tests added for:
+    - confirm reject on past slot with unexpired HOLD,
+    - admin reschedule reject on past target slot before cancel side-effects.
+  - integration scenario added:
+    - forced DB setup where slot start already passed while HOLD still unexpired,
+    - confirm endpoint returns deterministic business-rule `422`.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
@@ -2283,6 +2302,9 @@ Verification tasks added/updated:
     `/admin/bookings/{booking_id}/reschedule` RBAC + successful admin-reschedule path.
   - `tests/test_booking_billing_integration.py` extended with
     concurrent HOLD integration scenario and DB active-booking assertion.
+  - `tests/test_booking_rules.py` extended with confirm/reschedule past-slot invariant checks.
+  - `tests/test_booking_billing_integration.py` extended with confirm reject scenario
+    for past slot + unexpired HOLD.
 
 Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2293,5 +2315,8 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_cancel_booking_endpoint_returns_401_403_and_200_by_role or admin_reschedule_booking_endpoint_returns_401_403_and_200_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run ruff check app/modules/scheduling/repository.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_booking_billing_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k concurrent_hold_attempts_on_same_slot_allow_only_one_success` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `116 passed, 27 skipped`.
+- `py -m poetry run ruff check app/modules/booking/service.py tests/test_booking_rules.py tests/test_booking_billing_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py` -> `14 passed`.
+- `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "concurrent_hold_attempts_on_same_slot_allow_only_one_success or confirm_rejects_hold_when_slot_start_already_passed"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `118 passed, 28 skipped`.
 

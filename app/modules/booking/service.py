@@ -190,11 +190,14 @@ class BookingService:
         if booking.status != BookingStatusEnum.HOLD:
             raise ConflictException("Only HOLD booking can be confirmed")
 
-        if booking.hold_expires_at is None or booking.hold_expires_at <= utc_now():
+        now = utc_now()
+        if booking.hold_expires_at is None or booking.hold_expires_at <= now:
             booking.status = BookingStatusEnum.EXPIRED
             await self.scheduling_repository.set_slot_status(booking.slot, SlotStatusEnum.OPEN)
             await self.booking_repository.save(booking)
             raise BusinessRuleException("Booking hold has expired")
+        if booking.slot.start_at <= now:
+            raise BusinessRuleException("Cannot confirm booking for slot in the past")
 
         if booking.package_id is None:
             raise BusinessRuleException("Booking package is required")
@@ -203,7 +206,7 @@ class BookingService:
         if package is None:
             raise NotFoundException("Package not found")
 
-        if package.status != PackageStatusEnum.ACTIVE or package.expires_at <= utc_now():
+        if package.status != PackageStatusEnum.ACTIVE or package.expires_at <= now:
             raise BusinessRuleException("Package is inactive or expired")
         if package.lessons_left <= 0:
             raise BusinessRuleException("No lessons left")
@@ -211,7 +214,7 @@ class BookingService:
         await self.billing_repository.consume_package_lesson(package)
 
         booking.status = BookingStatusEnum.CONFIRMED
-        booking.confirmed_at = utc_now()
+        booking.confirmed_at = now
         booking.hold_expires_at = None
         await self.scheduling_repository.set_slot_status(booking.slot, SlotStatusEnum.BOOKED)
         await self.booking_repository.save(booking)
@@ -318,6 +321,11 @@ class BookingService:
             return existing_successor
         if old_booking.status in (BookingStatusEnum.CANCELED, BookingStatusEnum.EXPIRED):
             raise ConflictException("Booking cannot be rescheduled in current status")
+        target_slot = await self.scheduling_repository.get_slot_by_id(payload.new_slot_id)
+        if target_slot is None:
+            raise NotFoundException("Slot not found")
+        if target_slot.start_at <= utc_now():
+            raise BusinessRuleException("Cannot book a slot in the past")
 
         if actor.role.name == RoleEnum.ADMIN:
             cancel_reason = payload.reason or "Rescheduled by admin"

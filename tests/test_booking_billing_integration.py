@@ -479,3 +479,64 @@ async def test_concurrent_hold_attempts_on_same_slot_allow_only_one_success(
 
     active_booking_count = await _count_active_bookings_for_slot(UUID(slot["id"]))
     assert active_booking_count == 1
+
+
+@pytest.mark.asyncio
+async def test_confirm_rejects_hold_when_slot_start_already_passed(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
+
+    package = await _create_package(api_client, admin, student, lessons_total=5)
+    slot = await _create_slot(api_client, admin, teacher, hours_from_now=30)
+
+    hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={"slot_id": slot["id"], "package_id": package["id"]},
+    )
+    _assert_status(hold_response, 200)
+    held_booking = hold_response.json()
+
+    try:
+        connection = await asyncpg.connect(DB_DSN)
+    except Exception as exc:
+        pytest.skip(f"PostgreSQL is unavailable for past-confirm scenario: {exc}")
+        return
+
+    try:
+        booking_update = await connection.execute(
+            """
+            UPDATE bookings
+            SET hold_expires_at = NOW() + INTERVAL '5 minutes'
+            WHERE id = $1
+            """,
+            UUID(held_booking["id"]),
+        )
+        slot_update = await connection.execute(
+            """
+            UPDATE availability_slots
+            SET start_at = NOW() - INTERVAL '1 minute',
+                end_at = NOW() + INTERVAL '59 minutes',
+                status = 'hold'
+            WHERE id = $1
+            """,
+            UUID(slot["id"]),
+        )
+    finally:
+        await connection.close()
+
+    assert booking_update == "UPDATE 1"
+    assert slot_update == "UPDATE 1"
+
+    confirm_response = await api_client.post(
+        f"/booking/{held_booking['id']}/confirm",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(confirm_response, 422)
+    body = confirm_response.json()
+    assert body["error"]["code"] == "business_rule_violation"
+    assert "Cannot confirm booking for slot in the past" in body["error"]["message"]

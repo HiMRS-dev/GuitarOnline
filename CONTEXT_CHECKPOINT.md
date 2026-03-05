@@ -2184,3 +2184,40 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_admin_slot_bulk_create_integration.py` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - full local suite: `py -m poetry run pytest -q` -> `110 passed, 23 skipped`.
 
+## 33) Epic C Implementation Progress (Started 2026-03-05)
+
+Implemented in codebase:
+
+1. `C1` admin booking list endpoint with filters:
+- added admin-only endpoint:
+  - `GET /api/v1/admin/bookings`.
+- filters implemented:
+  - `teacher_id`,
+  - `student_id`,
+  - `status`,
+  - `from_utc`,
+  - `to_utc`,
+  - plus pagination (`limit`, `offset`).
+- booking range semantics are repository-level and deterministic:
+  - `from_utc`/`to_utc` filter by linked slot start time.
+- endpoint returns booking rows with UTC contract fields:
+  - booking ids/status/timestamps,
+  - package linkage and refund flags,
+  - linked slot interval (`slot_start_at_utc`, `slot_end_at_utc`).
+- service-level validation:
+  - admin-only access,
+  - UTC normalization for date-time filters,
+  - strict range rule `from_utc <= to_utc`.
+
+Verification tasks added/updated:
+- tests:
+  - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/bookings` RBAC check (`401/403/200`).
+
+Latest local checks:
+- `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_bookings_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_bookings_list.py` -> `4 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_bookings_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `114 passed, 24 skipped`.
+

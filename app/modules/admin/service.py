@@ -21,6 +21,7 @@ from app.modules.admin.models import AdminAction
 from app.modules.admin.repository import AdminRepository
 from app.modules.admin.schemas import (
     AdminActionCreate,
+    AdminBookingListItemRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
     AdminSlotBlockRead,
@@ -218,6 +219,42 @@ class AdminService:
             )
             serialized.append(AdminSlotListItemRead.model_validate(item))
         return serialized, total
+
+    async def list_bookings(
+        self,
+        actor: User,
+        *,
+        teacher_id: UUID | None,
+        student_id: UUID | None,
+        status: BookingStatusEnum | None,
+        from_utc: datetime | None,
+        to_utc: datetime | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[AdminBookingListItemRead], int]:
+        """List bookings for admin booking-management views."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can list bookings")
+
+        normalized_from_utc = ensure_utc(from_utc) if from_utc is not None else None
+        normalized_to_utc = ensure_utc(to_utc) if to_utc is not None else None
+        if (
+            normalized_from_utc is not None
+            and normalized_to_utc is not None
+            and normalized_from_utc > normalized_to_utc
+        ):
+            raise BusinessRuleException("from_utc must be less than or equal to to_utc")
+
+        items, total = await self.repository.list_bookings(
+            teacher_id=teacher_id,
+            student_id=student_id,
+            status=status,
+            from_utc=normalized_from_utc,
+            to_utc=normalized_to_utc,
+            limit=limit,
+            offset=offset,
+        )
+        return [AdminBookingListItemRead.model_validate(item) for item in items], total
 
     @staticmethod
     def _aggregate_slot_booking_status(

@@ -7,10 +7,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.core.enums import RoleEnum, TeacherStatusEnum
+from app.core.enums import BookingStatusEnum, RoleEnum, TeacherStatusEnum
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminActionRead,
+    AdminBookingListItemRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
     AdminSlotBlockRead,
@@ -149,6 +150,31 @@ async def list_admin_slots(
     items, total = await service.list_slots(
         current_user,
         teacher_id=teacher_id,
+        from_utc=from_utc,
+        to_utc=to_utc,
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+    return build_page(items, total, pagination)
+
+
+@router.get("/bookings", response_model=Page[AdminBookingListItemRead])
+async def list_admin_bookings(
+    teacher_id: UUID | None = Query(default=None),
+    student_id: UUID | None = Query(default=None),
+    status_filter: BookingStatusEnum | None = Query(default=None, alias="status"),
+    from_utc: datetime | None = Query(default=None),
+    to_utc: datetime | None = Query(default=None),
+    pagination=Depends(get_pagination_params),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> Page[AdminBookingListItemRead]:
+    """List bookings for admin operations with filters."""
+    items, total = await service.list_bookings(
+        current_user,
+        teacher_id=teacher_id,
+        student_id=student_id,
+        status=status_filter,
         from_utc=from_utc,
         to_utc=to_utc,
         limit=pagination.limit,

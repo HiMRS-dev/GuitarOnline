@@ -170,6 +170,50 @@ class AdminTeacherDetailRead(BaseModel):
     updated_at_utc: datetime
 
 
+class AdminBookingListItemRead(BaseModel):
+    """Admin booking list item with slot scheduling context."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "booking_id": "6b6a1681-f4d1-47fc-b6de-d4f4f657f57d",
+                "slot_id": "d8f2768a-4480-4800-88bf-2f36d5d8f6f6",
+                "student_id": "a46d9185-3369-4f6f-9506-5e01d5fdbd26",
+                "teacher_id": "84d1ecf5-0d3d-41b7-9ebf-f59b97f15b53",
+                "package_id": "9f2b8758-beb8-4c8b-bd23-3615e7c05a23",
+                "status": "confirmed",
+                "slot_start_at_utc": "2026-03-07T12:00:00+00:00",
+                "slot_end_at_utc": "2026-03-07T13:00:00+00:00",
+                "hold_expires_at_utc": None,
+                "confirmed_at_utc": "2026-03-04T10:25:00+00:00",
+                "canceled_at_utc": None,
+                "cancellation_reason": None,
+                "refund_returned": False,
+                "rescheduled_from_booking_id": None,
+                "created_at_utc": "2026-03-04T10:15:00+00:00",
+                "updated_at_utc": "2026-03-04T10:25:00+00:00",
+            },
+        },
+    )
+
+    booking_id: UUID
+    slot_id: UUID
+    student_id: UUID
+    teacher_id: UUID
+    package_id: UUID | None
+    status: BookingStatusEnum
+    slot_start_at_utc: datetime
+    slot_end_at_utc: datetime
+    hold_expires_at_utc: datetime | None
+    confirmed_at_utc: datetime | None
+    canceled_at_utc: datetime | None
+    cancellation_reason: str | None
+    refund_returned: bool
+    rescheduled_from_booking_id: UUID | None
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
 class AdminSlotListItemRead(BaseModel):
     """Admin slot list item with aggregated booking status."""
 

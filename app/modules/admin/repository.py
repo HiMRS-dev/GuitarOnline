@@ -338,6 +338,74 @@ class AdminRepository:
             )
         return items, total
 
+    async def list_bookings(
+        self,
+        *,
+        teacher_id: UUID | None,
+        student_id: UUID | None,
+        status: BookingStatusEnum | None,
+        from_utc: datetime | None,
+        to_utc: datetime | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, object]], int]:
+        """List bookings with admin filters and slot-time range constraints."""
+        base_stmt: Select[tuple[Booking, datetime, datetime]] = (
+            select(
+                Booking,
+                AvailabilitySlot.start_at.label("slot_start_at_utc"),
+                AvailabilitySlot.end_at.label("slot_end_at_utc"),
+            ).join(
+                AvailabilitySlot,
+                AvailabilitySlot.id == Booking.slot_id,
+            )
+        )
+
+        if teacher_id is not None:
+            base_stmt = base_stmt.where(Booking.teacher_id == teacher_id)
+        if student_id is not None:
+            base_stmt = base_stmt.where(Booking.student_id == student_id)
+        if status is not None:
+            base_stmt = base_stmt.where(Booking.status == status)
+        if from_utc is not None:
+            base_stmt = base_stmt.where(AvailabilitySlot.start_at >= from_utc)
+        if to_utc is not None:
+            base_stmt = base_stmt.where(AvailabilitySlot.start_at <= to_utc)
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int((await self.session.scalar(count_stmt)) or 0)
+
+        stmt = (
+            base_stmt.order_by(AvailabilitySlot.start_at.asc(), Booking.created_at.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = (await self.session.execute(stmt)).all()
+
+        items: list[dict[str, object]] = []
+        for booking, slot_start_at_utc, slot_end_at_utc in rows:
+            items.append(
+                {
+                    "booking_id": booking.id,
+                    "slot_id": booking.slot_id,
+                    "student_id": booking.student_id,
+                    "teacher_id": booking.teacher_id,
+                    "package_id": booking.package_id,
+                    "status": booking.status,
+                    "slot_start_at_utc": slot_start_at_utc,
+                    "slot_end_at_utc": slot_end_at_utc,
+                    "hold_expires_at_utc": booking.hold_expires_at,
+                    "confirmed_at_utc": booking.confirmed_at,
+                    "canceled_at_utc": booking.canceled_at,
+                    "cancellation_reason": booking.cancellation_reason,
+                    "refund_returned": booking.refund_returned,
+                    "rescheduled_from_booking_id": booking.rescheduled_from_booking_id,
+                    "created_at_utc": booking.created_at,
+                    "updated_at_utc": booking.updated_at,
+                },
+            )
+        return items, total
+
     async def get_slot_by_id(self, slot_id: UUID) -> AvailabilitySlot | None:
         """Get slot by id for admin operations."""
         stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)

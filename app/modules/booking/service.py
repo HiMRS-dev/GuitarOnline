@@ -58,6 +58,10 @@ class BookingService:
         self.lessons_repository = lessons_repository
         self.audit_repository = audit_repository
 
+    @staticmethod
+    def _available_lessons(package) -> int:
+        return package.lessons_left - package.lessons_reserved
+
     def _validate_actor_access(self, booking: Booking, actor: User) -> None:
         if actor.role.name == RoleEnum.ADMIN:
             return
@@ -142,7 +146,7 @@ class BookingService:
             raise BusinessRuleException("Package is not active")
         if package.expires_at <= utc_now():
             raise BusinessRuleException("Package is expired")
-        if package.lessons_left <= 0:
+        if self._available_lessons(package) <= 0:
             raise BusinessRuleException("No lessons left in package")
 
         hold_expires_at = utc_now() + timedelta(minutes=settings.booking_hold_minutes)
@@ -212,10 +216,10 @@ class BookingService:
 
         if package.status != PackageStatusEnum.ACTIVE or package.expires_at <= now:
             raise BusinessRuleException("Package is inactive or expired")
-        if package.lessons_left <= 0:
+        if self._available_lessons(package) <= 0:
             raise BusinessRuleException("No lessons left")
 
-        await self.billing_repository.consume_package_lesson(package)
+        await self.billing_repository.reserve_package_lesson(package)
 
         booking.status = BookingStatusEnum.CONFIRMED
         booking.confirmed_at = now
@@ -268,8 +272,10 @@ class BookingService:
                 slot_start_utc=booking.slot.start_at,
                 refund_window_hours=settings.booking_refund_window_hours,
             ):
-                await self.billing_repository.return_package_lesson(package)
+                await self.billing_repository.release_package_reservation(package)
                 refund_returned = True
+            else:
+                await self.billing_repository.consume_reserved_package_lesson(package)
 
         booking.status = BookingStatusEnum.CANCELED
         booking.canceled_at = now

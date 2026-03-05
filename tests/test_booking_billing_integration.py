@@ -279,7 +279,7 @@ async def auth_users(api_client: httpx.AsyncClient) -> AuthUsers:
 
 
 @pytest.mark.asyncio
-async def test_student_hold_confirm_decrements_package_lessons(
+async def test_student_hold_confirm_reserves_package_capacity(
     api_client: httpx.AsyncClient,
     auth_users: AuthUsers,
 ) -> None:
@@ -299,7 +299,8 @@ async def test_student_hold_confirm_decrements_package_lessons(
     package_after_confirm = await _get_package_for_student(api_client, student, package["id"])
 
     assert confirmed_booking["status"] == "confirmed"
-    assert package_after_confirm["lessons_left"] == 4
+    assert package_after_confirm["lessons_left"] == 5
+    assert package_after_confirm["lessons_reserved"] == 1
 
 
 @pytest.mark.asyncio
@@ -332,6 +333,7 @@ async def test_cancel_more_than_24h_returns_lesson(
     assert canceled_booking["status"] == "canceled"
     assert canceled_booking["refund_returned"] is True
     assert package_after_cancel["lessons_left"] == 5
+    assert package_after_cancel["lessons_reserved"] == 0
 
 
 @pytest.mark.asyncio
@@ -364,6 +366,7 @@ async def test_cancel_less_than_24h_does_not_return_lesson(
     assert canceled_booking["status"] == "canceled"
     assert canceled_booking["refund_returned"] is False
     assert package_after_cancel["lessons_left"] == 4
+    assert package_after_cancel["lessons_reserved"] == 0
 
 
 @pytest.mark.asyncio
@@ -417,7 +420,8 @@ async def test_rebook_same_slot_after_cancel_succeeds_with_active_booking_unique
     assert first_booking_after_rebook["status"] == "canceled"
     assert second_booking_after_rebook["status"] == "confirmed"
     assert second_booking_after_rebook["slot_id"] == slot["id"]
-    assert package_after_rebook["lessons_left"] == 4
+    assert package_after_rebook["lessons_left"] == 5
+    assert package_after_rebook["lessons_reserved"] == 1
     assert active_booking_count == 1
 
 
@@ -456,7 +460,8 @@ async def test_reschedule_keeps_balance_and_links_bookings(
     assert new_booking["status"] == "confirmed"
     assert new_booking["rescheduled_from_booking_id"] == old_confirmed_booking["id"]
     assert old_booking_after_reschedule["status"] == "canceled"
-    assert package_after_reschedule["lessons_left"] == 4
+    assert package_after_reschedule["lessons_left"] == 5
+    assert package_after_reschedule["lessons_reserved"] == 1
     assert old_slot["id"] in open_slot_ids
     assert new_slot["id"] not in open_slot_ids
 

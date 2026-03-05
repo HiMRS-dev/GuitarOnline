@@ -81,6 +81,7 @@ class AdminPackageDTO(BaseModel):
     student_id: UUID
     lessons_total: int
     lessons_left: int
+    lessons_reserved: int
     expires_at_utc: datetime
     status: PackageStatusEnum
     created_at_utc: datetime

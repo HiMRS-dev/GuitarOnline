@@ -41,6 +41,7 @@ class FakePackage:
     expires_at: datetime
     lessons_total: int
     lessons_left: int
+    lessons_reserved: int = 0
 
 
 @dataclass
@@ -152,19 +153,29 @@ class FakeSchedulingRepository:
 class FakeBillingRepository:
     def __init__(self, packages: dict[UUID, FakePackage]) -> None:
         self._packages = packages
-        self.return_calls = 0
-        self.consume_calls = 0
+        self.release_calls = 0
+        self.reserve_calls = 0
+        self.consume_reserved_calls = 0
 
     async def get_package_by_id(self, package_id: UUID) -> FakePackage | None:
         return self._packages.get(package_id)
 
-    async def consume_package_lesson(self, package: FakePackage) -> None:
-        package.lessons_left -= 1
-        self.consume_calls += 1
+    async def reserve_package_lesson(self, package: FakePackage) -> None:
+        package.lessons_reserved += 1
+        self.reserve_calls += 1
 
-    async def return_package_lesson(self, package: FakePackage) -> None:
-        package.lessons_left += 1
-        self.return_calls += 1
+    async def release_package_reservation(self, package: FakePackage) -> None:
+        if package.lessons_reserved <= 0:
+            return
+        package.lessons_reserved -= 1
+        self.release_calls += 1
+
+    async def consume_reserved_package_lesson(self, package: FakePackage) -> None:
+        if package.lessons_reserved <= 0:
+            return
+        package.lessons_reserved -= 1
+        package.lessons_left -= 1
+        self.consume_reserved_calls += 1
 
 
 class FakeLessonsRepository:
@@ -472,7 +483,9 @@ async def test_confirm_creates_lesson_and_emits_lesson_created_event(
     lesson = await lessons_repo.get_lesson_by_booking_id(confirmed.id)
 
     assert confirmed.status == BookingStatusEnum.CONFIRMED
-    assert billing_repo.consume_calls == 1
+    assert billing_repo.reserve_calls == 1
+    assert package.lessons_left == 8
+    assert package.lessons_reserved == 1
     assert lessons_repo.create_calls == 1
     assert lesson is not None
     assert lesson.status == LessonStatusEnum.SCHEDULED
@@ -532,8 +545,9 @@ async def test_confirm_is_idempotent_for_already_confirmed_booking(
 
     assert confirmed.id == booking_id
     assert confirmed.status == BookingStatusEnum.CONFIRMED
-    assert billing_repo.consume_calls == 0
+    assert billing_repo.reserve_calls == 0
     assert package.lessons_left == 3
+    assert package.lessons_reserved == 0
     assert lessons_repo.create_calls == 1
     assert lesson is not None
     assert lesson.status == LessonStatusEnum.SCHEDULED
@@ -590,7 +604,7 @@ async def test_confirm_rejects_past_slot_even_with_unexpired_hold(
         await service.confirm_booking(booking_id, actor)
 
     assert booking.status == BookingStatusEnum.HOLD
-    assert billing_repo.consume_calls == 0
+    assert billing_repo.reserve_calls == 0
     assert lessons_repo.create_calls == 0
     assert len(audit_repo.events) == 0
 
@@ -620,6 +634,7 @@ async def test_cancel_more_than_24h_returns_lesson(monkeypatch: pytest.MonkeyPat
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=8,
         lessons_left=3,
+        lessons_reserved=1,
     )
     booking = FakeBooking(
         id=booking_id,
@@ -642,8 +657,10 @@ async def test_cancel_more_than_24h_returns_lesson(monkeypatch: pytest.MonkeyPat
 
     assert canceled.status == BookingStatusEnum.CANCELED
     assert canceled.refund_returned is True
-    assert billing_repo.return_calls == 1
-    assert package.lessons_left == 4
+    assert billing_repo.release_calls == 1
+    assert billing_repo.consume_reserved_calls == 0
+    assert package.lessons_left == 3
+    assert package.lessons_reserved == 0
     assert slot.status == SlotStatusEnum.OPEN
 
 
@@ -672,6 +689,7 @@ async def test_cancel_less_than_24h_burns_lesson(monkeypatch: pytest.MonkeyPatch
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=8,
         lessons_left=3,
+        lessons_reserved=1,
     )
     booking = FakeBooking(
         id=booking_id,
@@ -694,8 +712,10 @@ async def test_cancel_less_than_24h_burns_lesson(monkeypatch: pytest.MonkeyPatch
 
     assert canceled.status == BookingStatusEnum.CANCELED
     assert canceled.refund_returned is False
-    assert billing_repo.return_calls == 0
-    assert package.lessons_left == 3
+    assert billing_repo.release_calls == 0
+    assert billing_repo.consume_reserved_calls == 1
+    assert package.lessons_left == 2
+    assert package.lessons_reserved == 0
     assert slot.status == SlotStatusEnum.OPEN
 
 
@@ -736,6 +756,7 @@ async def test_cancel_refund_policy_boundary_cases(
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=8,
         lessons_left=3,
+        lessons_reserved=1,
     )
     booking = FakeBooking(
         id=booking_id,
@@ -762,9 +783,11 @@ async def test_cancel_refund_policy_boundary_cases(
 
     assert canceled.refund_returned is expect_refund
     if expect_refund:
-        assert billing_repo.return_calls == 1
+        assert billing_repo.release_calls == 1
+        assert billing_repo.consume_reserved_calls == 0
     else:
-        assert billing_repo.return_calls == 0
+        assert billing_repo.release_calls == 0
+        assert billing_repo.consume_reserved_calls == 1
 
 
 @pytest.mark.asyncio
@@ -795,6 +818,7 @@ async def test_admin_cancel_writes_audit_with_refund_decision(
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=8,
         lessons_left=3,
+        lessons_reserved=1,
     )
     booking = FakeBooking(
         id=booking_id,
@@ -888,7 +912,8 @@ async def test_cancel_is_idempotent_for_already_canceled_booking(
     assert canceled.id == booking_id
     assert canceled.status == BookingStatusEnum.CANCELED
     assert canceled.cancellation_reason == "Initial cancel"
-    assert billing_repo.return_calls == 0
+    assert billing_repo.release_calls == 0
+    assert billing_repo.consume_reserved_calls == 0
     assert len(audit_repo.events) == 0
 
 
@@ -925,6 +950,7 @@ async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyP
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=10,
         lessons_left=4,
+        lessons_reserved=1,
     )
     old_booking = FakeBooking(
         id=old_booking_id,
@@ -963,9 +989,11 @@ async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyP
     assert new_booking.rescheduled_from_booking_id == old_booking_id
     assert old_slot.status == SlotStatusEnum.OPEN
     assert new_slot.status == SlotStatusEnum.BOOKED
-    assert billing_repo.return_calls == 1
-    assert billing_repo.consume_calls == 1
+    assert billing_repo.release_calls == 1
+    assert billing_repo.reserve_calls == 1
+    assert billing_repo.consume_reserved_calls == 0
     assert package.lessons_left == 4
+    assert package.lessons_reserved == 1
     old_lesson_after = await lessons_repo.get_lesson_by_booking_id(old_booking_id)
     new_lesson = await lessons_repo.get_lesson_by_booking_id(new_booking.id)
     assert old_lesson_after is not None
@@ -1013,6 +1041,7 @@ async def test_admin_reschedule_uses_system_hold_and_writes_audit(
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=10,
         lessons_left=4,
+        lessons_reserved=1,
     )
     old_booking = FakeBooking(
         id=old_booking_id,
@@ -1052,9 +1081,11 @@ async def test_admin_reschedule_uses_system_hold_and_writes_audit(
     assert new_booking.student_id == student_id
     assert old_slot.status == SlotStatusEnum.OPEN
     assert new_slot.status == SlotStatusEnum.BOOKED
-    assert billing_repo.return_calls == 1
-    assert billing_repo.consume_calls == 1
+    assert billing_repo.release_calls == 1
+    assert billing_repo.reserve_calls == 1
+    assert billing_repo.consume_reserved_calls == 0
     assert package.lessons_left == 4
+    assert package.lessons_reserved == 1
 
     old_lesson_after = await lessons_repo.get_lesson_by_booking_id(old_booking_id)
     new_lesson = await lessons_repo.get_lesson_by_booking_id(new_booking.id)
@@ -1119,6 +1150,7 @@ async def test_admin_reschedule_rejects_target_slot_in_past_before_cancel(
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=10,
         lessons_left=4,
+        lessons_reserved=1,
     )
     old_booking = FakeBooking(
         id=old_booking_id,
@@ -1147,8 +1179,9 @@ async def test_admin_reschedule_rejects_target_slot_in_past_before_cancel(
     assert old_booking.status == BookingStatusEnum.CONFIRMED
     assert old_slot.status == SlotStatusEnum.BOOKED
     assert past_slot.status == SlotStatusEnum.OPEN
-    assert billing_repo.return_calls == 0
-    assert billing_repo.consume_calls == 0
+    assert billing_repo.release_calls == 0
+    assert billing_repo.reserve_calls == 0
+    assert billing_repo.consume_reserved_calls == 0
     assert lessons_repo.create_calls == 0
     assert audit_repo.events == []
     assert audit_repo.audit_logs == []
@@ -1190,6 +1223,7 @@ async def test_reschedule_returns_existing_successor_on_retry(
         expires_at=fixed_now + timedelta(days=7),
         lessons_total=10,
         lessons_left=4,
+        lessons_reserved=1,
     )
     old_booking = FakeBooking(
         id=old_booking_id,
@@ -1230,8 +1264,9 @@ async def test_reschedule_returns_existing_successor_on_retry(
 
     assert retried.id == new_booking_id
     assert retried.rescheduled_from_booking_id == old_booking_id
-    assert billing_repo.return_calls == 0
-    assert billing_repo.consume_calls == 0
+    assert billing_repo.release_calls == 0
+    assert billing_repo.reserve_calls == 0
+    assert billing_repo.consume_reserved_calls == 0
     assert len(booking_repo._bookings) == 2
     assert len(audit_repo.events) == 0
 

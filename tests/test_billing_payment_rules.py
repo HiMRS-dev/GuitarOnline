@@ -34,6 +34,7 @@ class FakePackage:
     expires_at: datetime
     lessons_total: int
     lessons_left: int
+    lessons_reserved: int = 0
     price_amount: Decimal | None = None
     price_currency: str | None = None
 
@@ -78,6 +79,7 @@ class FakeBillingRepository:
             expires_at=expires_at,
             lessons_total=lessons_total,
             lessons_left=lessons_total,
+            lessons_reserved=0,
             price_amount=price_amount,
             price_currency=price_currency,
         )
@@ -406,6 +408,7 @@ async def test_create_admin_package_stores_price_snapshot_and_writes_admin_audit
 
     assert package.lessons_total == 12
     assert package.lessons_left == 12
+    assert package.lessons_reserved == 0
     assert package.price_amount == Decimal("149.00")
     assert package.price_currency == "USD"
     assert len(audit_repo.audit_logs) == 1

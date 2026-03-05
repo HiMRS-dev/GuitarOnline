@@ -31,6 +31,7 @@ class BillingRepository:
             student_id=student_id,
             lessons_total=lessons_total,
             lessons_left=lessons_total,
+            lessons_reserved=0,
             price_amount=price_amount,
             price_currency=price_currency.upper() if price_currency is not None else None,
             expires_at=expires_at,
@@ -101,12 +102,21 @@ class BillingRepository:
         await self.session.flush()
         return payment
 
-    async def consume_package_lesson(self, package: LessonPackage) -> None:
-        package.lessons_left -= 1
+    async def reserve_package_lesson(self, package: LessonPackage) -> None:
+        package.lessons_reserved += 1
         await self.session.flush()
 
-    async def return_package_lesson(self, package: LessonPackage) -> None:
-        package.lessons_left += 1
+    async def release_package_reservation(self, package: LessonPackage) -> None:
+        if package.lessons_reserved <= 0:
+            return
+        package.lessons_reserved -= 1
+        await self.session.flush()
+
+    async def consume_reserved_package_lesson(self, package: LessonPackage) -> None:
+        if package.lessons_reserved <= 0:
+            return
+        package.lessons_reserved -= 1
+        package.lessons_left -= 1
         await self.session.flush()
 
     async def find_packages_to_expire(self, now: datetime) -> list[LessonPackage]:

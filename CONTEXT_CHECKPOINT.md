@@ -2488,6 +2488,27 @@ Implemented in codebase:
     and creates packages without price snapshot (`null` fields) to avoid breaking
     existing portal/integration flows.
 
+4. `D4` reserve/consume accounting shift (phase 1: reserve + availability + cancel adaptation):
+- added migration:
+  - `alembic/versions/20260306_0009_package_lessons_reserved.py`,
+    introduces non-null reservation counter:
+    - `lessons_reserved` (default `0`).
+- package model/API contract updated with reservation counter:
+  - `LessonPackage.lessons_reserved`,
+  - package read/list responses include `lessons_reserved`.
+- confirm flow switched to reservation semantics:
+  - `BookingService.confirm_booking(...)` now reserves capacity
+    (`lessons_reserved + 1`) instead of decrementing `lessons_left`.
+- hold/confirm validation switched to available-capacity rule:
+  - `available = lessons_left - lessons_reserved`,
+  - reservation allowed only when `available > 0`.
+- cancellation adaptation applied (Epic D `D7` dependency resolved as part of D4):
+  - `>24h`: release reservation only (`lessons_reserved - 1`),
+  - `<=24h`: burn reserved lesson (`lessons_reserved - 1`, `lessons_left - 1`).
+- compatibility conflict resolved:
+  - package balance invariants in booking tests/integration contracts updated
+    from confirm-time decrement to reservation-time semantics.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2501,6 +2522,13 @@ Verification tasks added/updated:
     - role/expiration validations.
   - `tests/test_rbac_access_integration.py` extended with
     `POST /admin/packages` RBAC check (`401/403/201`).
+  - `tests/test_booking_rules.py` updated for reserve model:
+    - confirm reserves capacity,
+    - cancel/refund paths release or burn reservation,
+    - reschedule invariants preserve expected reservation balance.
+  - `tests/test_booking_billing_integration.py` updated for reserve-model expectations:
+    - confirm keeps `lessons_left` and increments `lessons_reserved`,
+    - cancel/reschedule/re-book assertions adapted to reservation semantics.
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2511,4 +2539,7 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/billing/models.py app/modules/billing/repository.py app/modules/billing/schemas.py app/modules/billing/service.py app/modules/admin/router.py app/modules/admin/schemas.py app/modules/admin/repository.py tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_rbac_access_integration.py alembic/versions/20260305_0008_package_price_snapshot_fields.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_admin_kpi_overview.py` -> `21 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_packages_endpoint_returns_401_403_and_200_by_role or admin_create_package_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/billing/models.py app/modules/billing/repository.py app/modules/billing/schemas.py app/modules/billing/service.py app/modules/booking/service.py app/modules/admin/schemas.py app/modules/admin/repository.py app/modules/admin/router.py app/modules/admin/contracts.py tests/test_booking_rules.py tests/test_booking_billing_integration.py tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_rbac_access_integration.py alembic/versions/20260306_0009_package_lessons_reserved.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_admin_kpi_overview.py` -> `40 passed`.
+- `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "student_hold_confirm_reserves_package_capacity or cancel_more_than_24h_returns_lesson or cancel_less_than_24h_does_not_return_lesson or rebook_same_slot_after_cancel_succeeds_with_active_booking_uniqueness or reschedule_keeps_balance_and_links_bookings"` -> `5 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

@@ -424,6 +424,7 @@ async def test_admin_create_package_endpoint_returns_401_403_and_201_by_role(
     assert body["student_id"] == str(student.id)
     assert body["price_amount"] == "149.00"
     assert body["price_currency"] == "USD"
+    assert body["lessons_reserved"] == 0
 
 
 @pytest.mark.asyncio

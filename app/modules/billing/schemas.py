@@ -51,6 +51,7 @@ class PackageRead(BaseModel):
     student_id: UUID
     lessons_total: int
     lessons_left: int
+    lessons_reserved: int
     price_amount: Decimal | None
     price_currency: str | None
     expires_at: datetime

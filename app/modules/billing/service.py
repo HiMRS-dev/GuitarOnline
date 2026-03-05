@@ -31,6 +31,10 @@ class BillingService:
         self.repository = repository
         self.audit_repository = audit_repository
 
+    @staticmethod
+    def _available_lessons(package: LessonPackage) -> int:
+        return package.lessons_left - package.lessons_reserved
+
     async def _expire_package(
         self,
         package: LessonPackage,
@@ -193,7 +197,7 @@ class BillingService:
         if package.status != PackageStatusEnum.ACTIVE:
             raise BusinessRuleException("Package is not active")
 
-        if package.lessons_left <= 0:
+        if self._available_lessons(package) <= 0:
             raise BusinessRuleException("No lessons left in package")
 
         return package
@@ -202,13 +206,15 @@ class BillingService:
         """Consume one lesson from package."""
         if package.lessons_left <= 0:
             raise BusinessRuleException("No lessons left")
-        await self.repository.consume_package_lesson(package)
+        if package.lessons_reserved <= 0:
+            raise BusinessRuleException("No reserved lessons to consume")
+        await self.repository.consume_reserved_package_lesson(package)
 
     async def return_lesson(self, package: LessonPackage) -> None:
-        """Return one lesson back to package."""
-        if package.lessons_left >= package.lessons_total:
+        """Release one reserved lesson back to available capacity."""
+        if package.lessons_reserved <= 0:
             return
-        await self.repository.return_package_lesson(package)
+        await self.repository.release_package_reservation(package)
 
     async def expire_packages(self, actor: User) -> int:
         """Expire all active packages that are past expiration timestamp."""

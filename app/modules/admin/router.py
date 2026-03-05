@@ -239,6 +239,7 @@ async def create_admin_package(
         student_id=package.student_id,
         lessons_total=package.lessons_total,
         lessons_left=package.lessons_left,
+        lessons_reserved=package.lessons_reserved,
         price_amount=package.price_amount,
         price_currency=package.price_currency,
         expires_at_utc=package.expires_at,

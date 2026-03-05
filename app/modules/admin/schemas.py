@@ -239,6 +239,7 @@ class AdminPackageListItemRead(BaseModel):
                 "student_id": "a46d9185-3369-4f6f-9506-5e01d5fdbd26",
                 "lessons_total": 10,
                 "lessons_left": 4,
+                "lessons_reserved": 1,
                 "price_amount": "120.00",
                 "price_currency": "USD",
                 "expires_at_utc": "2026-04-07T12:00:00+00:00",
@@ -253,6 +254,7 @@ class AdminPackageListItemRead(BaseModel):
     student_id: UUID
     lessons_total: int
     lessons_left: int
+    lessons_reserved: int
     price_amount: Decimal | None = None
     price_currency: str | None = None
     expires_at_utc: datetime
@@ -283,6 +285,7 @@ class AdminPackageCreateRead(BaseModel):
     student_id: UUID
     lessons_total: int
     lessons_left: int
+    lessons_reserved: int
     price_amount: Decimal | None
     price_currency: str | None
     expires_at_utc: datetime

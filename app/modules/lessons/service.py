@@ -14,6 +14,7 @@ from app.modules.billing.repository import BillingRepository
 from app.modules.booking.repository import BookingRepository
 from app.modules.identity.models import User
 from app.modules.lessons.models import Lesson
+from app.modules.lessons.moderation import validate_report_content
 from app.modules.lessons.repository import LessonsRepository
 from app.modules.lessons.schemas import LessonCreate, LessonUpdate, TeacherLessonReportRequest
 from app.shared.exceptions import (
@@ -148,6 +149,11 @@ class LessonsService:
         changes = payload.model_dump(exclude_none=True)
         if "links" in changes:
             changes["links"] = self._normalize_links(changes.get("links"))
+        validate_report_content(
+            notes=changes.get("notes"),
+            homework=changes.get("homework"),
+            links=changes.get("links"),
+        )
         use_template = bool(changes.pop("use_meeting_url_template", False))
         if "meeting_url" in changes or use_template:
             changes["meeting_url"] = self._resolve_meeting_url_change(

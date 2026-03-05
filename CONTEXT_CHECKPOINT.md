@@ -2826,6 +2826,22 @@ Implemented in codebase:
   - `TeacherLessonReportRequest.recording_url`,
   - lessons service normalizes validated URL into persisted string value.
 
+7. `E8` minimal link/content moderation for lesson report payload:
+- baseline moderation helper added:
+  - `app/modules/lessons/moderation.py`.
+- report payload now rejects obvious direct-contact patterns in:
+  - `notes`,
+  - `homework`,
+  - `links`.
+- blocked heuristics include:
+  - email-like tokens,
+  - phone-like numeric patterns,
+  - handle-like tokens (`@...`),
+  - known contact/messenger markers in text and links (`t.me`, `wa.me`, `mailto:`, `tel:` etc.).
+- clear business validation error returned:
+  - `Report contains restricted contact information`.
+- moderation scope intentionally limited to teacher report flow as v1 baseline.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
@@ -2855,6 +2871,11 @@ Verification tasks added/updated:
     - recording URL update path,
     - recording URL report path,
     - invalid URL validation guards.
+  - `tests/test_lesson_report_moderation.py` added:
+    - clean payload accepted,
+    - reject email in notes,
+    - reject phone in homework,
+    - reject messenger/contact links.
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2874,4 +2895,6 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_portal_auth_flow_integration.py -k portal_teacher_and_admin_sequences_for_role_specific_endpoints` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run ruff check app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py alembic/versions/20260306_0014_lesson_recording_url.py tests/test_lesson_recording_url.py tests/test_teacher_lesson_report.py tests/test_lesson_meeting_url.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_lesson_recording_url.py tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py tests/test_student_lessons_access.py` -> `14 passed`.
+- `py -m poetry run ruff check app/modules/lessons/moderation.py app/modules/lessons/service.py tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py tests/test_lesson_recording_url.py tests/test_lesson_meeting_url.py` -> `15 passed`.
 

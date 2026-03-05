@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
 from app.core.enums import RoleEnum
 from app.modules.identity.service import require_roles
-from app.modules.lessons.schemas import LessonRead
+from app.modules.lessons.schemas import LessonRead, TeacherLessonReportRequest
 from app.modules.lessons.service import LessonsService, get_lessons_service
 from app.shared.pagination import Page, build_page, get_pagination_params
 
@@ -33,3 +34,15 @@ async def list_teacher_lessons(
     )
     serialized = [LessonRead.model_validate(item) for item in items]
     return build_page(serialized, total, pagination)
+
+
+@router.post("/lessons/{lesson_id}/report", response_model=LessonRead)
+async def report_teacher_lesson(
+    lesson_id: UUID,
+    payload: TeacherLessonReportRequest,
+    service: LessonsService = Depends(get_lessons_service),
+    current_user=Depends(require_roles(RoleEnum.TEACHER)),
+) -> LessonRead:
+    """Save teacher report payload for own lesson."""
+    lesson = await service.report_lesson(lesson_id, payload, current_user)
+    return LessonRead.model_validate(lesson)

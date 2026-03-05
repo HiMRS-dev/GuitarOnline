@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from app.core.enums import LessonStatusEnum
 from app.shared.utils import ensure_utc
@@ -35,6 +35,16 @@ class LessonUpdate(BaseModel):
     status: LessonStatusEnum | None = None
     topic: str | None = Field(default=None, max_length=255)
     notes: str | None = None
+    homework: str | None = None
+    links: list[HttpUrl] | None = None
+
+
+class TeacherLessonReportRequest(BaseModel):
+    """Teacher report payload for lesson outcomes and materials."""
+
+    notes: str | None = None
+    homework: str | None = None
+    links: list[HttpUrl] = Field(default_factory=list, max_length=50)
 
 
 class LessonRead(BaseModel):
@@ -52,5 +62,7 @@ class LessonRead(BaseModel):
     consumed_at: datetime | None
     topic: str | None
     notes: str | None
+    homework: str | None
+    links: list[str] | None
     created_at: datetime
     updated_at: datetime

@@ -2750,14 +2750,43 @@ Implemented in codebase:
   - new router `app/modules/lessons/teacher_router.py`,
   - mounted in `app/main.py`.
 
+2. `E3` teacher report endpoint (`POST /teacher/lessons/{id}/report`):
+- new teacher-only report endpoint added:
+  - `POST /api/v1/teacher/lessons/{lesson_id}/report`.
+- report payload contract implemented:
+  - `notes`,
+  - `homework`,
+  - `links` (validated URL list).
+- lesson persistence contract extended for report fields:
+  - migration added:
+    - `alembic/versions/20260306_0012_lesson_report_fields.py`,
+      adds nullable `lessons.homework` and `lessons.links`.
+  - lesson model/read DTO now includes:
+    - `homework`,
+    - `links`.
+- teacher ownership and role boundaries enforced:
+  - only `teacher` role can call endpoint,
+  - teacher can update report only for own lesson.
+- report update path integrated with lessons service:
+  - `LessonsService.report_lesson(...)` uses repository update with normalized links storage.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
   - `tests/test_rbac_access_integration.py` extended with
     `/teacher/lessons` RBAC check (`401/403/200`).
+  - `tests/test_teacher_lesson_report.py` added:
+    - teacher ownership checks,
+    - report persistence checks for `notes/homework/links`,
+    - role/404 guard coverage.
+  - `tests/test_rbac_access_integration.py` extended with
+    `/teacher/lessons/{lesson_id}/report` RBAC check (`401/403/200`).
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_teacher_lessons_list.py tests/test_lessons_complete.py tests/test_lessons_no_show.py` -> `16 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k teacher_lessons_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py alembic/versions/20260306_0012_lesson_report_fields.py tests/test_teacher_lesson_report.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_teacher_lesson_report.py tests/test_teacher_lessons_list.py tests/test_lessons_complete.py tests/test_lessons_no_show.py` -> `20 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "teacher_lessons_endpoint_returns_401_403_and_200_by_role or teacher_lesson_report_endpoint_returns_401_403_and_200_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

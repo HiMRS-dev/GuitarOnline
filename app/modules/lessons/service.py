@@ -14,7 +14,7 @@ from app.modules.booking.repository import BookingRepository
 from app.modules.identity.models import User
 from app.modules.lessons.models import Lesson
 from app.modules.lessons.repository import LessonsRepository
-from app.modules.lessons.schemas import LessonCreate, LessonUpdate
+from app.modules.lessons.schemas import LessonCreate, LessonUpdate, TeacherLessonReportRequest
 from app.shared.exceptions import (
     BusinessRuleException,
     ConflictException,
@@ -36,6 +36,12 @@ class LessonsService:
         self.repository = repository
         self.billing_repository = billing_repository
         self.booking_repository = booking_repository
+
+    @staticmethod
+    def _normalize_links(links: list | None) -> list[str] | None:
+        if links is None:
+            return None
+        return [str(link) for link in links]
 
     async def create_lesson(self, payload: LessonCreate, actor: User) -> Lesson:
         """Create lesson entity from booking data."""
@@ -75,7 +81,31 @@ class LessonsService:
         if actor.role.name == RoleEnum.TEACHER and lesson.teacher_id != actor.id:
             raise UnauthorizedException("Teacher can update only own lessons")
 
-        return await self.repository.update_lesson(lesson, **payload.model_dump(exclude_none=True))
+        changes = payload.model_dump(exclude_none=True)
+        if "links" in changes:
+            changes["links"] = self._normalize_links(changes["links"])
+
+        return await self.repository.update_lesson(lesson, **changes)
+
+    async def report_lesson(
+        self,
+        lesson_id: UUID,
+        payload: TeacherLessonReportRequest,
+        actor: User,
+    ) -> Lesson:
+        """Create or update teacher lesson report."""
+        if actor.role.name != RoleEnum.TEACHER:
+            raise UnauthorizedException("Only teacher can report lesson")
+
+        lesson = await self.repository.get_lesson_by_id(lesson_id)
+        if lesson is None:
+            raise NotFoundException("Lesson not found")
+        if lesson.teacher_id != actor.id:
+            raise UnauthorizedException("Teacher can report only own lessons")
+
+        changes = payload.model_dump()
+        changes["links"] = self._normalize_links(changes.get("links"))
+        return await self.repository.update_lesson(lesson, **changes)
 
     async def mark_no_show(self, lesson_id: UUID, actor: User) -> Lesson:
         """Mark lesson as NO_SHOW via admin-only operation."""

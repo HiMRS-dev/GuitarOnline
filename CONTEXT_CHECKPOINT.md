@@ -3136,9 +3136,24 @@ Implemented in codebase:
   - `web-admin/.gitignore`,
   - `web-admin/README.md`.
 
+2. `G2` auth flow contract:
+- implemented login call against backend contract:
+  - `POST {VITE_API_BASE_URL}/identity/auth/login`.
+- added auth modules:
+  - `web-admin/src/features/auth/api.ts`,
+  - `web-admin/src/features/auth/types.ts`,
+  - `web-admin/src/features/auth/storage.ts`.
+- token storage implemented in v1 mode:
+  - access/refresh/token_type persisted in `localStorage`,
+  - bootstrap load + explicit sign-out clear path wired in app state.
+- login UI integrated into `App` with deterministic error surface.
+- migration path documented for v2:
+  - `web-admin/README.md` now describes planned move to httpOnly cookies.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/src web-admin/README.md` -> no overlong lines found.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

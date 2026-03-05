@@ -52,6 +52,53 @@ h2 {
   color: #3b4c5e;
 }
 
+.auth-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid #c9d7e4;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  padding: 0.6rem 0.85rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: #0f4b84;
+  color: #fff;
+  font: inherit;
+}
+
+button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-text {
+  margin: 0;
+  color: #9d1f1f;
+}
+
+.success-text {
+  margin: 0 0 0.5rem;
+  color: #1f7a39;
+}
+
+.auth-state p {
+  margin: 0.4rem 0;
+}
+
 code {
   background: #f2f6ff;
   border: 1px solid #d4deee;

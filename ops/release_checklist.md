@@ -69,6 +69,7 @@ Use this checklist before promoting a build to a target environment.
 - Load sanity scenario (~1000 slots + admin slots envelope checks):
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - expected output includes `Load sanity passed`.
+  - script automatically falls back to legacy scheduling endpoints when admin slot endpoints are unavailable.
 - Explicit health/readiness/metrics verification (do not skip):
   - `curl -fsS http://localhost:8000/health`
   - `curl -fsS http://localhost:8000/ready`

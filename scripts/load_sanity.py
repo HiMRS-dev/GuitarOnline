@@ -166,31 +166,74 @@ def main() -> None:
         expected=201,
     )
 
-    bulk_result = request_json(
-        "/api/v1/admin/slots/bulk-create",
-        method="POST",
-        headers=auth_headers(str(admin_login["access_token"])),
-        body={
-            "teacher_id": str(teacher_user["id"]),
-            "date_from_utc": date_from.isoformat(),
-            "date_to_utc": date_to.isoformat(),
-            "weekdays": WEEKDAYS,
-            "start_time_utc": WORKDAY_START.isoformat(),
-            "end_time_utc": WORKDAY_END.isoformat(),
-            "slot_duration_minutes": SLOT_DURATION_MINUTES,
-            "exclude_dates": [],
-            "exclude_time_ranges": [],
-        },
-        expected=200,
-    )
-
-    created_count = int(bulk_result.get("created_count", 0))
-    skipped_count = int(bulk_result.get("skipped_count", 0))
-    if created_count + skipped_count != candidate_slots:
-        raise RuntimeError(
-            "Bulk-create result mismatch: "
-            f"created={created_count}, skipped={skipped_count}, candidates={candidate_slots}",
+    admin_token = str(admin_login["access_token"])
+    created_count = 0
+    skipped_count = 0
+    run_mode = "admin_bulk_create"
+    try:
+        bulk_result = request_json(
+            "/api/v1/admin/slots/bulk-create",
+            method="POST",
+            headers=auth_headers(admin_token),
+            body={
+                "teacher_id": str(teacher_user["id"]),
+                "date_from_utc": date_from.isoformat(),
+                "date_to_utc": date_to.isoformat(),
+                "weekdays": WEEKDAYS,
+                "start_time_utc": WORKDAY_START.isoformat(),
+                "end_time_utc": WORKDAY_END.isoformat(),
+                "slot_duration_minutes": SLOT_DURATION_MINUTES,
+                "exclude_dates": [],
+                "exclude_time_ranges": [],
+            },
+            expected=200,
         )
+        created_count = int(bulk_result.get("created_count", 0))
+        skipped_count = int(bulk_result.get("skipped_count", 0))
+        if created_count + skipped_count != candidate_slots:
+            raise RuntimeError(
+                "Bulk-create result mismatch: "
+                f"created={created_count}, skipped={skipped_count}, candidates={candidate_slots}",
+            )
+    except RuntimeError as error:
+        if "-> 404" not in str(error):
+            raise
+
+        run_mode = "legacy_slot_create"
+        start_cursor = date_from
+        while start_cursor <= date_to:
+            if start_cursor.weekday() in WEEKDAYS:
+                slot_start = datetime.combine(start_cursor, WORKDAY_START, tzinfo=UTC)
+                slot_end_bound = datetime.combine(start_cursor, WORKDAY_END, tzinfo=UTC)
+                while slot_start + timedelta(minutes=SLOT_DURATION_MINUTES) <= slot_end_bound:
+                    slot_end = slot_start + timedelta(minutes=SLOT_DURATION_MINUTES)
+                    try:
+                        request_json(
+                            "/api/v1/scheduling/slots",
+                            method="POST",
+                            headers=auth_headers(admin_token),
+                            body={
+                                "teacher_id": str(teacher_user["id"]),
+                                "start_at": slot_start.isoformat(),
+                                "end_at": slot_end.isoformat(),
+                            },
+                            expected=201,
+                        )
+                        created_count += 1
+                    except RuntimeError as create_error:
+                        if "-> 422" in str(create_error):
+                            skipped_count += 1
+                        else:
+                            raise
+                    slot_start = slot_end
+            start_cursor += timedelta(days=1)
+
+        if created_count + skipped_count != candidate_slots:
+            raise RuntimeError(
+                "Legacy slot-create result mismatch: "
+                f"created={created_count}, skipped={skipped_count}, candidates={candidate_slots}",
+            )
+
     if created_count < TARGET_SLOTS:
         raise RuntimeError(
             "Bulk-create produced fewer slots than target: "
@@ -199,20 +242,34 @@ def main() -> None:
 
     from_utc = datetime.combine(date_from, time.min, tzinfo=UTC)
     to_utc = datetime.combine(date_to, time.max.replace(microsecond=0), tzinfo=UTC)
-    query = urlencode(
-        {
-            "teacher_id": str(teacher_user["id"]),
-            "from_utc": from_utc.isoformat(),
-            "to_utc": to_utc.isoformat(),
-            "limit": 200,
-            "offset": 0,
-        },
-    )
-    slots_page = request_json(
-        f"/api/v1/admin/slots?{query}",
-        headers=auth_headers(str(admin_login["access_token"])),
-        expected=200,
-    )
+    if run_mode == "admin_bulk_create":
+        query = urlencode(
+            {
+                "teacher_id": str(teacher_user["id"]),
+                "from_utc": from_utc.isoformat(),
+                "to_utc": to_utc.isoformat(),
+                "limit": 200,
+                "offset": 0,
+            },
+        )
+        slots_page = request_json(
+            f"/api/v1/admin/slots?{query}",
+            headers=auth_headers(admin_token),
+            expected=200,
+        )
+    else:
+        query = urlencode(
+            {
+                "teacher_id": str(teacher_user["id"]),
+                "limit": 200,
+                "offset": 0,
+            },
+        )
+        slots_page = request_json(
+            f"/api/v1/scheduling/slots/open?{query}",
+            headers=auth_headers(admin_token),
+            expected=200,
+        )
 
     if not isinstance(slots_page.get("items"), list):
         raise RuntimeError("Admin slots endpoint returned invalid items envelope")
@@ -226,8 +283,8 @@ def main() -> None:
 
     print(
         "Load sanity passed "
-        f"(target={TARGET_SLOTS}, candidates={candidate_slots}, created={created_count}, "
-        f"skipped={skipped_count}, listed_total={slots_page['total']}).",
+        f"(mode={run_mode}, target={TARGET_SLOTS}, candidates={candidate_slots}, "
+        f"created={created_count}, skipped={skipped_count}, listed_total={slots_page['total']}).",
     )
 
 

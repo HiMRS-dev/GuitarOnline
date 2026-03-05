@@ -93,6 +93,9 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - optional custom target (must stay within bulk-create cap):
     - `docker compose -f docker-compose.prod.yml exec -T -e LOAD_SANITY_TARGET_SLOTS=900 app python scripts/load_sanity.py`
+  - endpoint compatibility behavior:
+    - prefers `/api/v1/admin/slots/bulk-create` + `/api/v1/admin/slots`,
+    - falls back to legacy `/api/v1/scheduling/slots` + `/api/v1/scheduling/slots/open` if admin endpoints are unavailable.
 - Explicit ops probe verification after smoke:
   - `curl -fsS http://localhost:8000/health`
   - `curl -fsS http://localhost:8000/ready`

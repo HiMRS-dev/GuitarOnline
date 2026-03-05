@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.enums import LessonStatusEnum, RoleEnum
+from app.modules.audit.repository import AuditRepository
 from app.modules.billing.repository import BillingRepository
 from app.modules.booking.repository import BookingRepository
 from app.modules.identity.models import User
@@ -36,10 +37,12 @@ class LessonsService:
         repository: LessonsRepository,
         billing_repository: BillingRepository | None = None,
         booking_repository: BookingRepository | None = None,
+        audit_repository: AuditRepository | None = None,
     ) -> None:
         self.repository = repository
         self.billing_repository = billing_repository
         self.booking_repository = booking_repository
+        self.audit_repository = audit_repository
 
     @staticmethod
     def _normalize_links(links: list | None) -> list[str] | None:
@@ -76,6 +79,17 @@ class LessonsService:
         if meeting_url is None:
             raise BusinessRuleException("meeting_url is required when template mode is disabled")
         return str(meeting_url)
+
+    @staticmethod
+    def _collect_changed_fields(lesson: Lesson, changes: dict) -> list[str]:
+        fields = ("notes", "homework", "links", "meeting_url", "recording_url")
+        changed: list[str] = []
+        for field in fields:
+            if field not in changes:
+                continue
+            if getattr(lesson, field) != changes[field]:
+                changed.append(field)
+        return changed
 
     async def create_lesson(self, payload: LessonCreate, actor: User) -> Lesson:
         """Create lesson entity from booking data."""
@@ -163,7 +177,23 @@ class LessonsService:
             )
         if "recording_url" in changes:
             changes["recording_url"] = str(changes["recording_url"])
-        return await self.repository.update_lesson(lesson, **changes)
+        changed_fields = self._collect_changed_fields(lesson, changes)
+        updated = await self.repository.update_lesson(lesson, **changes)
+
+        if changed_fields and self.audit_repository is not None:
+            await self.audit_repository.create_audit_log(
+                actor_id=actor.id,
+                action="lesson.report.update",
+                entity_type="lesson",
+                entity_id=str(updated.id),
+                payload={
+                    "lesson_id": str(updated.id),
+                    "changed_fields": changed_fields,
+                    "changed_count": len(changed_fields),
+                },
+            )
+
+        return updated
 
     async def mark_no_show(self, lesson_id: UUID, actor: User) -> Lesson:
         """Mark lesson as NO_SHOW via admin-only operation."""
@@ -271,4 +301,5 @@ async def get_lessons_service(session: AsyncSession = Depends(get_db_session)) -
         repository=LessonsRepository(session),
         billing_repository=BillingRepository(session),
         booking_repository=BookingRepository(session),
+        audit_repository=AuditRepository(session),
     )

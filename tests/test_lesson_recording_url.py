@@ -22,6 +22,10 @@ class FakeLesson:
     scheduled_start_at: datetime
     scheduled_end_at: datetime
     status: LessonStatusEnum
+    notes: str | None = None
+    homework: str | None = None
+    links: list[str] | None = None
+    meeting_url: str | None = None
     recording_url: str | None = None
 
 

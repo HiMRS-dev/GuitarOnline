@@ -2842,6 +2842,20 @@ Implemented in codebase:
   - `Report contains restricted contact information`.
 - moderation scope intentionally limited to teacher report flow as v1 baseline.
 
+8. `E9` report change audit (`lesson.report.update`):
+- audit integration added to lessons domain:
+  - `LessonsService` now accepts `audit_repository` dependency.
+- teacher report flow writes structured audit log for actual changes only:
+  - action: `lesson.report.update`,
+  - entity: `lesson`,
+  - payload includes:
+    - `lesson_id`,
+    - `changed_fields`,
+    - `changed_count`.
+- audit payload keeps metadata-only contract:
+  - no raw report diffs or sensitive full before/after content snapshots.
+- no-op updates do not emit audit entries.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
@@ -2876,6 +2890,9 @@ Verification tasks added/updated:
     - reject email in notes,
     - reject phone in homework,
     - reject messenger/contact links.
+  - `tests/test_teacher_lesson_report_audit.py` added:
+    - audit entry written with changed fields metadata,
+    - no audit entry when report payload does not change lesson fields.
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2897,4 +2914,6 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_lesson_recording_url.py tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py tests/test_student_lessons_access.py` -> `14 passed`.
 - `py -m poetry run ruff check app/modules/lessons/moderation.py app/modules/lessons/service.py tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py tests/test_lesson_recording_url.py tests/test_lesson_meeting_url.py` -> `15 passed`.
+- `py -m poetry run ruff check app/modules/lessons/service.py tests/test_teacher_lesson_report_audit.py tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py tests/test_lesson_recording_url.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_teacher_lesson_report_audit.py tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py tests/test_lesson_recording_url.py` -> `13 passed`.
 

@@ -41,6 +41,11 @@ class SchedulingRepository:
         stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
         return await self.session.scalar(stmt)
 
+    async def get_slot_by_id_for_update(self, slot_id: UUID) -> AvailabilitySlot | None:
+        """Load slot row with write lock for booking HOLD concurrency control."""
+        stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id).with_for_update()
+        return await self.session.scalar(stmt)
+
     async def lock_teacher_for_slot_mutation(self, teacher_id: UUID) -> None:
         """Acquire row lock for teacher to serialize slot mutations."""
         stmt = select(User.id).where(User.id == teacher_id).with_for_update()

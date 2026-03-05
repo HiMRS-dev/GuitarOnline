@@ -2256,6 +2256,20 @@ Implemented in codebase:
     - `new_slot_id`,
     - `reason`.
 
+4. `C4` HOLD concurrency hardening + integration coverage:
+- implemented slot-level lock during HOLD creation:
+  - `SchedulingRepository.get_slot_by_id_for_update(slot_id)` uses `SELECT ... FOR UPDATE`.
+  - booking hold core (`_hold_booking_for_student`) now loads slot via row lock
+    before availability checks and status transition to `hold`.
+- HOLD expiry semantics remain unchanged:
+  - `hold_expires_at = now + BOOKING_HOLD_MINUTES`.
+- added integration scenario for concurrent HOLD attempts on same slot:
+  - `tests/test_booking_billing_integration.py::test_concurrent_hold_attempts_on_same_slot_allow_only_one_success`.
+- scenario verifies:
+  - exactly one request succeeds with `200`,
+  - competing request fails with business-rule `422` (`Slot is not available`),
+  - DB invariant: only one active booking (`hold`/`confirmed`) exists for target slot.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
@@ -2267,6 +2281,8 @@ Verification tasks added/updated:
     `/admin/bookings/{booking_id}/cancel` RBAC + successful admin-cancel path.
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/bookings/{booking_id}/reschedule` RBAC + successful admin-reschedule path.
+  - `tests/test_booking_billing_integration.py` extended with
+    concurrent HOLD integration scenario and DB active-booking assertion.
 
 Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2275,5 +2291,7 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_bookings_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_cancel_booking_endpoint_returns_401_403_and_200_by_role"` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_cancel_booking_endpoint_returns_401_403_and_200_by_role or admin_reschedule_booking_endpoint_returns_401_403_and_200_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `116 passed, 26 skipped`.
+- `py -m poetry run ruff check app/modules/scheduling/repository.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_booking_billing_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k concurrent_hold_attempts_on_same_slot_allow_only_one_success` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `116 passed, 27 skipped`.
 

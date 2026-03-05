@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -205,6 +206,29 @@ async def _force_hold_expired(booking_id: UUID) -> None:
         await connection.close()
 
     assert result == "UPDATE 1", f"Expected exactly one booking updated, got: {result}"
+
+
+async def _count_active_bookings_for_slot(slot_id: UUID) -> int:
+    try:
+        connection = await asyncpg.connect(DB_DSN)
+    except Exception as exc:
+        pytest.skip(f"PostgreSQL is unavailable for hold concurrency scenario: {exc}")
+        return 0
+
+    try:
+        value = await connection.fetchval(
+            """
+            SELECT COUNT(*)::int
+            FROM bookings
+            WHERE slot_id = $1
+              AND status IN ('hold', 'confirmed')
+            """,
+            slot_id,
+        )
+    finally:
+        await connection.close()
+
+    return int(value or 0)
 
 
 @pytest_asyncio.fixture()
@@ -418,3 +442,40 @@ async def test_expire_holds_releases_slot_and_marks_booking_expired(
     assert expired_count >= 1
     assert expired_booking["status"] == "expired"
     assert slot["id"] in open_slot_ids
+
+
+@pytest.mark.asyncio
+async def test_concurrent_hold_attempts_on_same_slot_allow_only_one_success(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student_one = auth_users.student
+    student_two = await _register_and_login(api_client, role="student")
+
+    package_one = await _create_package(api_client, admin, student_one, lessons_total=5)
+    package_two = await _create_package(api_client, admin, student_two, lessons_total=5)
+    slot = await _create_slot(api_client, admin, teacher, hours_from_now=54)
+
+    async def hold(student: AuthUser, package_id: str) -> httpx.Response:
+        return await api_client.post(
+            "/booking/hold",
+            headers=_auth_headers(student.access_token),
+            json={"slot_id": slot["id"], "package_id": package_id},
+        )
+
+    response_one, response_two = await asyncio.gather(
+        hold(student_one, package_one["id"]),
+        hold(student_two, package_two["id"]),
+    )
+    statuses = sorted([response_one.status_code, response_two.status_code])
+    assert statuses == [200, 422]
+
+    failed_response = response_one if response_one.status_code != 200 else response_two
+    failed_body = failed_response.json()
+    assert failed_body["error"]["code"] == "business_rule_violation"
+    assert "Slot is not available" in failed_body["error"]["message"]
+
+    active_booking_count = await _count_active_bookings_for_slot(UUID(slot["id"]))
+    assert active_booking_count == 1

@@ -121,7 +121,7 @@ class BookingService:
         student_id: UUID,
     ) -> Booking:
         """Create HOLD booking for specific student without actor-role checks."""
-        slot = await self.scheduling_repository.get_slot_by_id(slot_id)
+        slot = await self.scheduling_repository.get_slot_by_id_for_update(slot_id)
         if slot is None:
             raise NotFoundException("Slot not found")
         if slot.status != SlotStatusEnum.OPEN:

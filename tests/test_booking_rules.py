@@ -133,6 +133,9 @@ class FakeSchedulingRepository:
     async def get_slot_by_id(self, slot_id: UUID) -> FakeSlot | None:
         return self._slots.get(slot_id)
 
+    async def get_slot_by_id_for_update(self, slot_id: UUID) -> FakeSlot | None:
+        return self._slots.get(slot_id)
+
     async def set_slot_status(self, slot: FakeSlot, status: SlotStatusEnum) -> FakeSlot:
         slot.status = status
         return slot

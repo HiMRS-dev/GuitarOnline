@@ -21,6 +21,7 @@ from app.modules.booking.schemas import (
     BookingRescheduleRequest,
 )
 from app.modules.booking.service import BookingService, settings
+from app.shared.exceptions import UnauthorizedException
 
 
 @dataclass
@@ -723,3 +724,112 @@ async def test_reschedule_returns_existing_successor_on_retry(
     assert billing_repo.consume_calls == 0
     assert len(booking_repo._bookings) == 2
     assert len(audit_repo.events) == 0
+
+
+@pytest.mark.asyncio
+async def test_expire_holds_requires_admin_actor(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=24),
+        end_at=fixed_now + timedelta(hours=25),
+        status=SlotStatusEnum.HOLD,
+    )
+    booking = FakeBooking(
+        id=booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=uuid4(),
+        status=BookingStatusEnum.HOLD,
+        hold_expires_at=fixed_now - timedelta(minutes=1),
+    )
+
+    service, _, _, _, _, _ = make_service(
+        slots={slot_id: slot},
+        packages={},
+        bookings={booking_id: booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    with pytest.raises(UnauthorizedException):
+        await service.expire_holds(actor)
+
+
+@pytest.mark.asyncio
+async def test_expire_holds_system_expires_only_stale_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    stale_slot_id = uuid4()
+    fresh_slot_id = uuid4()
+    stale_booking_id = uuid4()
+    fresh_booking_id = uuid4()
+
+    stale_slot = FakeSlot(
+        id=stale_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=24),
+        end_at=fixed_now + timedelta(hours=25),
+        status=SlotStatusEnum.HOLD,
+    )
+    fresh_slot = FakeSlot(
+        id=fresh_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=26),
+        end_at=fixed_now + timedelta(hours=27),
+        status=SlotStatusEnum.HOLD,
+    )
+    stale_booking = FakeBooking(
+        id=stale_booking_id,
+        slot_id=stale_slot_id,
+        slot=stale_slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=uuid4(),
+        status=BookingStatusEnum.HOLD,
+        hold_expires_at=fixed_now - timedelta(minutes=2),
+    )
+    fresh_booking = FakeBooking(
+        id=fresh_booking_id,
+        slot_id=fresh_slot_id,
+        slot=fresh_slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=uuid4(),
+        status=BookingStatusEnum.HOLD,
+        hold_expires_at=fixed_now + timedelta(minutes=2),
+    )
+
+    service, _, _, _, _, audit_repo = make_service(
+        slots={stale_slot_id: stale_slot, fresh_slot_id: fresh_slot},
+        packages={},
+        bookings={stale_booking_id: stale_booking, fresh_booking_id: fresh_booking},
+    )
+
+    expired_count = await service.expire_holds_system()
+
+    assert expired_count == 1
+    assert stale_booking.status == BookingStatusEnum.EXPIRED
+    assert stale_booking.hold_expires_at is None
+    assert stale_slot.status == SlotStatusEnum.OPEN
+    assert fresh_booking.status == BookingStatusEnum.HOLD
+    assert fresh_slot.status == SlotStatusEnum.HOLD
+    assert any(
+        event["event_type"] == "booking.hold.expired"
+        and event["payload"]["booking_id"] == str(stale_booking_id)
+        for event in audit_repo.events
+    )

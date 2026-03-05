@@ -2097,6 +2097,28 @@ Implemented in codebase:
   by selecting only highest-priority bucket per `slot_id`.
 - range filters are UTC-normalized and validated (`from_utc <= to_utc`).
 
+14. `B13` automatic HOLD cleanup worker:
+- resolved execution-identity conflict by adding system expiration path in booking service:
+  - `BookingService.expire_holds_system()` performs HOLD expiration without user actor,
+  - existing admin endpoint flow keeps RBAC and now delegates to this system path.
+- stale HOLD expiration logic remains deterministic:
+  - set booking status to `expired`,
+  - clear `hold_expires_at`,
+  - release slot back to `open`,
+  - emit outbox event `booking.hold.expired`.
+- added dedicated worker executable:
+  - `app/workers/booking_holds_expirer.py`,
+  with `once/loop` modes via env vars:
+  - `BOOKING_HOLDS_EXPIRER_MODE`,
+  - `BOOKING_HOLDS_EXPIRER_POLL_SECONDS`,
+  - `BOOKING_HOLDS_EXPIRER_LOG_LEVEL`.
+- production wiring added:
+  - `docker-compose.prod.yml` now runs service `booking-holds-expirer`
+    in loop mode by default.
+- docs/runtime updates:
+  - `README.md` workers and runbook sections updated,
+  - `.env.example` includes HOLD-expirer worker variables.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_slot_stats.py` (service-level final-bucket aggregation + UTC/range/RBAC),
@@ -2108,6 +2130,8 @@ Verification tasks added/updated:
   - `tests/test_admin_teacher_detail.py` (service-level detail behavior + `404`/RBAC),
   - `tests/test_admin_teacher_moderation.py` (service-level verify/disable behavior + `404`/RBAC),
   - `tests/test_admin_slots_list.py` (service-level slot aggregation + UTC/range validation + RBAC),
+  - `tests/test_booking_rules.py` extended with HOLD expiration admin/system-path checks,
+  - `tests/test_booking_holds_expirer_worker.py` (worker run-cycle uses system path + commits tx),
   - `tests/test_rbac_access_integration.py` extended with `/admin/teachers` and
     `/admin/teachers/{teacher_id}` RBAC checks,
   - `tests/test_rbac_access_integration.py` extended with
@@ -2136,5 +2160,7 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/repository.py app/modules/admin/service.py app/modules/admin/router.py app/modules/admin/schemas.py tests/test_admin_slot_stats.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_admin_slot_stats.py tests/test_admin_slot_bulk_create.py tests/test_admin_slot_block.py tests/test_admin_slot_delete.py tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `41 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_slot_stats_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `107 passed, 22 skipped`.
+- `py -m poetry run ruff check app/modules/booking/service.py app/workers/booking_holds_expirer.py tests/test_booking_rules.py tests/test_booking_holds_expirer_worker.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_booking_holds_expirer_worker.py` -> `11 passed`.
+- full local suite: `py -m poetry run pytest -q` -> `110 passed, 22 skipped`.
 

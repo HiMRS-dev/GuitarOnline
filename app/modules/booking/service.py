@@ -348,11 +348,17 @@ class BookingService:
         if actor.role.name != RoleEnum.ADMIN:
             raise UnauthorizedException("Only admin can run hold expiration")
 
+        return await self.expire_holds_system()
+
+    async def expire_holds_system(self) -> int:
+        """Expire stale HOLD bookings without user actor context."""
         now = utc_now()
         holds = await self.booking_repository.find_expired_holds(now)
         for booking in holds:
             booking.status = BookingStatusEnum.EXPIRED
+            booking.hold_expires_at = None
             await self.scheduling_repository.set_slot_status(booking.slot, SlotStatusEnum.OPEN)
+            await self.booking_repository.save(booking)
             await self.audit_repository.create_outbox_event(
                 aggregate_type="booking",
                 aggregate_id=str(booking.id),

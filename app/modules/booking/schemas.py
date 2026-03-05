@@ -27,6 +27,7 @@ class BookingRescheduleRequest(BaseModel):
     """Reschedule booking request."""
 
     new_slot_id: UUID
+    reason: str | None = Field(default=None, max_length=512)
 
 
 class BookingRead(BaseModel):

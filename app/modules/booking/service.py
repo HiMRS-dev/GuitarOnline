@@ -113,12 +113,15 @@ class BookingService:
             },
         )
 
-    async def hold_booking(self, payload: BookingHoldRequest, actor: User) -> Booking:
-        """Create booking in HOLD status for 10 minutes."""
-        if actor.role.name != RoleEnum.STUDENT:
-            raise UnauthorizedException("Only students can hold bookings")
-
-        slot = await self.scheduling_repository.get_slot_by_id(payload.slot_id)
+    async def _hold_booking_for_student(
+        self,
+        *,
+        slot_id: UUID,
+        package_id: UUID,
+        student_id: UUID,
+    ) -> Booking:
+        """Create HOLD booking for specific student without actor-role checks."""
+        slot = await self.scheduling_repository.get_slot_by_id(slot_id)
         if slot is None:
             raise NotFoundException("Slot not found")
         if slot.status != SlotStatusEnum.OPEN:
@@ -126,11 +129,11 @@ class BookingService:
         if slot.start_at <= utc_now():
             raise BusinessRuleException("Cannot book a slot in the past")
 
-        package = await self.billing_repository.get_package_by_id(payload.package_id)
+        package = await self.billing_repository.get_package_by_id(package_id)
         if package is None:
             raise NotFoundException("Package not found")
-        if package.student_id != actor.id:
-            raise UnauthorizedException("Package does not belong to current student")
+        if package.student_id != student_id:
+            raise BusinessRuleException("Booking package does not belong to booking student")
         if package.status != PackageStatusEnum.ACTIVE:
             raise BusinessRuleException("Package is not active")
         if package.expires_at <= utc_now():
@@ -143,7 +146,7 @@ class BookingService:
 
         booking = await self.booking_repository.create_booking_hold(
             slot_id=slot.id,
-            student_id=actor.id,
+            student_id=student_id,
             teacher_id=slot.teacher_id,
             package_id=package.id,
             hold_expires_at=hold_expires_at,
@@ -156,11 +159,22 @@ class BookingService:
             payload={
                 "booking_id": str(booking.id),
                 "slot_id": str(slot.id),
-                "student_id": str(actor.id),
+                "student_id": str(student_id),
             },
         )
 
         return booking
+
+    async def hold_booking(self, payload: BookingHoldRequest, actor: User) -> Booking:
+        """Create booking in HOLD status for 10 minutes."""
+        if actor.role.name != RoleEnum.STUDENT:
+            raise UnauthorizedException("Only students can hold bookings")
+
+        return await self._hold_booking_for_student(
+            slot_id=payload.slot_id,
+            package_id=payload.package_id,
+            student_id=actor.id,
+        )
 
     async def confirm_booking(self, booking_id: UUID, actor: User) -> Booking:
         """Confirm held booking and consume lesson from package."""
@@ -305,19 +319,31 @@ class BookingService:
         if old_booking.status in (BookingStatusEnum.CANCELED, BookingStatusEnum.EXPIRED):
             raise ConflictException("Booking cannot be rescheduled in current status")
 
+        if actor.role.name == RoleEnum.ADMIN:
+            cancel_reason = payload.reason or "Rescheduled by admin"
+        else:
+            cancel_reason = payload.reason or "Rescheduled by user"
+
         old_booking = await self.cancel_booking(
             booking_id=booking_id,
-            payload=BookingCancelRequest(reason="Rescheduled by user"),
+            payload=BookingCancelRequest(reason=cancel_reason),
             actor=actor,
         )
 
         if old_booking.package_id is None:
             raise BusinessRuleException("Booking has no package for reschedule")
 
-        new_hold = await self.hold_booking(
-            BookingHoldRequest(slot_id=payload.new_slot_id, package_id=old_booking.package_id),
-            actor,
-        )
+        if actor.role.name == RoleEnum.ADMIN:
+            new_hold = await self._hold_booking_for_student(
+                slot_id=payload.new_slot_id,
+                package_id=old_booking.package_id,
+                student_id=old_booking.student_id,
+            )
+        else:
+            new_hold = await self.hold_booking(
+                BookingHoldRequest(slot_id=payload.new_slot_id, package_id=old_booking.package_id),
+                actor,
+            )
         new_booking = await self.confirm_booking(new_hold.id, actor)
         new_booking.rescheduled_from_booking_id = old_booking.id
         await self.booking_repository.save(new_booking)
@@ -330,6 +356,7 @@ class BookingService:
                 "new_booking_id": str(new_booking.id),
                 "old_booking_id": str(old_booking.id),
                 "student_id": str(new_booking.student_id),
+                "reason": cancel_reason,
             },
         )
         if actor.role.name == RoleEnum.ADMIN:
@@ -339,8 +366,12 @@ class BookingService:
                 entity_type="booking",
                 entity_id=str(new_booking.id),
                 payload={
+                    "admin_id": str(actor.id),
                     "old_booking_id": str(old_booking.id),
                     "new_booking_id": str(new_booking.id),
+                    "old_slot_id": str(old_booking.slot_id),
+                    "new_slot_id": str(new_booking.slot_id),
+                    "reason": cancel_reason,
                 },
             )
 

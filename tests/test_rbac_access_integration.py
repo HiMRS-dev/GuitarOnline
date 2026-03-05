@@ -438,6 +438,94 @@ async def test_admin_cancel_booking_endpoint_returns_401_403_and_200_by_role(
 
 
 @pytest.mark.asyncio
+async def test_admin_reschedule_booking_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    teacher = await _register_and_login(api_client, "teacher")
+
+    package_response = await api_client.post(
+        "/billing/packages",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "student_id": str(student.id),
+            "lessons_total": 5,
+            "expires_at": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+        },
+    )
+    _assert_status(package_response, 201)
+    package_id = package_response.json()["id"]
+
+    old_start_at = datetime.now(UTC) + timedelta(days=9, hours=1)
+    old_end_at = old_start_at + timedelta(hours=1)
+    old_slot_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "teacher_id": str(teacher.id),
+            "start_at_utc": old_start_at.isoformat(),
+            "end_at_utc": old_end_at.isoformat(),
+        },
+    )
+    _assert_status(old_slot_response, 201)
+    old_slot_id = old_slot_response.json()["slot_id"]
+
+    new_start_at = datetime.now(UTC) + timedelta(days=10, hours=1)
+    new_end_at = new_start_at + timedelta(hours=1)
+    new_slot_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "teacher_id": str(teacher.id),
+            "start_at_utc": new_start_at.isoformat(),
+            "end_at_utc": new_end_at.isoformat(),
+        },
+    )
+    _assert_status(new_slot_response, 201)
+    new_slot_id = new_slot_response.json()["slot_id"]
+
+    hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={"slot_id": old_slot_id, "package_id": package_id},
+    )
+    _assert_status(hold_response, 200)
+    old_booking_id = hold_response.json()["id"]
+
+    confirm_response = await api_client.post(
+        f"/booking/{old_booking_id}/confirm",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(confirm_response, 200)
+
+    no_token_response = await api_client.post(
+        f"/admin/bookings/{old_booking_id}/reschedule",
+        json={"new_slot_id": new_slot_id, "reason": "Admin swap"},
+    )
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.post(
+        f"/admin/bookings/{old_booking_id}/reschedule",
+        headers=_auth_headers(student.access_token),
+        json={"new_slot_id": new_slot_id, "reason": "Admin swap"},
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.post(
+        f"/admin/bookings/{old_booking_id}/reschedule",
+        headers=_auth_headers(admin.access_token),
+        json={"new_slot_id": new_slot_id, "reason": "Admin swap"},
+    )
+    _assert_status(admin_response, 200)
+    payload = admin_response.json()
+    assert payload["status"] == "confirmed"
+    assert payload["slot_id"] == new_slot_id
+    assert payload["rescheduled_from_booking_id"] == old_booking_id
+    assert payload["cancellation_reason"] is None
+
+
+@pytest.mark.asyncio
 async def test_admin_slot_stats_endpoint_returns_401_403_and_200_by_role(
     api_client: httpx.AsyncClient,
 ) -> None:

@@ -13,6 +13,7 @@ from app.modules.admin.schemas import (
     AdminActionRead,
     AdminBookingCancelRequest,
     AdminBookingListItemRead,
+    AdminBookingRescheduleRequest,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
     AdminSlotBlockRead,
@@ -27,7 +28,7 @@ from app.modules.admin.schemas import (
     AdminTeacherListItemRead,
 )
 from app.modules.admin.service import AdminService, get_admin_service
-from app.modules.booking.schemas import BookingCancelRequest, BookingRead
+from app.modules.booking.schemas import BookingCancelRequest, BookingRead, BookingRescheduleRequest
 from app.modules.booking.service import BookingService, get_booking_service
 from app.modules.identity.service import require_roles
 from app.modules.scheduling.schemas import SlotCreate
@@ -197,6 +198,22 @@ async def cancel_admin_booking(
     booking = await service.cancel_booking(
         booking_id,
         BookingCancelRequest(reason=payload.reason),
+        current_user,
+    )
+    return BookingRead.model_validate(booking)
+
+
+@router.post("/bookings/{booking_id}/reschedule", response_model=BookingRead)
+async def reschedule_admin_booking(
+    booking_id: UUID,
+    payload: AdminBookingRescheduleRequest,
+    service: BookingService = Depends(get_booking_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> BookingRead:
+    """Reschedule booking via admin-only atomic flow."""
+    booking = await service.reschedule_booking(
+        booking_id,
+        BookingRescheduleRequest(new_slot_id=payload.new_slot_id, reason=payload.reason),
         current_user,
     )
     return BookingRead.model_validate(booking)

@@ -729,6 +729,110 @@ async def test_reschedule_is_cancel_plus_new_booking(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_admin_reschedule_uses_system_hold_and_writes_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    admin_id = uuid4()
+    old_slot_id = uuid4()
+    new_slot_id = uuid4()
+    package_id = uuid4()
+    old_booking_id = uuid4()
+
+    old_slot = FakeSlot(
+        id=old_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=30),
+        end_at=fixed_now + timedelta(hours=31),
+        status=SlotStatusEnum.BOOKED,
+    )
+    new_slot = FakeSlot(
+        id=new_slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=48),
+        end_at=fixed_now + timedelta(hours=49),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=10,
+        lessons_left=4,
+    )
+    old_booking = FakeBooking(
+        id=old_booking_id,
+        slot_id=old_slot_id,
+        slot=old_slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CONFIRMED,
+    )
+    old_lesson = FakeLesson(
+        id=uuid4(),
+        booking_id=old_booking_id,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        scheduled_start_at=old_slot.start_at,
+        scheduled_end_at=old_slot.end_at,
+    )
+
+    service, booking_repo, billing_repo, _, lessons_repo, audit_repo = make_service(
+        slots={old_slot_id: old_slot, new_slot_id: new_slot},
+        packages={package_id: package},
+        bookings={old_booking_id: old_booking},
+        lessons={old_booking_id: old_lesson},
+    )
+    admin_actor = make_actor(admin_id, RoleEnum.ADMIN)
+
+    new_booking = await service.reschedule_booking(
+        old_booking_id,
+        BookingRescheduleRequest(new_slot_id=new_slot_id, reason="Admin move"),
+        admin_actor,
+    )
+
+    assert booking_repo._bookings[old_booking_id].status == BookingStatusEnum.CANCELED
+    assert new_booking.status == BookingStatusEnum.CONFIRMED
+    assert new_booking.rescheduled_from_booking_id == old_booking_id
+    assert new_booking.student_id == student_id
+    assert old_slot.status == SlotStatusEnum.OPEN
+    assert new_slot.status == SlotStatusEnum.BOOKED
+    assert billing_repo.return_calls == 1
+    assert billing_repo.consume_calls == 1
+    assert package.lessons_left == 4
+
+    old_lesson_after = await lessons_repo.get_lesson_by_booking_id(old_booking_id)
+    new_lesson = await lessons_repo.get_lesson_by_booking_id(new_booking.id)
+    assert old_lesson_after is not None
+    assert old_lesson_after.status == LessonStatusEnum.CANCELED
+    assert new_lesson is not None
+    assert new_lesson.status == LessonStatusEnum.SCHEDULED
+
+    reschedule_events = [
+        event for event in audit_repo.events if event["event_type"] == "booking.rescheduled"
+    ]
+    assert len(reschedule_events) == 1
+    assert reschedule_events[0]["payload"]["reason"] == "Admin move"
+
+    actions = [log["action"] for log in audit_repo.audit_logs]
+    assert "admin.booking.cancel" in actions
+    assert "admin.booking.reschedule" in actions
+    reschedule_log = next(
+        log for log in audit_repo.audit_logs if log["action"] == "admin.booking.reschedule"
+    )
+    assert reschedule_log["payload"]["admin_id"] == str(admin_id)
+    assert reschedule_log["payload"]["reason"] == "Admin move"
+    assert reschedule_log["payload"]["old_slot_id"] == str(old_slot_id)
+    assert reschedule_log["payload"]["new_slot_id"] == str(new_slot_id)
+
+
+@pytest.mark.asyncio
 async def test_reschedule_returns_existing_successor_on_retry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

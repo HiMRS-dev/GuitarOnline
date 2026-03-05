@@ -2230,20 +2230,50 @@ Implemented in codebase:
     - `refund_policy_applied` (`refunded` / `no_refund`),
     - final booking status.
 
+3. `C3` admin reschedule endpoint (atomic cancel + new confirmed):
+- added admin-only endpoint:
+  - `POST /api/v1/admin/bookings/{booking_id}/reschedule`.
+- explicit admin reschedule contract:
+  - `AdminBookingRescheduleRequest` with required fields:
+    - `new_slot_id`,
+    - `reason`.
+- conflict resolution implemented for student-only HOLD restriction:
+  - added internal booking service path `_hold_booking_for_student(...)` that performs
+    HOLD validations/creation for a target student without relying on public student-role endpoint.
+  - public `hold_booking(...)` keeps existing student-only access and delegates to this core helper.
+- `reschedule_booking(...)` now supports admin flow atomically in one request transaction:
+  - cancel old booking with explicit reason,
+  - hold target slot for same booking student/package,
+  - confirm new booking,
+  - set `rescheduled_from_booking_id`.
+- admin trace hardening for reschedule:
+  - outbox `booking.rescheduled` now includes `reason`,
+  - audit `admin.booking.reschedule` payload includes:
+    - `admin_id`,
+    - `old_booking_id`,
+    - `new_booking_id`,
+    - `old_slot_id`,
+    - `new_slot_id`,
+    - `reason`.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
   - `tests/test_booking_rules.py` extended with admin cancel audit payload assertions,
+  - `tests/test_booking_rules.py` extended with admin reschedule atomic-path and audit assertions,
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/bookings` RBAC check (`401/403/200`),
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/bookings/{booking_id}/cancel` RBAC + successful admin-cancel path.
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/bookings/{booking_id}/reschedule` RBAC + successful admin-reschedule path.
 
 Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_admin_bookings_list.py` -> `4 passed`.
-- `py -m poetry run pytest -q tests/test_booking_rules.py` -> `11 passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py` -> `12 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_bookings_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_cancel_booking_endpoint_returns_401_403_and_200_by_role"` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `115 passed, 25 skipped`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_cancel_booking_endpoint_returns_401_403_and_200_by_role or admin_reschedule_booking_endpoint_returns_401_403_and_200_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `116 passed, 26 skipped`.
 

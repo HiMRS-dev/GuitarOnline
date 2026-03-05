@@ -220,6 +220,13 @@ class AdminBookingCancelRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=512)
 
 
+class AdminBookingRescheduleRequest(BaseModel):
+    """Admin request schema for booking reschedule."""
+
+    new_slot_id: UUID
+    reason: str = Field(min_length=1, max_length=512)
+
+
 class AdminSlotListItemRead(BaseModel):
     """Admin slot list item with aggregated booking status."""
 

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime, timedelta
 import urllib.error
 import urllib.request
 from urllib.parse import urlencode
 from uuid import uuid4
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.getenv("DEPLOY_SMOKE_BASE_URL", "http://localhost:8000").rstrip("/")
 
 
 def request(

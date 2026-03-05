@@ -71,6 +71,8 @@ def test_email_fields_are_exposed_only_on_identity_or_admin_routes() -> None:
         "/api/v1/identity/users/me",
         "/api/v1/admin/teachers",
         "/api/v1/admin/teachers/{teacher_id}",
+        "/api/v1/admin/teachers/{teacher_id}/verify",
+        "/api/v1/admin/teachers/{teacher_id}/disable",
     }
 
     for route in main_module.app.routes:
@@ -82,4 +84,3 @@ def test_email_fields_are_exposed_only_on_identity_or_admin_routes() -> None:
             continue
 
         assert route.path in allowed_routes
-

@@ -25,12 +25,12 @@ def test_cors_middleware_uses_frontend_admin_origin_setting() -> None:
         None,
     )
     assert cors_middleware is not None
-    assert cors_middleware.options["allow_origins"] == list(
+    assert cors_middleware.kwargs["allow_origins"] == list(
         main_module.settings.frontend_admin_origin,
     )
-    assert cors_middleware.options["allow_credentials"] is True
-    assert cors_middleware.options["allow_methods"] == ["*"]
-    assert cors_middleware.options["allow_headers"] == ["*"]
+    assert cors_middleware.kwargs["allow_credentials"] is True
+    assert cors_middleware.kwargs["allow_methods"] == ["*"]
+    assert cors_middleware.kwargs["allow_headers"] == ["*"]
 
 
 def test_identity_auth_routes_keep_rate_limit_dependencies() -> None:

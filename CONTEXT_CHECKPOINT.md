@@ -2977,6 +2977,26 @@ Implemented in codebase:
   - marks notification `failed` on delivery error/result failure before failing outbox event.
 - no new outbox table introduced; existing outbox + `notifications` journal retained.
 
+3. `F3` worker processing baseline hardening:
+- worker runtime configuration normalized with new canonical env namespace:
+  - `NOTIFICATIONS_OUTBOX_WORKER_*`.
+- backward compatibility preserved:
+  - legacy `OUTBOX_WORKER_*` env vars still accepted with warning log.
+- deterministic env parsing added for:
+  - `log_level`,
+  - `mode`,
+  - `poll_seconds`,
+  - `batch_size`,
+  - `max_retries`,
+  - `base_backoff_seconds`,
+  - `max_backoff_seconds`.
+- invalid env values now fallback to explicit defaults with warning logs (instead of runtime cast crashes).
+- worker startup and per-cycle logging improved:
+  - startup config snapshot,
+  - cycle success logs with elapsed milliseconds,
+  - cycle failure logs with elapsed milliseconds.
+- `run_cycle(...)` now accepts resolved config object for stable runtime behavior and testability.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_notification_templates.py` added for:
@@ -2987,10 +3007,16 @@ Verification tasks added/updated:
   - `tests/test_outbox_notifications_worker.py` extended for delivery-stub behavior:
     - delivery client invocation on success path,
     - notification journal persistence with `failed` status on delivery failure.
+  - `tests/test_outbox_notifications_worker_entrypoint.py` added for:
+    - `run_cycle(...)` config wiring + commit behavior,
+    - canonical env parsing,
+    - legacy env fallback,
+    - invalid env default fallback.
 
 Latest local checks:
 - `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).
 - `python -m pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`No module named pytest` in active Python environment).
 - `python -m compileall app/core/enums.py app/modules/notifications tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/modules/notifications/delivery.py app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
+- `python -m compileall app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> success.
 

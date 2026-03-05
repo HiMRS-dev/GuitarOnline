@@ -2997,6 +2997,18 @@ Implemented in codebase:
   - cycle failure logs with elapsed milliseconds.
 - `run_cycle(...)` now accepts resolved config object for stable runtime behavior and testability.
 
+4. `F4` trigger mapping centralized in notifications worker:
+- booking-domain trigger mapping moved to explicit template mapping path:
+  - `booking.confirmed` -> `booking_confirmed`,
+  - `booking.canceled` -> `booking_canceled`,
+  - `booking.rescheduled` -> `booking_canceled` + optional `booking_confirmed`.
+- reschedule optional confirm behavior implemented with payload flag:
+  - `include_new_booking_confirmation` (default `true`).
+- booking message rendering now goes through template registry contract:
+  - `render_template(...)`,
+  - persisted `notifications.template_key` is canonical template token.
+- booking event processing remains centralized in `NotificationsOutboxWorker` via dedicated helper methods.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_notification_templates.py` added for:
@@ -3012,6 +3024,10 @@ Verification tasks added/updated:
     - canonical env parsing,
     - legacy env fallback,
     - invalid env default fallback.
+  - `tests/test_outbox_notifications_worker.py` extended for booking trigger mapping:
+    - template key assertions for `booking.confirmed` and `booking.canceled`,
+    - `booking.rescheduled` emits two notifications by default (`canceled` + `confirmed`),
+    - `booking.rescheduled` emits only cancel notification when optional confirm is disabled.
 
 Latest local checks:
 - `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).
@@ -3019,4 +3035,5 @@ Latest local checks:
 - `python -m compileall app/core/enums.py app/modules/notifications tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/modules/notifications/delivery.py app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> success.
+- `python -m compileall app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
 

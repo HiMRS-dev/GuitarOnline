@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import UUID
 
-from app.core.enums import NotificationStatusEnum
+from app.core.enums import NotificationStatusEnum, NotificationTemplateKeyEnum
 from app.modules.audit.models import OutboxEvent
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.repository import BillingRepository
@@ -17,6 +18,7 @@ from app.modules.notifications.delivery import (
     StubEmailDeliveryClient,
 )
 from app.modules.notifications.repository import NotificationsRepository
+from app.modules.notifications.templates import render_template
 from app.shared.utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -156,43 +158,75 @@ class NotificationsOutboxWorker:
         last_attempt_at = event.updated_at or event.occurred_at
         return now >= last_attempt_at + timedelta(seconds=backoff_seconds)
 
-    async def _build_messages(self, event: OutboxEvent) -> list[NotificationMessage]:
-        payload = event.payload or {}
-        event_type = event.event_type
-
+    def _build_booking_template_contexts(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> list[tuple[NotificationTemplateKeyEnum, dict[str, Any]]]:
         if event_type == "booking.confirmed":
-            student_id = self._required_uuid(payload, "student_id")
-            booking_id = payload.get("booking_id", "unknown")
             return [
-                NotificationMessage(
-                    user_id=student_id,
-                    title="Booking confirmed",
-                    body=f"Your booking {booking_id} has been confirmed.",
+                (
+                    NotificationTemplateKeyEnum.BOOKING_CONFIRMED,
+                    {"booking_id": payload.get("booking_id", "unknown")},
                 ),
             ]
 
         if event_type == "booking.canceled":
-            student_id = self._required_uuid(payload, "student_id")
-            booking_id = payload.get("booking_id", "unknown")
             return [
-                NotificationMessage(
-                    user_id=student_id,
-                    title="Booking canceled",
-                    body=f"Your booking {booking_id} has been canceled.",
+                (
+                    NotificationTemplateKeyEnum.BOOKING_CANCELED,
+                    {"booking_id": payload.get("booking_id", "unknown")},
                 ),
             ]
 
-        if event_type == "booking.rescheduled":
-            student_id = self._required_uuid(payload, "student_id")
-            new_booking_id = payload.get("new_booking_id", "unknown")
-            old_booking_id = payload.get("old_booking_id", "unknown")
-            return [
+        if event_type != "booking.rescheduled":
+            return []
+
+        template_contexts: list[tuple[NotificationTemplateKeyEnum, dict[str, Any]]] = [
+            (
+                NotificationTemplateKeyEnum.BOOKING_CANCELED,
+                {"booking_id": payload.get("old_booking_id", "unknown")},
+            ),
+        ]
+        include_new_booking_confirmation = payload.get("include_new_booking_confirmation", True)
+        if include_new_booking_confirmation:
+            template_contexts.append(
+                (
+                    NotificationTemplateKeyEnum.BOOKING_CONFIRMED,
+                    {"booking_id": payload.get("new_booking_id", "unknown")},
+                ),
+            )
+        return template_contexts
+
+    def _build_booking_messages(
+        self,
+        event_type: str,
+        payload: dict[str, Any],
+    ) -> list[NotificationMessage]:
+        template_contexts = self._build_booking_template_contexts(event_type, payload)
+        if not template_contexts:
+            return []
+
+        student_id = self._required_uuid(payload, "student_id")
+        messages: list[NotificationMessage] = []
+        for template_key, template_payload in template_contexts:
+            rendered = render_template(template_key, template_payload)
+            messages.append(
                 NotificationMessage(
                     user_id=student_id,
-                    title="Booking rescheduled",
-                    body=f"Booking moved from {old_booking_id} to {new_booking_id}.",
+                    template_key=rendered.template_key.value,
+                    title=rendered.title,
+                    body=rendered.body,
                 ),
-            ]
+            )
+        return messages
+
+    async def _build_messages(self, event: OutboxEvent) -> list[NotificationMessage]:
+        payload = event.payload or {}
+        event_type = event.event_type
+
+        if event_type.startswith("booking."):
+            return self._build_booking_messages(event_type, payload)
 
         if event_type in ("lesson.created", "lesson.canceled"):
             title = "Lesson scheduled" if event_type == "lesson.created" else "Lesson canceled"

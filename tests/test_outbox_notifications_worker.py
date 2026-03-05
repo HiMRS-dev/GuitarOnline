@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from app.core.enums import NotificationStatusEnum, OutboxStatusEnum
+from app.core.enums import NotificationStatusEnum, NotificationTemplateKeyEnum, OutboxStatusEnum
 from app.modules.notifications.delivery import DeliveryMessage, DeliveryResult
 from app.modules.notifications.outbox_worker import NotificationsOutboxWorker
 
@@ -176,6 +176,10 @@ async def test_worker_processes_booking_confirmed_into_notification() -> None:
     assert event.status == OutboxStatusEnum.PROCESSED
     assert len(notifications_repo.notifications) == 1
     assert notifications_repo.notifications[0].user_id == student_id
+    assert (
+        notifications_repo.notifications[0].template_key
+        == NotificationTemplateKeyEnum.BOOKING_CONFIRMED.value
+    )
     assert notifications_repo.notifications[0].status == NotificationStatusEnum.SENT
 
 
@@ -269,6 +273,66 @@ async def test_worker_requeues_failed_event_after_backoff() -> None:
     assert stats["processed"] == 1
     assert event.status == OutboxStatusEnum.PROCESSED
     assert len(notifications_repo.notifications) == 1
+    assert (
+        notifications_repo.notifications[0].template_key
+        == NotificationTemplateKeyEnum.BOOKING_CANCELED.value
+    )
+
+
+@pytest.mark.asyncio
+async def test_worker_maps_booking_rescheduled_to_cancel_and_confirm_templates() -> None:
+    student_id = uuid4()
+    event = FakeOutboxEvent(
+        id=uuid4(),
+        event_type="booking.rescheduled",
+        payload={
+            "student_id": str(student_id),
+            "old_booking_id": "old-booking",
+            "new_booking_id": "new-booking",
+        },
+    )
+    worker, _, notifications_repo = make_worker(
+        [event],
+        now=datetime(2026, 2, 23, 12, 0, tzinfo=UTC),
+    )
+
+    stats = await worker.run_once()
+
+    assert stats == {"requeued": 0, "processed": 1, "failed": 0, "dispatched": 2}
+    assert event.status == OutboxStatusEnum.PROCESSED
+    assert len(notifications_repo.notifications) == 2
+    assert [notification.template_key for notification in notifications_repo.notifications] == [
+        NotificationTemplateKeyEnum.BOOKING_CANCELED.value,
+        NotificationTemplateKeyEnum.BOOKING_CONFIRMED.value,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_worker_rescheduled_event_can_skip_new_booking_confirmation() -> None:
+    student_id = uuid4()
+    event = FakeOutboxEvent(
+        id=uuid4(),
+        event_type="booking.rescheduled",
+        payload={
+            "student_id": str(student_id),
+            "old_booking_id": "old-booking",
+            "new_booking_id": "new-booking",
+            "include_new_booking_confirmation": False,
+        },
+    )
+    worker, _, notifications_repo = make_worker(
+        [event],
+        now=datetime(2026, 2, 23, 12, 0, tzinfo=UTC),
+    )
+
+    stats = await worker.run_once()
+
+    assert stats == {"requeued": 0, "processed": 1, "failed": 0, "dispatched": 1}
+    assert len(notifications_repo.notifications) == 1
+    assert (
+        notifications_repo.notifications[0].template_key
+        == NotificationTemplateKeyEnum.BOOKING_CANCELED.value
+    )
 
 
 @pytest.mark.asyncio

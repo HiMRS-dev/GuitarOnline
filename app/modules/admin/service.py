@@ -24,6 +24,7 @@ from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminBookingListItemRead,
     AdminKpiOverviewRead,
+    AdminKpiSalesRead,
     AdminOperationsOverviewRead,
     AdminPackageListItemRead,
     AdminSlotBlockRead,
@@ -109,6 +110,39 @@ class AdminService:
             },
         )
         return AdminOperationsOverviewRead(**snapshot)
+
+    async def get_kpi_sales(
+        self,
+        actor: User,
+        *,
+        from_utc: datetime,
+        to_utc: datetime,
+    ) -> AdminKpiSalesRead:
+        """Return sales KPI snapshot for requested UTC interval."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can view sales KPI")
+
+        normalized_from_utc = ensure_utc(from_utc)
+        normalized_to_utc = ensure_utc(to_utc)
+        if normalized_from_utc > normalized_to_utc:
+            raise BusinessRuleException("from_utc must be less than or equal to to_utc")
+
+        snapshot = await self.repository.get_kpi_sales(
+            from_utc=normalized_from_utc,
+            to_utc=normalized_to_utc,
+        )
+        await self.repository.create_action(
+            admin_id=actor.id,
+            action="admin.kpi.sales.view",
+            target_type="kpi_sales",
+            target_id=None,
+            payload={
+                "generated_at": snapshot["generated_at"].isoformat(),
+                "from_utc": normalized_from_utc.isoformat(),
+                "to_utc": normalized_to_utc.isoformat(),
+            },
+        )
+        return AdminKpiSalesRead(**snapshot)
 
     async def list_teachers(
         self,

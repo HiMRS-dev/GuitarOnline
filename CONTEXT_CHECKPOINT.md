@@ -2616,6 +2616,28 @@ Implemented in codebase:
   - `provider_name` in create request remains optional for legacy clients
     (defaults to `manual_paid`).
 
+11. `D11` sales KPI endpoint (`GET /admin/kpi/sales?from_utc&to_utc`):
+- admin API contract added:
+  - `GET /api/v1/admin/kpi/sales?from_utc&to_utc`.
+- new response schema added:
+  - `AdminKpiSalesRead`, includes:
+    - payment counters and amounts (`succeeded`, `refunded`, `net`),
+    - package creation and paid-conversion counters for range.
+- repository aggregation added:
+  - `AdminRepository.get_kpi_sales(...)` computes range-scoped metrics for:
+    - succeeded/refunded payment counts and sums,
+    - net amount,
+    - packages created total,
+    - packages created with succeeded payment,
+    - unpaid packages and conversion ratio.
+- service layer added:
+  - `AdminService.get_kpi_sales(...)` with:
+    - admin-only guard,
+    - UTC normalization and range validation (`from_utc <= to_utc`),
+    - admin action trace (`admin.kpi.sales.view`).
+- docs updated:
+  - `README.md` Admin Operations section now documents sales KPI endpoint.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2654,6 +2676,12 @@ Verification tasks added/updated:
   - `tests/test_billing_payment_rules.py` extended with D10 webhook-readiness checks:
     - provider identity fields persisted on payment create,
     - webhook can resolve payment by `provider_payment_id`.
+  - `tests/test_admin_kpi_sales.py` added:
+    - sales snapshot mapping,
+    - admin action trace,
+    - admin-only access and invalid-range guard.
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/kpi/sales` RBAC check (`401/403/200`).
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2680,4 +2708,7 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_billing_payment_rules.py` -> `20 passed`.
 - `py -m poetry run ruff check app/modules/billing/models.py app/modules/billing/repository.py app/modules/billing/providers.py app/modules/billing/schemas.py app/modules/billing/service.py alembic/versions/20260306_0011_payment_provider_identity_fields.py tests/test_billing_payment_rules.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_billing_payment_rules.py` -> `21 passed`.
+- `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_sales.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_kpi_sales.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `7 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_sales_kpi_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

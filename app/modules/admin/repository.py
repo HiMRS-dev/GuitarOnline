@@ -632,6 +632,113 @@ class AdminRepository:
             "packages_canceled": packages_canceled,
         }
 
+    async def get_kpi_sales(
+        self,
+        *,
+        from_utc: datetime,
+        to_utc: datetime,
+        generated_at: datetime | None = None,
+    ) -> dict[str, datetime | int | Decimal]:
+        payments_window_filter = (
+            Payment.created_at >= from_utc,
+            Payment.created_at <= to_utc,
+        )
+        packages_window_filter = (
+            LessonPackage.created_at >= from_utc,
+            LessonPackage.created_at <= to_utc,
+        )
+
+        payments_succeeded_count = int(
+            (
+                await self.session.scalar(
+                    select(func.count(Payment.id)).where(
+                        Payment.status == PaymentStatusEnum.SUCCEEDED,
+                        *payments_window_filter,
+                    ),
+                )
+            )
+            or 0,
+        )
+        payments_refunded_count = int(
+            (
+                await self.session.scalar(
+                    select(func.count(Payment.id)).where(
+                        Payment.status == PaymentStatusEnum.REFUNDED,
+                        *payments_window_filter,
+                    ),
+                )
+            )
+            or 0,
+        )
+        payments_succeeded_amount = Decimal(
+            (
+                await self.session.scalar(
+                    select(func.coalesce(func.sum(Payment.amount), 0)).where(
+                        Payment.status == PaymentStatusEnum.SUCCEEDED,
+                        *payments_window_filter,
+                    ),
+                )
+            )
+            or 0,
+        )
+        payments_refunded_amount = Decimal(
+            (
+                await self.session.scalar(
+                    select(func.coalesce(func.sum(Payment.amount), 0)).where(
+                        Payment.status == PaymentStatusEnum.REFUNDED,
+                        *payments_window_filter,
+                    ),
+                )
+            )
+            or 0,
+        )
+        payments_net_amount = payments_succeeded_amount - payments_refunded_amount
+
+        packages_created_total = int(
+            (
+                await self.session.scalar(
+                    select(func.count(LessonPackage.id)).where(*packages_window_filter),
+                )
+            )
+            or 0,
+        )
+        created_packages_subquery = (
+            select(LessonPackage.id).where(*packages_window_filter).subquery()
+        )
+        packages_created_paid = int(
+            (
+                await self.session.scalar(
+                    select(func.count(func.distinct(Payment.package_id))).where(
+                        Payment.status == PaymentStatusEnum.SUCCEEDED,
+                        Payment.package_id.in_(select(created_packages_subquery.c.id)),
+                        *payments_window_filter,
+                    ),
+                )
+            )
+            or 0,
+        )
+        packages_created_unpaid = max(packages_created_total - packages_created_paid, 0)
+        packages_created_paid_conversion_rate = (
+            Decimal(packages_created_paid) / Decimal(packages_created_total)
+            if packages_created_total > 0
+            else Decimal("0")
+        )
+
+        return {
+            "generated_at": generated_at or utc_now(),
+            "from_utc": from_utc,
+            "to_utc": to_utc,
+            "payments_succeeded_count": payments_succeeded_count,
+            "payments_refunded_count": payments_refunded_count,
+            "payments_succeeded_amount": payments_succeeded_amount,
+            "payments_refunded_amount": payments_refunded_amount,
+            "payments_net_amount": payments_net_amount,
+            "packages_created_total": packages_created_total,
+            "packages_created_paid": packages_created_paid,
+            "packages_created_unpaid": packages_created_unpaid,
+            "packages_created_paid_conversion_rate": packages_created_paid_conversion_rate,
+        }
+
     async def _count_users_by_role(self) -> dict[RoleEnum, int]:
         stmt = (
             select(Role.name, func.count(User.id))

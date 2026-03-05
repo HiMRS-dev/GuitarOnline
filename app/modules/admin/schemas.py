@@ -104,6 +104,25 @@ class AdminKpiOverviewRead(BaseModel):
     packages_canceled: int
 
 
+class AdminKpiSalesRead(BaseModel):
+    """Admin sales KPI snapshot for requested UTC range."""
+
+    generated_at: datetime
+    from_utc: datetime
+    to_utc: datetime
+
+    payments_succeeded_count: int
+    payments_refunded_count: int
+    payments_succeeded_amount: Decimal
+    payments_refunded_amount: Decimal
+    payments_net_amount: Decimal
+
+    packages_created_total: int
+    packages_created_paid: int
+    packages_created_unpaid: int
+    packages_created_paid_conversion_rate: Decimal
+
+
 class AdminTeacherListItemRead(BaseModel):
     """Admin teacher list item with search/filter metadata."""
 

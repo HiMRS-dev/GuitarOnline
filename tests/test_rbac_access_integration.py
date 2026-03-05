@@ -120,6 +120,39 @@ async def test_admin_endpoint_returns_401_403_and_200_by_role(
 
 
 @pytest.mark.asyncio
+async def test_admin_sales_kpi_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    from_utc = (datetime.now(UTC) - timedelta(days=30)).isoformat()
+    to_utc = datetime.now(UTC).isoformat()
+
+    no_token_response = await api_client.get(
+        "/admin/kpi/sales",
+        params={"from_utc": from_utc, "to_utc": to_utc},
+    )
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.get(
+        "/admin/kpi/sales",
+        headers=_auth_headers(student.access_token),
+        params={"from_utc": from_utc, "to_utc": to_utc},
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.get(
+        "/admin/kpi/sales",
+        headers=_auth_headers(admin.access_token),
+        params={"from_utc": from_utc, "to_utc": to_utc},
+    )
+    _assert_status(admin_response, 200)
+    payload = admin_response.json()
+    assert "payments_succeeded_amount" in payload
+    assert "packages_created_total" in payload
+
+
+@pytest.mark.asyncio
 async def test_admin_teachers_endpoint_returns_401_403_and_200_by_role(
     api_client: httpx.AsyncClient,
 ) -> None:

@@ -15,6 +15,7 @@ from app.modules.admin.schemas import (
     AdminBookingListItemRead,
     AdminBookingRescheduleRequest,
     AdminKpiOverviewRead,
+    AdminKpiSalesRead,
     AdminOperationsOverviewRead,
     AdminPackageCreateRead,
     AdminPackageCreateRequest,
@@ -365,6 +366,21 @@ async def get_admin_kpi_overview(
 ) -> AdminKpiOverviewRead:
     """Get admin KPI overview snapshot."""
     return await service.get_kpi_overview(current_user)
+
+
+@router.get("/kpi/sales", response_model=AdminKpiSalesRead)
+async def get_admin_kpi_sales(
+    from_utc: datetime = Query(...),
+    to_utc: datetime = Query(...),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminKpiSalesRead:
+    """Get admin sales KPI snapshot for requested UTC interval."""
+    return await service.get_kpi_sales(
+        current_user,
+        from_utc=from_utc,
+        to_utc=to_utc,
+    )
 
 
 @router.get("/ops/overview", response_model=AdminOperationsOverviewRead)

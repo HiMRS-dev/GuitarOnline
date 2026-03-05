@@ -291,7 +291,10 @@ Production-ready modular monolith backend for an online guitar school.
 
 - Admin KPI overview endpoint:
   - `GET /api/v1/admin/kpi/overview`
+- Admin sales KPI endpoint (UTC range):
+  - `GET /api/v1/admin/kpi/sales?from_utc=<iso>&to_utc=<iso>`
 - Response provides aggregated KPIs for users, bookings, lessons, payments, and packages.
+- Sales KPI includes succeeded/refunded/net payment metrics and package paid-conversion counters for range.
 - Admin operational overview endpoint:
   - `GET /api/v1/admin/ops/overview?max_retries=5`
 - Response provides queue and consistency signals (outbox retries/dead-letter, stale holds, overdue packages).

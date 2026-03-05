@@ -2081,8 +2081,25 @@ Implemented in codebase:
   - overlap failures return business-rule error with conflicting slot metadata
     (`overlap_slot_id`, interval bounds).
 
+12. `B11` DB-level anti-overlap strategy closure:
+- Epic B v1.1 approved `locking` as pragmatic DB-level protection for this phase.
+- implemented lock-based strategy from B10 is now the active B11 fulfillment:
+  - teacher-scope `SELECT ... FOR UPDATE` serialization.
+- PostgreSQL exclusion constraint remains intentionally deferred as optional phase-2 hardening
+  (no additional schema constraint introduced in this phase).
+
+13. `B12` admin slots stats endpoint with final-bucket semantics:
+- added admin-only endpoint:
+  - `GET /api/v1/admin/slots/stats?from_utc&to_utc`.
+- implemented single-final-bucket counting per slot with approved priority:
+  - `completed > canceled > confirmed > held > open`.
+- aggregation spans slot + booking + lesson states while preventing double-counting
+  by selecting only highest-priority bucket per `slot_id`.
+- range filters are UTC-normalized and validated (`from_utc <= to_utc`).
+
 Verification tasks added/updated:
 - tests:
+  - `tests/test_admin_slot_stats.py` (service-level final-bucket aggregation + UTC/range/RBAC),
   - `tests/test_admin_slot_bulk_create.py` (service-level bulk create base flow + limit/exclusions/lock validation),
   - `tests/test_admin_slot_block.py` (service-level slot block flow + 403/404),
   - `tests/test_admin_slot_delete.py` (service-level delete policy: success/403/404/409),
@@ -2097,6 +2114,7 @@ Verification tasks added/updated:
     `/admin/teachers/{teacher_id}/verify` and `/disable` RBAC checks and audit-log trace check,
   - `tests/test_rbac_access_integration.py` extended with:
     - `/admin/slots` RBAC check,
+    - `/admin/slots/stats` RBAC check,
     - `POST /admin/slots` RBAC check,
     - `POST /admin/slots/bulk-create` RBAC check,
     - `DELETE /admin/slots/{slot_id}` RBAC + conflict policy checks,
@@ -2115,5 +2133,8 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_admin_slot_bulk_create.py tests/test_admin_slot_block.py tests/test_admin_slot_delete.py tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `37 passed`.
 - `py -m poetry run ruff check app/modules/scheduling/repository.py app/modules/scheduling/service.py tests/test_admin_slot_create_rules.py tests/test_admin_slot_bulk_create.py` -> `All checks passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_bulk_create_slots_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `103 passed, 21 skipped`.
+- `py -m poetry run ruff check app/modules/admin/repository.py app/modules/admin/service.py app/modules/admin/router.py app/modules/admin/schemas.py tests/test_admin_slot_stats.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_slot_stats.py tests/test_admin_slot_bulk_create.py tests/test_admin_slot_block.py tests/test_admin_slot_delete.py tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `41 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_slot_stats_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `107 passed, 22 skipped`.
 

@@ -400,6 +400,41 @@ class AdminRepository:
         await self.session.flush()
         return slot
 
+    async def list_slot_status_snapshots(
+        self,
+        *,
+        from_utc: datetime | None,
+        to_utc: datetime | None,
+    ) -> list[dict[str, object]]:
+        """Return slot/booking/lesson status snapshots for stats aggregation."""
+        stmt = (
+            select(
+                AvailabilitySlot.id.label("slot_id"),
+                AvailabilitySlot.status.label("slot_status"),
+                Booking.status.label("booking_status"),
+                Lesson.status.label("lesson_status"),
+            )
+            .outerjoin(Booking, Booking.slot_id == AvailabilitySlot.id)
+            .outerjoin(Lesson, Lesson.booking_id == Booking.id)
+        )
+        if from_utc is not None:
+            stmt = stmt.where(AvailabilitySlot.start_at >= from_utc)
+        if to_utc is not None:
+            stmt = stmt.where(AvailabilitySlot.start_at <= to_utc)
+
+        rows = (await self.session.execute(stmt)).all()
+        items: list[dict[str, object]] = []
+        for row in rows:
+            items.append(
+                {
+                    "slot_id": row.slot_id,
+                    "slot_status": row.slot_status,
+                    "booking_status": row.booking_status,
+                    "lesson_status": row.lesson_status,
+                },
+            )
+        return items
+
     async def get_kpi_overview(self) -> dict[str, datetime | int | Decimal]:
         role_counts = await self._count_users_by_role()
         booking_counts = await self._count_bookings_by_status()

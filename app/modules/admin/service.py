@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db_session
 from app.core.enums import (
     BookingStatusEnum,
+    LessonStatusEnum,
     RoleEnum,
     SlotBookingAggregateStatusEnum,
     SlotStatusEnum,
@@ -24,6 +25,7 @@ from app.modules.admin.schemas import (
     AdminOperationsOverviewRead,
     AdminSlotBlockRead,
     AdminSlotListItemRead,
+    AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
 )
@@ -280,6 +282,91 @@ class AdminService:
             blocked_by_admin_id=blocked.blocked_by_admin_id,
             updated_at_utc=blocked.updated_at,
         )
+
+    async def get_slot_stats(
+        self,
+        actor: User,
+        *,
+        from_utc: datetime | None,
+        to_utc: datetime | None,
+    ) -> AdminSlotStatsRead:
+        """Return slot stats with single-final-bucket semantics."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can view slot stats")
+
+        normalized_from_utc = ensure_utc(from_utc) if from_utc is not None else None
+        normalized_to_utc = ensure_utc(to_utc) if to_utc is not None else None
+        if (
+            normalized_from_utc is not None
+            and normalized_to_utc is not None
+            and normalized_from_utc > normalized_to_utc
+        ):
+            raise BusinessRuleException("from_utc must be less than or equal to to_utc")
+
+        rows = await self.repository.list_slot_status_snapshots(
+            from_utc=normalized_from_utc,
+            to_utc=normalized_to_utc,
+        )
+        priority = {
+            "open": 1,
+            "held": 2,
+            "confirmed": 3,
+            "canceled": 4,
+            "completed": 5,
+        }
+        final_bucket_by_slot: dict[UUID, str] = {}
+        for row in rows:
+            slot_id = row["slot_id"]
+            bucket = self._resolve_slot_stats_bucket(
+                slot_status=row["slot_status"],
+                booking_status=row["booking_status"],
+                lesson_status=row["lesson_status"],
+            )
+            current_bucket = final_bucket_by_slot.get(slot_id)
+            if current_bucket is None or priority[bucket] > priority[current_bucket]:
+                final_bucket_by_slot[slot_id] = bucket
+
+        counts = {
+            "open": 0,
+            "held": 0,
+            "confirmed": 0,
+            "canceled": 0,
+            "completed": 0,
+        }
+        for bucket in final_bucket_by_slot.values():
+            counts[bucket] += 1
+
+        return AdminSlotStatsRead(
+            from_utc=normalized_from_utc,
+            to_utc=normalized_to_utc,
+            total_slots=len(final_bucket_by_slot),
+            open_slots=counts["open"],
+            held_slots=counts["held"],
+            confirmed_slots=counts["confirmed"],
+            canceled_slots=counts["canceled"],
+            completed_slots=counts["completed"],
+        )
+
+    @staticmethod
+    def _resolve_slot_stats_bucket(
+        *,
+        slot_status: SlotStatusEnum,
+        booking_status: BookingStatusEnum | None,
+        lesson_status: LessonStatusEnum | None,
+    ) -> str:
+        if lesson_status == LessonStatusEnum.COMPLETED:
+            return "completed"
+        if lesson_status == LessonStatusEnum.CANCELED:
+            return "canceled"
+        if slot_status in {SlotStatusEnum.CANCELED, SlotStatusEnum.BLOCKED}:
+            return "canceled"
+        if booking_status in {BookingStatusEnum.CANCELED, BookingStatusEnum.EXPIRED}:
+            return "canceled"
+        if slot_status == SlotStatusEnum.BOOKED or booking_status == BookingStatusEnum.CONFIRMED:
+            return "confirmed"
+        if slot_status == SlotStatusEnum.HOLD or booking_status == BookingStatusEnum.HOLD:
+            return "held"
+        return "open"
 
 
 async def get_admin_service(session: AsyncSession = Depends(get_db_session)) -> AdminService:

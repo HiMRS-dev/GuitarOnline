@@ -341,6 +341,19 @@ class AdminSlotBulkCreateRead(BaseModel):
     skipped: list[AdminSlotBulkCreateSkippedItemRead]
 
 
+class AdminSlotStatsRead(BaseModel):
+    """Admin slot stats with final-bucket semantics."""
+
+    from_utc: datetime | None
+    to_utc: datetime | None
+    total_slots: int
+    open_slots: int
+    held_slots: int
+    confirmed_slots: int
+    canceled_slots: int
+    completed_slots: int
+
+
 class AdminOperationsOverviewRead(BaseModel):
     """Operational snapshot for admin runbook checks."""
 

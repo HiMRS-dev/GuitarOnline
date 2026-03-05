@@ -20,6 +20,7 @@ from app.modules.admin.schemas import (
     AdminSlotCreateRead,
     AdminSlotCreateRequest,
     AdminSlotListItemRead,
+    AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
 )
@@ -204,6 +205,21 @@ async def bulk_create_admin_slots(
         skipped_count=len(skipped),
         created_slot_ids=[slot.id for slot in created_slots],
         skipped=skipped,
+    )
+
+
+@router.get("/slots/stats", response_model=AdminSlotStatsRead)
+async def get_admin_slot_stats(
+    from_utc: datetime | None = Query(default=None),
+    to_utc: datetime | None = Query(default=None),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminSlotStatsRead:
+    """Return admin slot stats with final bucket semantics."""
+    return await service.get_slot_stats(
+        current_user,
+        from_utc=from_utc,
+        to_utc=to_utc,
     )
 
 

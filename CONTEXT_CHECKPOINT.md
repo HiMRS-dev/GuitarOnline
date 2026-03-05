@@ -3112,3 +3112,34 @@ Latest local checks:
 - `python -m compileall app/modules/notifications/models.py app/modules/notifications/repository.py app/modules/notifications/reminder_worker.py app/modules/lessons/repository.py app/workers/lesson_reminder_24h_worker.py alembic/versions/20260306_0016_notification_idempotency_key.py` -> success.
 - `python -m compileall tests/test_lesson_reminder_worker.py app/modules/notifications/reminder_worker.py app/workers/lesson_reminder_24h_worker.py` -> success.
 
+## 37) Epic G Implementation Progress (Started 2026-03-06)
+
+Implemented in codebase:
+
+1. `G1` app bootstrap (`web-admin`):
+- created new frontend workspace:
+  - `web-admin/` using `Vite + React + TypeScript`.
+- initial scaffold files added:
+  - `web-admin/index.html`,
+  - `web-admin/src/main.tsx`,
+  - `web-admin/src/App.tsx`,
+  - `web-admin/src/styles.css`,
+  - TypeScript config trio (`tsconfig.json`, `tsconfig.app.json`, `tsconfig.node.json`),
+  - `web-admin/vite.config.ts`.
+- baseline tooling added:
+  - ESLint config: `web-admin/eslint.config.mjs`,
+  - Prettier config: `web-admin/prettier.config.mjs`.
+- environment contract added:
+  - `web-admin/.env.example` with `VITE_API_BASE_URL`.
+- package/runtime metadata added:
+  - `web-admin/package.json`,
+  - `web-admin/.gitignore`,
+  - `web-admin/README.md`.
+
+Verification tasks added/updated:
+- static checks:
+  - `rg -n ".{101}" web-admin` -> no overlong lines found.
+
+Latest local checks:
+- Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).
+

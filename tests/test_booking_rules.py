@@ -707,6 +707,9 @@ async def test_admin_cancel_writes_audit_with_refund_decision(
     assert log["entity_id"] == str(booking_id)
     assert log["payload"]["booking_id"] == str(booking_id)
     assert log["payload"]["admin_id"] == str(admin_id)
+    assert log["payload"]["actor_id"] == str(admin_id)
+    assert log["payload"]["old_slot_id"] == str(slot_id)
+    assert log["payload"]["new_slot_id"] is None
     assert log["payload"]["reason"] == "Admin policy cancel"
     assert log["payload"]["refund_returned"] is True
     assert log["payload"]["refund_policy_applied"] == "refunded"
@@ -952,7 +955,9 @@ async def test_admin_reschedule_uses_system_hold_and_writes_audit(
     reschedule_log = next(
         log for log in audit_repo.audit_logs if log["action"] == "admin.booking.reschedule"
     )
+    assert reschedule_log["payload"]["booking_id"] == str(new_booking.id)
     assert reschedule_log["payload"]["admin_id"] == str(admin_id)
+    assert reschedule_log["payload"]["actor_id"] == str(admin_id)
     assert reschedule_log["payload"]["reason"] == "Admin move"
     assert reschedule_log["payload"]["old_slot_id"] == str(old_slot_id)
     assert reschedule_log["payload"]["new_slot_id"] == str(new_slot_id)

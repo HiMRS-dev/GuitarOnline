@@ -2305,6 +2305,26 @@ Implemented in codebase:
   - booking cancel flow boundary tests (`tests/test_booking_rules.py`),
     confirming helper behavior is applied in business flow.
 
+7. `C8` admin audit payload normalization for cancel/reschedule:
+- explicit admin audit actions are finalized and normalized:
+  - `admin.booking.cancel`,
+  - `admin.booking.reschedule`.
+- structured payload shape now includes required trace keys:
+  - `booking_id`,
+  - `old_slot_id`,
+  - `new_slot_id`,
+  - `reason`,
+  - `actor_id`.
+- compatibility keys retained:
+  - `admin_id` remains present for existing consumers.
+- additional admin-cancel metadata preserved:
+  - `refund_returned`,
+  - `refund_policy_applied`,
+  - final booking status.
+- reschedule payload keeps linkage fields:
+  - `old_booking_id`,
+  - `new_booking_id`.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
@@ -2323,6 +2343,8 @@ Verification tasks added/updated:
     for past slot + unexpired HOLD.
   - `tests/test_booking_policy.py` (policy helper 24h boundary coverage).
   - `tests/test_booking_rules.py` extended with cancel refund boundary coverage.
+  - `tests/test_booking_rules.py` extended with
+    admin cancel/reschedule audit payload key assertions (`actor_id`, slot ids, booking id).
 
 Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2338,5 +2360,7 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "concurrent_hold_attempts_on_same_slot_allow_only_one_success or confirm_rejects_hold_when_slot_start_already_passed"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run ruff check app/modules/booking/policy.py app/modules/booking/service.py tests/test_booking_policy.py tests/test_booking_rules.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_booking_policy.py tests/test_booking_rules.py` -> `20 passed`.
+- `py -m poetry run ruff check app/modules/booking/service.py tests/test_booking_rules.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py` -> `17 passed`.
 - full local suite: `py -m poetry run pytest -q` -> `124 passed, 28 skipped`.
 

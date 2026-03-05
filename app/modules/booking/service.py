@@ -298,6 +298,9 @@ class BookingService:
                 payload={
                     "booking_id": str(booking.id),
                     "admin_id": str(actor.id),
+                    "actor_id": str(actor.id),
+                    "old_slot_id": str(booking.slot_id),
+                    "new_slot_id": None,
                     "reason": payload.reason,
                     "refund_returned": refund_returned,
                     "refund_policy_applied": "refunded" if refund_returned else "no_refund",
@@ -378,7 +381,9 @@ class BookingService:
                 entity_type="booking",
                 entity_id=str(new_booking.id),
                 payload={
+                    "booking_id": str(new_booking.id),
                     "admin_id": str(actor.id),
+                    "actor_id": str(actor.id),
                     "old_booking_id": str(old_booking.id),
                     "new_booking_id": str(new_booking.id),
                     "old_slot_id": str(old_booking.slot_id),

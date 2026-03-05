@@ -1,0 +1,44 @@
+export type KpiOverview = {
+  generated_at: string;
+  users_total: number;
+  users_students: number;
+  users_teachers: number;
+  users_admins: number;
+  bookings_total: number;
+  bookings_hold: number;
+  bookings_confirmed: number;
+  bookings_canceled: number;
+  bookings_expired: number;
+  lessons_total: number;
+  lessons_scheduled: number;
+  lessons_completed: number;
+  lessons_canceled: number;
+  payments_total: number;
+  payments_pending: number;
+  payments_succeeded: number;
+  payments_failed: number;
+  payments_refunded: number;
+  payments_succeeded_amount: string;
+  payments_refunded_amount: string;
+  payments_net_amount: string;
+  packages_total: number;
+  packages_active: number;
+  packages_expired: number;
+  packages_depleted: number;
+  packages_canceled: number;
+};
+
+export type KpiSales = {
+  generated_at: string;
+  from_utc: string;
+  to_utc: string;
+  payments_succeeded_count: number;
+  payments_refunded_count: number;
+  payments_succeeded_amount: string;
+  payments_refunded_amount: string;
+  payments_net_amount: string;
+  packages_created_total: number;
+  packages_created_paid: number;
+  packages_created_unpaid: number;
+  packages_created_paid_conversion_rate: string;
+};

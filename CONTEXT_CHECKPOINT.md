@@ -3249,6 +3249,21 @@ Implemented in codebase:
 - deterministic unavailable mode implemented for booking endpoints in bookings panel.
 - table/modals styles extended for bookings operations.
 
+9. `G15` + `G16` + `G17` students/packages/KPI pages:
+- package domain API integration added:
+  - `web-admin/src/features/packages/api.ts`,
+  - `web-admin/src/features/packages/types.ts`.
+- KPI API integration added:
+  - `web-admin/src/features/kpi/api.ts`,
+  - `web-admin/src/features/kpi/types.ts`.
+- students page now consumes Epic D package data (`GET /admin/packages`) and renders aggregated student-level package summary.
+- packages page now consumes Epic D package list with status filter and tabular package lifecycle view.
+- KPI page now consumes:
+  - `GET /admin/kpi/overview`,
+  - `GET /admin/kpi/sales` with configurable UTC date range.
+- deterministic unavailable states added for package/KPI endpoint dependencies.
+- dashboard/table/filter styles expanded for students/packages/KPI views.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
@@ -3259,6 +3274,7 @@ Verification tasks added/updated:
   - `rg -n ".{101}" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/features/teachers/types.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/slots/api.ts web-admin/src/features/slots/types.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/bookings/api.ts web-admin/src/features/bookings/types.ts web-admin/src/styles.css` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/src/admin/pages/StudentsPage.tsx web-admin/src/admin/pages/PackagesPage.tsx web-admin/src/admin/pages/KpiPage.tsx web-admin/src/features/packages/api.ts web-admin/src/features/packages/types.ts web-admin/src/features/kpi/api.ts web-admin/src/features/kpi/types.ts web-admin/src/styles.css` -> no overlong lines found.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

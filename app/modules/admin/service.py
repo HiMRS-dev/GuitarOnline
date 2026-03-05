@@ -22,6 +22,7 @@ from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminSlotBlockRead,
     AdminSlotListItemRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
@@ -33,7 +34,7 @@ from app.shared.exceptions import (
     NotFoundException,
     UnauthorizedException,
 )
-from app.shared.utils import ensure_utc
+from app.shared.utils import ensure_utc, utc_now
 
 
 class AdminService:
@@ -249,6 +250,36 @@ class AdminService:
             )
 
         await self.repository.delete_slot(slot=slot, admin_id=actor.id)
+
+    async def block_slot(
+        self,
+        actor: User,
+        *,
+        slot_id: UUID,
+        reason: str,
+    ) -> AdminSlotBlockRead:
+        """Block slot with reason and audit trace."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can block slots")
+
+        slot = await self.repository.get_slot_by_id(slot_id)
+        if slot is None:
+            raise NotFoundException("Slot not found")
+
+        blocked = await self.repository.block_slot(
+            slot=slot,
+            reason=reason,
+            admin_id=actor.id,
+            blocked_at=utc_now(),
+        )
+        return AdminSlotBlockRead(
+            slot_id=blocked.id,
+            slot_status=blocked.status,
+            block_reason=blocked.block_reason,
+            blocked_at_utc=blocked.blocked_at,
+            blocked_by_admin_id=blocked.blocked_by_admin_id,
+            updated_at_utc=blocked.updated_at,
+        )
 
 
 async def get_admin_service(session: AsyncSession = Depends(get_db_session)) -> AdminService:

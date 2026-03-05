@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey
+from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,13 @@ class AvailabilitySlot(BaseModelMixin, Base):
         SAEnum(SlotStatusEnum, name="slot_status_enum", native_enum=False),
         default=SlotStatusEnum.OPEN,
         nullable=False,
+        index=True,
+    )
+    block_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    blocked_by_admin_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
 

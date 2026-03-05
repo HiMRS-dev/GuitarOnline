@@ -18,6 +18,7 @@ from app.core.enums import (
     PackageStatusEnum,
     PaymentStatusEnum,
     RoleEnum,
+    SlotStatusEnum,
     TeacherStatusEnum,
 )
 from app.modules.admin.models import AdminAction
@@ -365,6 +366,39 @@ class AdminRepository:
         )
         await self.session.delete(slot)
         await self.session.flush()
+
+    async def block_slot(
+        self,
+        *,
+        slot: AvailabilitySlot,
+        reason: str,
+        admin_id: UUID,
+        blocked_at: datetime,
+    ) -> AvailabilitySlot:
+        """Mark slot as blocked and persist block metadata + audit."""
+        previous_status = slot.status
+        slot.status = SlotStatusEnum.BLOCKED
+        slot.block_reason = reason
+        slot.blocked_at = blocked_at
+        slot.blocked_by_admin_id = admin_id
+
+        self.session.add(
+            AuditLog(
+                actor_id=admin_id,
+                action="admin.slot.block",
+                entity_type="availability_slot",
+                entity_id=str(slot.id),
+                payload={
+                    "teacher_id": str(slot.teacher_id),
+                    "from_status": str(previous_status),
+                    "to_status": str(slot.status),
+                    "reason": reason,
+                    "blocked_at_utc": blocked_at.isoformat(),
+                },
+            ),
+        )
+        await self.session.flush()
+        return slot
 
     async def get_kpi_overview(self) -> dict[str, datetime | int | Decimal]:
         role_counts = await self._count_users_by_role()

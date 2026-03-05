@@ -13,6 +13,8 @@ from app.modules.admin.schemas import (
     AdminActionRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminSlotBlockRead,
+    AdminSlotBlockRequest,
     AdminSlotCreateRead,
     AdminSlotCreateRequest,
     AdminSlotListItemRead,
@@ -161,6 +163,17 @@ async def delete_admin_slot(
     """Delete slot when no related bookings exist."""
     await service.delete_slot(current_user, slot_id=slot_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/slots/{slot_id}/block", response_model=AdminSlotBlockRead)
+async def block_admin_slot(
+    slot_id: UUID,
+    payload: AdminSlotBlockRequest,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminSlotBlockRead:
+    """Block slot and persist reason with audit trace."""
+    return await service.block_slot(current_user, slot_id=slot_id, reason=payload.reason)
 
 
 @router.get("/kpi/overview", response_model=AdminKpiOverviewRead)

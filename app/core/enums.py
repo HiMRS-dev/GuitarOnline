@@ -18,6 +18,7 @@ class SlotStatusEnum(StrEnum):
     HOLD = "hold"
     BOOKED = "booked"
     CANCELED = "canceled"
+    BLOCKED = "blocked"
 
 
 class SlotBookingAggregateStatusEnum(StrEnum):

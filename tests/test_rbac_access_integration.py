@@ -463,6 +463,66 @@ async def test_admin_delete_slot_endpoint_returns_409_when_slot_has_related_book
 
 
 @pytest.mark.asyncio
+async def test_admin_block_slot_endpoint_returns_401_403_and_200_and_writes_audit(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    teacher = await _register_and_login(api_client, "teacher")
+    start_at = datetime.now(UTC) + timedelta(days=6, hours=1)
+    end_at = start_at + timedelta(hours=1)
+    create_slot_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "teacher_id": str(teacher.id),
+            "start_at_utc": start_at.isoformat(),
+            "end_at_utc": end_at.isoformat(),
+        },
+    )
+    _assert_status(create_slot_response, 201)
+    slot_id = create_slot_response.json()["slot_id"]
+
+    no_token_response = await api_client.post(
+        f"/admin/slots/{slot_id}/block",
+        json={"reason": "Teacher unavailable"},
+    )
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.post(
+        f"/admin/slots/{slot_id}/block",
+        headers=_auth_headers(student.access_token),
+        json={"reason": "Teacher unavailable"},
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.post(
+        f"/admin/slots/{slot_id}/block",
+        headers=_auth_headers(admin.access_token),
+        json={"reason": "Teacher unavailable"},
+    )
+    _assert_status(admin_response, 200)
+    payload = admin_response.json()
+    assert payload["slot_id"] == slot_id
+    assert payload["slot_status"] == "blocked"
+    assert payload["block_reason"] == "Teacher unavailable"
+
+    logs_response = await api_client.get(
+        "/audit/logs?limit=100&offset=0",
+        headers=_auth_headers(admin.access_token),
+    )
+    _assert_status(logs_response, 200)
+    logs = logs_response.json()["items"]
+    matched = [
+        item
+        for item in logs
+        if item["action"] == "admin.slot.block" and item["entity_id"] == slot_id
+    ]
+    assert matched
+    assert matched[0]["payload"]["reason"] == "Teacher unavailable"
+
+
+@pytest.mark.asyncio
 async def test_teacher_profile_create_forbidden_for_student_and_allowed_for_teacher(
     api_client: httpx.AsyncClient,
 ) -> None:

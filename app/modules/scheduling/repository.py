@@ -84,5 +84,9 @@ class SchedulingRepository:
         status: SlotStatusEnum,
     ) -> AvailabilitySlot:
         slot.status = status
+        if status != SlotStatusEnum.BLOCKED:
+            slot.block_reason = None
+            slot.blocked_at = None
+            slot.blocked_by_admin_id = None
         await self.session.flush()
         return slot

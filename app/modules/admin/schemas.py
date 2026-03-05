@@ -246,6 +246,36 @@ class AdminSlotCreateRead(BaseModel):
     updated_at_utc: datetime
 
 
+class AdminSlotBlockRequest(BaseModel):
+    """Admin request schema for slot blocking."""
+
+    reason: str = Field(min_length=1, max_length=512)
+
+
+class AdminSlotBlockRead(BaseModel):
+    """Admin response schema for blocked slot state."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "slot_id": "41fc173a-0a17-4ebf-8687-951714f1f55f",
+                "slot_status": "blocked",
+                "block_reason": "Teacher unavailable (sick leave)",
+                "blocked_at_utc": "2026-03-05T12:30:00+00:00",
+                "blocked_by_admin_id": "c4ea1016-8586-4602-9fbe-c1100d2057a1",
+                "updated_at_utc": "2026-03-05T12:30:00+00:00",
+            },
+        },
+    )
+
+    slot_id: UUID
+    slot_status: SlotStatusEnum
+    block_reason: str | None
+    blocked_at_utc: datetime | None
+    blocked_by_admin_id: UUID | None
+    updated_at_utc: datetime
+
+
 class AdminOperationsOverviewRead(BaseModel):
     """Operational snapshot for admin runbook checks."""
 

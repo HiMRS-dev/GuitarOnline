@@ -73,7 +73,7 @@ class ManualPaidPaymentProvider:
         return PaymentProviderCreateResult(
             status=PaymentStatusEnum.PENDING,
             external_reference=external_reference,
-            provider_payment_id=None,
+            provider_payment_id=external_reference,
             paid_at=None,
         )
 

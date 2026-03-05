@@ -60,6 +60,8 @@ class Payment(BaseModelMixin, Base):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    provider_name: Mapped[str] = mapped_column(String(64), nullable=False, default="manual_paid")
+    provider_payment_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[PaymentStatusEnum] = mapped_column(
         SAEnum(PaymentStatusEnum, name="payment_status_enum", native_enum=False),
         default=PaymentStatusEnum.PENDING,

@@ -66,12 +66,16 @@ class BillingRepository:
         package_id: UUID,
         amount: Decimal,
         currency: str,
+        provider_name: str,
+        provider_payment_id: str | None,
         external_reference: str | None,
     ) -> Payment:
         payment = Payment(
             package_id=package_id,
             amount=amount,
             currency=currency.upper(),
+            provider_name=provider_name.strip().lower(),
+            provider_payment_id=provider_payment_id,
             external_reference=external_reference,
             status=PaymentStatusEnum.PENDING,
         )
@@ -88,6 +92,13 @@ class BillingRepository:
         external_reference: str,
     ) -> Payment | None:
         stmt = select(Payment).where(Payment.external_reference == external_reference)
+        return await self.session.scalar(stmt)
+
+    async def get_payment_by_provider_payment_id(
+        self,
+        provider_payment_id: str,
+    ) -> Payment | None:
+        stmt = select(Payment).where(Payment.provider_payment_id == provider_payment_id)
         return await self.session.scalar(stmt)
 
     async def get_payment_student_id(self, payment_id: UUID) -> UUID | None:

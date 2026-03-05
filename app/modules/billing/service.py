@@ -359,6 +359,8 @@ class BillingService:
             package_id=payload.package_id,
             amount=Decimal(payload.amount),
             currency=payload.currency,
+            provider_name=provider.name,
+            provider_payment_id=provider_create_result.provider_payment_id,
             external_reference=(
                 provider_create_result.external_reference or payload.external_reference
             ),
@@ -373,8 +375,8 @@ class BillingService:
                 "amount": str(payment.amount),
                 "currency": payment.currency,
                 "external_reference": payment.external_reference,
-                "provider_name": provider.name,
-                "provider_payment_id": provider_create_result.provider_payment_id,
+                "provider_name": payment.provider_name,
+                "provider_payment_id": payment.provider_payment_id,
             },
         )
         await self.audit_repository.create_outbox_event(
@@ -385,7 +387,7 @@ class BillingService:
                 "payment_id": str(payment.id),
                 "package_id": str(payment.package_id),
                 "status": str(payment.status),
-                "provider_name": provider.name,
+                "provider_name": payment.provider_name,
             },
         )
         if provider_create_result.status != payment.status:
@@ -437,6 +439,10 @@ class BillingService:
         if payment is None and webhook_result.external_reference:
             payment = await self.repository.get_payment_by_external_reference(
                 webhook_result.external_reference,
+            )
+        if payment is None and webhook_result.provider_payment_id:
+            payment = await self.repository.get_payment_by_provider_payment_id(
+                webhook_result.provider_payment_id,
             )
         if payment is None:
             raise NotFoundException("Payment not found for webhook payload")

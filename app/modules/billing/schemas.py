@@ -85,6 +85,8 @@ class PaymentRead(BaseModel):
     package_id: UUID
     amount: Decimal
     currency: str
+    provider_name: str
+    provider_payment_id: str | None
     status: PaymentStatusEnum
     external_reference: str | None
     paid_at: datetime | None

@@ -2588,6 +2588,34 @@ Implemented in codebase:
   - existing payment API contracts remain valid (legacy clients can omit `provider_name`,
     defaults to `manual_paid`).
 
+10. `D10` payments webhook readiness (`provider_name`, `provider_payment_id`, unique index):
+- payments persistence model extended with provider identity fields:
+  - `Payment.provider_name` (non-null, default `manual_paid` for new rows),
+  - `Payment.provider_payment_id` (nullable).
+- migration added:
+  - `alembic/versions/20260306_0011_payment_provider_identity_fields.py`:
+    - adds both fields,
+    - backfills existing rows with `provider_name='manual_paid'`,
+    - enforces non-null `provider_name`,
+    - adds partial unique index:
+      - `uq_payments_provider_payment_id_not_null`
+      - unique on `provider_payment_id` when not null.
+- billing repository/service contracts updated for provider identity flow:
+  - payment create path now persists:
+    - `provider_name`,
+    - `provider_payment_id`,
+  - webhook resolution path can find payment by:
+    - `payment_id`,
+    - `external_reference`,
+    - `provider_payment_id` (new fallback).
+- API response contract extended:
+  - `PaymentRead` now returns:
+    - `provider_name`,
+    - `provider_payment_id`.
+- compatibility notes:
+  - `provider_name` in create request remains optional for legacy clients
+    (defaults to `manual_paid`).
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2623,6 +2651,9 @@ Verification tasks added/updated:
     - payment create path routes via provider registry,
     - webhook path updates payment status through provider result,
     - ignored webhook payload produces no side-effects.
+  - `tests/test_billing_payment_rules.py` extended with D10 webhook-readiness checks:
+    - provider identity fields persisted on payment create,
+    - webhook can resolve payment by `provider_payment_id`.
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2647,4 +2678,6 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_lessons_complete.py tests/test_lessons_no_show.py` -> `13 passed`.
 - `py -m poetry run ruff check app/modules/billing/providers.py app/modules/billing/service.py app/modules/billing/repository.py app/modules/billing/schemas.py tests/test_billing_payment_rules.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_billing_payment_rules.py` -> `20 passed`.
+- `py -m poetry run ruff check app/modules/billing/models.py app/modules/billing/repository.py app/modules/billing/providers.py app/modules/billing/schemas.py app/modules/billing/service.py alembic/versions/20260306_0011_payment_provider_identity_fields.py tests/test_billing_payment_rules.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_billing_payment_rules.py` -> `21 passed`.
 

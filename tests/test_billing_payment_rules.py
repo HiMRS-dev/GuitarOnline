@@ -28,6 +28,8 @@ class FakePayment:
     package_id: UUID = field(default_factory=uuid4)
     amount: Decimal = Decimal("0")
     currency: str = "USD"
+    provider_name: str = "manual_paid"
+    provider_payment_id: str | None = None
     external_reference: str | None = None
     paid_at: datetime | None = None
 
@@ -63,6 +65,15 @@ class FakeBillingRepository:
     ) -> FakePayment | None:
         for payment in self._payments.values():
             if payment.external_reference == external_reference:
+                return payment
+        return None
+
+    async def get_payment_by_provider_payment_id(
+        self,
+        provider_payment_id: str,
+    ) -> FakePayment | None:
+        for payment in self._payments.values():
+            if payment.provider_payment_id == provider_payment_id:
                 return payment
         return None
 
@@ -106,6 +117,8 @@ class FakeBillingRepository:
         package_id: UUID,
         amount: Decimal,
         currency: str,
+        provider_name: str,
+        provider_payment_id: str | None,
         external_reference: str | None,
     ) -> FakePayment:
         payment = FakePayment(
@@ -113,6 +126,8 @@ class FakeBillingRepository:
             package_id=package_id,
             amount=amount,
             currency=currency.upper(),
+            provider_name=provider_name,
+            provider_payment_id=provider_payment_id,
             external_reference=external_reference,
             status=PaymentStatusEnum.PENDING,
         )
@@ -641,6 +656,8 @@ async def test_create_payment_routes_through_provider_abstraction() -> None:
     assert len(provider.create_calls) == 1
     assert provider.create_calls[0]["package_id"] == package_id
     assert payment.external_reference == "provider-ref-001"
+    assert payment.provider_name == "manual_paid"
+    assert payment.provider_payment_id == "provider-pay-001"
     assert audit_repo.audit_logs[0]["payload"]["provider_name"] == "manual_paid"
     assert audit_repo.audit_logs[0]["payload"]["provider_payment_id"] == "provider-pay-001"
 
@@ -680,6 +697,39 @@ async def test_handle_payment_webhook_updates_payment_status_by_provider_result(
     assert len(provider.webhook_calls) == 1
     assert audit_repo.audit_logs[0]["action"] == "billing.payment.webhook.update"
     assert audit_repo.audit_logs[0]["actor_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_handle_payment_webhook_can_resolve_payment_by_provider_payment_id() -> None:
+    payment_id = uuid4()
+    payment = FakePayment(
+        id=payment_id,
+        package_id=uuid4(),
+        status=PaymentStatusEnum.PENDING,
+        paid_at=None,
+        provider_payment_id="provider-pay-xyz",
+    )
+    provider = FakePaymentProvider(
+        webhook_result_by_payload={
+            "payment.succeeded": PaymentWebhookResult(
+                provider_payment_id="provider-pay-xyz",
+                status=PaymentStatusEnum.SUCCEEDED,
+            ),
+        },
+    )
+    service, _ = make_service(
+        payments={payment_id: payment},
+        provider_registry=PaymentProviderRegistry(providers=[provider]),
+    )
+
+    updated = await service.handle_payment_webhook(
+        "manual_paid",
+        {"event": "payment.succeeded"},
+    )
+
+    assert updated is not None
+    assert updated.id == payment_id
+    assert updated.status == PaymentStatusEnum.SUCCEEDED
 
 
 @pytest.mark.asyncio

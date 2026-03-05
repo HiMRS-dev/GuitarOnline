@@ -3340,11 +3340,22 @@ Implemented in codebase:
 - added missing reminder worker runbook commands:
   - `python -m app.workers.lesson_reminder_24h_worker` (`once`/`loop`).
 
+3. `H3` health/metrics explicit validation in smoke/ops runbooks:
+- release runbook updated:
+  - `ops/release_checklist.md` now includes mandatory scripted smoke run command:
+    - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`.
+- added explicit post-smoke probe commands (do-not-skip) for:
+  - `/health`,
+  - `/ready`,
+  - `/metrics` with metrics-family grep validation.
+- README deployment runbook synchronized with the same explicit probe verification commands.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
   - `python -m compileall scripts/deploy_smoke_check.py` -> success.
   - `rg -n "Development Runbook|Backend local setup|Demo seed data|Workers local run|NOTIFICATIONS_OUTBOX_WORKER_MODE|lesson_reminder_24h_worker|web-admin local run" README.md` -> expected entries found.
+  - `rg -n "deploy_smoke_check.py|health/readiness/metrics verification|/metrics" ops/release_checklist.md README.md` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

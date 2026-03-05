@@ -87,6 +87,12 @@ Production-ready modular monolith backend for an online guitar school.
   - `grafana` (dashboards UI, port `3000`).
 - Apply migrations after deploy:
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
+- Run post-deploy smoke script:
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
+- Explicit ops probe verification after smoke:
+  - `curl -fsS http://localhost:8000/health`
+  - `curl -fsS http://localhost:8000/ready`
+  - `curl -fsS http://localhost:8000/metrics | grep -E "^(http_requests_total|http_request_duration_seconds)"`
 
 ### One-Click Deploy Pipeline
 

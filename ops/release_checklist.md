@@ -58,6 +58,12 @@ Use this checklist before promoting a build to a target environment.
 
 ## 5) Smoke Tests
 
+- Required scripted smoke run:
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
+- Explicit health/readiness/metrics verification (do not skip):
+  - `curl -fsS http://localhost:8000/health`
+  - `curl -fsS http://localhost:8000/ready`
+  - `curl -fsS http://localhost:8000/metrics | grep -E "^(http_requests_total|http_request_duration_seconds)"`
 - API health:
   - `GET /health` returns `200`.
 - API readiness:

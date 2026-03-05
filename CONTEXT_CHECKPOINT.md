@@ -3430,6 +3430,25 @@ Implemented in codebase:
   - `listTeachers({ status })` maps to `GET /admin/teachers?status=...`.
 - UX styling added for quick-filter controls in `web-admin/src/styles.css`.
 
+10. `H10` release cut (`smoke + sanity + security`) and release artifacts:
+- security gate execution (local):
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py`
+  - result: `21 passed`.
+- deploy + smoke gate (remote workflow):
+  - run id: `22721067857`,
+  - URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22721067857`,
+  - result: `success`.
+- load-sanity gate (remote workflow):
+  - run id: `22721101896`,
+  - URL: `https://github.com/HiMRS-dev/GuitarOnline/actions/runs/22721101896`,
+  - result: `success`.
+- release tooling additions for repeatable H10 execution:
+  - `.github/workflows/load-sanity.yml` (`workflow_dispatch` sanity gate on target host),
+  - `scripts/deploy_smoke_check.py` now supports `DEPLOY_SMOKE_BASE_URL`,
+  - `scripts/load_sanity.py` hardened with legacy endpoint fallback and deterministic guardrails.
+- release notes published:
+  - `docs/releases/v1.1.0.md` with migration + rollback notes and gate evidence.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
@@ -3449,6 +3468,10 @@ Verification tasks added/updated:
   - `rg -n "load_sanity.py|Load sanity passed|LOAD_SANITY_TARGET_SLOTS|~1000" README.md ops/release_checklist.md scripts/load_sanity.py` -> expected entries found.
   - `rg -n ".{101}" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/shared/storage/adminFilters.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n "quick-filter|ADMIN_TEACHER_FILTER_STORAGE_KEY|go_admin_calendar_teacher_id|status filter" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/shared/storage/adminFilters.ts web-admin/src/styles.css` -> expected entries found.
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` -> `21 passed`.
+  - `gh run watch 22721067857 --interval 5` -> deploy workflow `success`.
+  - `gh run watch 22721101896 --interval 5` -> load-sanity workflow `success`.
+  - `rg -n "v1.1.0|Verification Evidence|Migration Notes|Rollback Notes" docs/releases/v1.1.0.md README.md` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

@@ -453,6 +453,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `ops/release_checklist.md`
 - Reliability hardening runbook (health checks, log retention, monitoring, rollback drills):
   - `ops/production_hardening_checklist.md`
+- Latest release notes:
+  - `docs/releases/v1.1.0.md`
 
 ## Docker Network Mitigation
 

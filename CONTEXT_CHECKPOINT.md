@@ -3058,6 +3058,18 @@ Implemented in codebase:
   - idempotency skip when key already exists,
   - successful `sent` status for newly created reminder notification.
 
+8. `F8` Telegram extensibility documentation:
+- added integration guide:
+  - `docs/NOTIFICATIONS_INTEGRATIONS.md`.
+- documented provider contract:
+  - `send(message) -> DeliveryResult`.
+- documented channel-adapter approach:
+  - transport-specific payload builders per channel (`email`, `telegram`).
+- documented retry/error handling expectations:
+  - retryable vs non-retryable classification,
+  - worker-owned retry path and status transitions.
+- documented idempotency/observability expectations for notification delivery providers.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_notification_templates.py` added for:
@@ -3087,6 +3099,7 @@ Verification tasks added/updated:
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/notifications` role check (`401/403/200`).
   - `tests/test_lesson_reminder_worker.py` added as focused reminder-generation coverage for Epic F.
+  - `docs/NOTIFICATIONS_INTEGRATIONS.md` added as extensibility contract for new delivery channels.
 
 Latest local checks:
 - `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).

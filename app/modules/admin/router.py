@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query, status
 
-from app.core.enums import RoleEnum
+from app.core.enums import RoleEnum, TeacherStatusEnum
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminActionRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminTeacherDetailRead,
+    AdminTeacherListItemRead,
 )
 from app.modules.admin.service import AdminService, get_admin_service
 from app.modules.identity.service import require_roles
@@ -39,6 +43,59 @@ async def list_admin_actions(
     items, total = await service.list_actions(current_user, pagination.limit, pagination.offset)
     serialized = [AdminActionRead.model_validate(item) for item in items]
     return build_page(serialized, total, pagination)
+
+
+@router.get("/teachers", response_model=Page[AdminTeacherListItemRead])
+async def list_admin_teachers(
+    status_filter: TeacherStatusEnum | None = Query(default=None, alias="status"),
+    verified: bool | None = Query(default=None),
+    q: str | None = Query(default=None, min_length=1, max_length=255),
+    tag: str | None = Query(default=None, min_length=1, max_length=64),
+    pagination=Depends(get_pagination_params),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> Page[AdminTeacherListItemRead]:
+    """List teachers for admin filters by status/verification/query/tag."""
+    items, total = await service.list_teachers(
+        current_user,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        status=status_filter,
+        verified=verified,
+        q=q,
+        tag=tag,
+    )
+    return build_page(items, total, pagination)
+
+
+@router.get("/teachers/{teacher_id}", response_model=AdminTeacherDetailRead)
+async def get_admin_teacher_detail(
+    teacher_id: UUID,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminTeacherDetailRead:
+    """Get teacher detail for admin views."""
+    return await service.get_teacher_detail(current_user, teacher_id=teacher_id)
+
+
+@router.post("/teachers/{teacher_id}/verify", response_model=AdminTeacherDetailRead)
+async def verify_admin_teacher(
+    teacher_id: UUID,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminTeacherDetailRead:
+    """Verify teacher profile from admin panel."""
+    return await service.verify_teacher(current_user, teacher_id=teacher_id)
+
+
+@router.post("/teachers/{teacher_id}/disable", response_model=AdminTeacherDetailRead)
+async def disable_admin_teacher(
+    teacher_id: UUID,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminTeacherDetailRead:
+    """Disable teacher profile from admin panel."""
+    return await service.disable_teacher(current_user, teacher_id=teacher_id)
 
 
 @router.get("/kpi/overview", response_model=AdminKpiOverviewRead)

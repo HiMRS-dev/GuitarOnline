@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, BaseModelMixin
 from app.core.enums import TeacherStatusEnum
+
+if TYPE_CHECKING:
+    from app.modules.identity.models import User
 
 
 class TeacherProfile(BaseModelMixin, Base):
@@ -33,4 +37,30 @@ class TeacherProfile(BaseModelMixin, Base):
         index=True,
     )
 
-    user = relationship("User", back_populates="teacher_profile")
+    user: Mapped[User] = relationship("User", back_populates="teacher_profile")
+    tags: Mapped[list[TeacherProfileTag]] = relationship(
+        back_populates="teacher_profile",
+        cascade="all, delete-orphan",
+    )
+
+
+class TeacherProfileTag(BaseModelMixin, Base):
+    """Teacher profile tag used for admin filtering."""
+
+    __tablename__ = "teacher_profile_tags"
+    __table_args__ = (
+        UniqueConstraint(
+            "teacher_profile_id",
+            "tag",
+            name="uq_teacher_profile_tags_profile_tag",
+        ),
+    )
+
+    teacher_profile_id: Mapped[UUID] = mapped_column(
+        ForeignKey("teacher_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tag: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+
+    teacher_profile: Mapped[TeacherProfile] = relationship(back_populates="tags")

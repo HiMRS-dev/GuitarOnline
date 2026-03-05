@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
-from app.core.enums import RoleEnum
+from app.core.enums import RoleEnum, TeacherStatusEnum
 from app.modules.admin.models import AdminAction
 from app.modules.admin.repository import AdminRepository
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminTeacherDetailRead,
+    AdminTeacherListItemRead,
 )
 from app.modules.identity.models import User
-from app.shared.exceptions import UnauthorizedException
+from app.shared.exceptions import NotFoundException, UnauthorizedException
 
 
 class AdminService:
@@ -85,6 +89,77 @@ class AdminService:
             },
         )
         return AdminOperationsOverviewRead(**snapshot)
+
+    async def list_teachers(
+        self,
+        actor: User,
+        *,
+        limit: int,
+        offset: int,
+        status: TeacherStatusEnum | None,
+        verified: bool | None,
+        q: str | None,
+        tag: str | None,
+    ) -> tuple[list[AdminTeacherListItemRead], int]:
+        """List teachers with admin filters for scheduling operations."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can list teachers")
+
+        items, total = await self.repository.list_teachers(
+            limit=limit,
+            offset=offset,
+            status=status,
+            verified=verified,
+            q=q,
+            tag=tag,
+        )
+        return [AdminTeacherListItemRead.model_validate(item) for item in items], total
+
+    async def get_teacher_detail(
+        self,
+        actor: User,
+        *,
+        teacher_id: UUID,
+    ) -> AdminTeacherDetailRead:
+        """Get teacher detail for admin operations."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can view teacher detail")
+
+        item = await self.repository.get_teacher_detail(teacher_id=teacher_id)
+        if item is None:
+            raise NotFoundException("Teacher profile not found")
+
+        return AdminTeacherDetailRead.model_validate(item)
+
+    async def verify_teacher(
+        self,
+        actor: User,
+        *,
+        teacher_id: UUID,
+    ) -> AdminTeacherDetailRead:
+        """Verify teacher profile and return updated detail."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can verify teachers")
+
+        item = await self.repository.verify_teacher(teacher_id=teacher_id, admin_id=actor.id)
+        if item is None:
+            raise NotFoundException("Teacher profile not found")
+        return AdminTeacherDetailRead.model_validate(item)
+
+    async def disable_teacher(
+        self,
+        actor: User,
+        *,
+        teacher_id: UUID,
+    ) -> AdminTeacherDetailRead:
+        """Disable teacher profile and user account."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can disable teachers")
+
+        item = await self.repository.disable_teacher(teacher_id=teacher_id, admin_id=actor.id)
+        if item is None:
+            raise NotFoundException("Teacher profile not found")
+        return AdminTeacherDetailRead.model_validate(item)
 
 
 async def get_admin_service(session: AsyncSession = Depends(get_db_session)) -> AdminService:

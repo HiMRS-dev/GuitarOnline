@@ -1911,3 +1911,74 @@ Verification tasks added/updated:
   - `tests/test_rbac_access_integration.py`,
   - `tests/test_config_security.py` extended for new settings behavior.
 
+## 32) Epic B Implementation Progress (Started 2026-03-05)
+
+Implemented in codebase:
+
+1. `B1` admin teacher list endpoint with filters:
+- added `GET /api/v1/admin/teachers` (admin-only) with filters:
+  - `status`,
+  - `verified`,
+  - `q` (display name + email),
+  - `tag`,
+  - plus existing pagination (`limit`, `offset`).
+- endpoint returns admin list items with:
+  - `teacher_id` (uses `users.id`),
+  - `profile_id`,
+  - `status`,
+  - `verified`,
+  - `tags`,
+  - `created_at_utc`,
+  - `updated_at_utc`.
+
+2. Conflict resolution for `B1` (`tag` filter dependency):
+- identified conflict: `tag` filtering required relational tags storage that did not exist.
+- implemented foundation before endpoint finalization:
+  - new table/model `teacher_profile_tags`,
+  - profile-tag uniqueness (`teacher_profile_id + tag`),
+  - indexes for `teacher_profile_id` and `tag`,
+  - SQLAlchemy relationships on `TeacherProfile`.
+- alembic migration added:
+  - `20260305_0003_teacher_profile_tags.py`.
+
+3. `B2` admin teacher detail endpoint:
+- added `GET /api/v1/admin/teachers/{teacher_id}` (admin-only),
+  where `teacher_id = users.id` (as fixed in Epic B v1.1 decisions).
+- endpoint returns detailed teacher card with:
+  - profile fields (`display_name`, `bio`, `experience_years`),
+  - moderation fields (`status`, `verified`),
+  - account state (`is_active`),
+  - tags (`teacher_profile_tags`),
+  - UTC timestamps (`created_at_utc`, `updated_at_utc`).
+- missing teacher profile returns unified `404` with error envelope.
+
+4. `B3` admin teacher moderation endpoints (`verify` / `disable`) + audit:
+- added admin-only endpoints:
+  - `POST /api/v1/admin/teachers/{teacher_id}/verify`,
+  - `POST /api/v1/admin/teachers/{teacher_id}/disable`.
+- moderation behavior aligned with Epic B v1.1 decisions:
+  - `verify`: sets `teacher_status=verified` and `is_approved=true`,
+  - `disable`: sets `teacher_status=disabled`, `is_approved=false`,
+    and `users.is_active=false`.
+- both endpoints write immutable entries to `audit_logs` with actions:
+  - `admin.teacher.verify`,
+  - `admin.teacher.disable`,
+  including before/after moderation payload snapshot.
+
+Verification tasks added/updated:
+- tests:
+  - `tests/test_admin_teachers_list.py` (service-level behavior + admin role enforcement),
+  - `tests/test_admin_teacher_detail.py` (service-level detail behavior + `404`/RBAC),
+  - `tests/test_admin_teacher_moderation.py` (service-level verify/disable behavior + `404`/RBAC),
+  - `tests/test_rbac_access_integration.py` extended with `/admin/teachers` and
+    `/admin/teachers/{teacher_id}` RBAC checks,
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/teachers/{teacher_id}/verify` and `/disable` RBAC checks and audit-log trace check.
+
+Latest local checks:
+- `py -m poetry run ruff check app/modules/admin app/modules/teachers tests/test_admin_teacher_moderation.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `15 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_detail_endpoint or admin_teachers_endpoint"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_verify_endpoint or admin_teacher_disable_endpoint or admin_teacher_moderation_endpoints_write_audit_logs"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `81 passed, 15 skipped`.
+

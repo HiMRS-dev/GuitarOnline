@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.enums import TeacherStatusEnum
+
 
 class AdminActionCreate(BaseModel):
     """Create admin action request."""
@@ -92,6 +94,74 @@ class AdminKpiOverviewRead(BaseModel):
     packages_active: int
     packages_expired: int
     packages_canceled: int
+
+
+class AdminTeacherListItemRead(BaseModel):
+    """Admin teacher list item with search/filter metadata."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "teacher_id": "8a937f92-0132-4691-b735-c224078afaef",
+                "profile_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
+                "email": "teacher@example.com",
+                "display_name": "Alice Blues",
+                "status": "verified",
+                "verified": True,
+                "is_active": True,
+                "tags": ["jazz", "fingerstyle"],
+                "created_at_utc": "2026-03-05T10:00:00+00:00",
+                "updated_at_utc": "2026-03-05T10:15:00+00:00",
+            },
+        },
+    )
+
+    teacher_id: UUID
+    profile_id: UUID
+    email: str
+    display_name: str
+    status: TeacherStatusEnum
+    verified: bool
+    is_active: bool
+    tags: list[str]
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
+class AdminTeacherDetailRead(BaseModel):
+    """Admin teacher detail with profile metadata and moderation fields."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "teacher_id": "8a937f92-0132-4691-b735-c224078afaef",
+                "profile_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
+                "email": "teacher@example.com",
+                "display_name": "Alice Blues",
+                "bio": "Fingerstyle and jazz guitar teacher.",
+                "experience_years": 8,
+                "status": "verified",
+                "verified": True,
+                "is_active": True,
+                "tags": ["jazz", "fingerstyle"],
+                "created_at_utc": "2026-03-05T10:00:00+00:00",
+                "updated_at_utc": "2026-03-05T10:15:00+00:00",
+            },
+        },
+    )
+
+    teacher_id: UUID
+    profile_id: UUID
+    email: str
+    display_name: str
+    bio: str
+    experience_years: int
+    status: TeacherStatusEnum
+    verified: bool
+    is_active: bool
+    tags: list[str]
+    created_at_utc: datetime
+    updated_at_utc: datetime
 
 
 class AdminOperationsOverviewRead(BaseModel):

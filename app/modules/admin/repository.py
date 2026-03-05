@@ -6,8 +6,9 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.enums import (
     BookingStatusEnum,
@@ -17,14 +18,16 @@ from app.core.enums import (
     PackageStatusEnum,
     PaymentStatusEnum,
     RoleEnum,
+    TeacherStatusEnum,
 )
 from app.modules.admin.models import AdminAction
-from app.modules.audit.models import OutboxEvent
+from app.modules.audit.models import AuditLog, OutboxEvent
 from app.modules.billing.models import LessonPackage, Payment
 from app.modules.booking.models import Booking
 from app.modules.identity.models import Role, User
 from app.modules.lessons.models import Lesson
 from app.modules.notifications.models import Notification
+from app.modules.teachers.models import TeacherProfile, TeacherProfileTag
 from app.shared.utils import utc_now
 
 
@@ -61,6 +64,228 @@ class AdminRepository:
         stmt = base_stmt.order_by(AdminAction.created_at.desc()).limit(limit).offset(offset)
         items = (await self.session.scalars(stmt)).all()
         return items, total
+
+    async def list_teachers(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        status: TeacherStatusEnum | None,
+        verified: bool | None,
+        q: str | None,
+        tag: str | None,
+    ) -> tuple[list[dict[str, object]], int]:
+        """List teachers for admin scheduling and moderation flows."""
+        normalized_q = q.strip() if q else None
+        normalized_tag = tag.strip().lower() if tag else None
+
+        base_stmt: Select[tuple[UUID]] = (
+            select(TeacherProfile.id)
+            .join(User, User.id == TeacherProfile.user_id)
+            .join(Role, Role.id == User.role_id)
+            .where(Role.name == RoleEnum.TEACHER)
+        )
+
+        if status is not None:
+            base_stmt = base_stmt.where(TeacherProfile.status == status)
+        if verified is not None:
+            base_stmt = base_stmt.where(TeacherProfile.is_approved.is_(verified))
+        if normalized_q:
+            pattern = f"%{normalized_q}%"
+            base_stmt = base_stmt.where(
+                or_(
+                    TeacherProfile.display_name.ilike(pattern),
+                    User.email.ilike(pattern),
+                ),
+            )
+        if normalized_tag:
+            base_stmt = base_stmt.join(
+                TeacherProfileTag,
+                TeacherProfileTag.teacher_profile_id == TeacherProfile.id,
+            ).where(func.lower(TeacherProfileTag.tag) == normalized_tag)
+
+        teacher_ids_stmt = base_stmt.distinct()
+        total_stmt = select(func.count()).select_from(teacher_ids_stmt.subquery())
+        total = int((await self.session.scalar(total_stmt)) or 0)
+
+        paged_ids_stmt = (
+            teacher_ids_stmt.order_by(TeacherProfile.created_at.desc()).limit(limit).offset(offset)
+        )
+        teacher_profile_ids = list((await self.session.scalars(paged_ids_stmt)).all())
+        if not teacher_profile_ids:
+            return [], total
+
+        profiles_stmt = (
+            select(TeacherProfile)
+            .where(TeacherProfile.id.in_(teacher_profile_ids))
+            .options(
+                selectinload(TeacherProfile.user),
+                selectinload(TeacherProfile.tags),
+            )
+        )
+        profiles = (await self.session.scalars(profiles_stmt)).all()
+        profile_by_id = {profile.id: profile for profile in profiles}
+
+        items: list[dict[str, object]] = []
+        for profile_id in teacher_profile_ids:
+            profile = profile_by_id.get(profile_id)
+            if profile is None:
+                continue
+
+            serialized = self._serialize_teacher_profile(profile)
+            if serialized is None:
+                continue
+            items.append(serialized)
+
+        return items, total
+
+    async def get_teacher_detail(self, *, teacher_id: UUID) -> dict[str, object] | None:
+        """Get teacher detail by teacher user id."""
+        profile = await self._get_teacher_profile_by_user_id(teacher_id=teacher_id)
+        if profile is None:
+            return None
+
+        return self._serialize_teacher_profile(profile, include_profile_fields=True)
+
+    async def verify_teacher(
+        self,
+        *,
+        teacher_id: UUID,
+        admin_id: UUID,
+    ) -> dict[str, object] | None:
+        """Verify teacher profile and write audit trail."""
+        profile = await self._get_teacher_profile_by_user_id(
+            teacher_id=teacher_id,
+            lock_for_update=True,
+        )
+        if profile is None:
+            return None
+
+        user = profile.user
+        if user is None:
+            return None
+
+        previous_status = profile.status
+        previous_is_approved = profile.is_approved
+
+        profile.status = TeacherStatusEnum.VERIFIED
+        profile.is_approved = True
+
+        self.session.add(
+            AuditLog(
+                actor_id=admin_id,
+                action="admin.teacher.verify",
+                entity_type="teacher_profile",
+                entity_id=str(profile.id),
+                payload={
+                    "teacher_id": str(profile.user_id),
+                    "from_status": str(previous_status),
+                    "to_status": str(profile.status),
+                    "from_is_approved": previous_is_approved,
+                    "to_is_approved": profile.is_approved,
+                    "user_is_active": user.is_active,
+                },
+            ),
+        )
+        await self.session.flush()
+        return self._serialize_teacher_profile(profile, include_profile_fields=True)
+
+    async def disable_teacher(
+        self,
+        *,
+        teacher_id: UUID,
+        admin_id: UUID,
+    ) -> dict[str, object] | None:
+        """Disable teacher profile and user account and write audit trail."""
+        profile = await self._get_teacher_profile_by_user_id(
+            teacher_id=teacher_id,
+            lock_for_update=True,
+        )
+        if profile is None:
+            return None
+
+        user = profile.user
+        if user is None:
+            return None
+
+        previous_status = profile.status
+        previous_is_approved = profile.is_approved
+        previous_is_active = user.is_active
+
+        profile.status = TeacherStatusEnum.DISABLED
+        profile.is_approved = False
+        user.is_active = False
+
+        self.session.add(
+            AuditLog(
+                actor_id=admin_id,
+                action="admin.teacher.disable",
+                entity_type="teacher_profile",
+                entity_id=str(profile.id),
+                payload={
+                    "teacher_id": str(profile.user_id),
+                    "from_status": str(previous_status),
+                    "to_status": str(profile.status),
+                    "from_is_approved": previous_is_approved,
+                    "to_is_approved": profile.is_approved,
+                    "from_user_is_active": previous_is_active,
+                    "to_user_is_active": user.is_active,
+                },
+            ),
+        )
+        await self.session.flush()
+        return self._serialize_teacher_profile(profile, include_profile_fields=True)
+
+    async def _get_teacher_profile_by_user_id(
+        self,
+        *,
+        teacher_id: UUID,
+        lock_for_update: bool = False,
+    ) -> TeacherProfile | None:
+        stmt = (
+            select(TeacherProfile)
+            .join(User, User.id == TeacherProfile.user_id)
+            .join(Role, Role.id == User.role_id)
+            .where(
+                TeacherProfile.user_id == teacher_id,
+                Role.name == RoleEnum.TEACHER,
+            )
+            .options(
+                selectinload(TeacherProfile.user),
+                selectinload(TeacherProfile.tags),
+            )
+        )
+        if lock_for_update:
+            stmt = stmt.with_for_update()
+        return await self.session.scalar(stmt)
+
+    def _serialize_teacher_profile(
+        self,
+        profile: TeacherProfile,
+        *,
+        include_profile_fields: bool = False,
+    ) -> dict[str, object] | None:
+        user = profile.user
+        if user is None:
+            return None
+
+        tags = sorted({tag_row.tag for tag_row in profile.tags}, key=str.lower)
+        data: dict[str, object] = {
+            "teacher_id": profile.user_id,
+            "profile_id": profile.id,
+            "email": user.email,
+            "display_name": profile.display_name,
+            "status": profile.status,
+            "verified": profile.is_approved,
+            "is_active": user.is_active,
+            "tags": tags,
+            "created_at_utc": profile.created_at,
+            "updated_at_utc": profile.updated_at,
+        }
+        if include_profile_fields:
+            data["bio"] = profile.bio
+            data["experience_years"] = profile.experience_years
+        return data
 
     async def get_kpi_overview(self) -> dict[str, datetime | int | Decimal]:
         role_counts = await self._count_users_by_role()

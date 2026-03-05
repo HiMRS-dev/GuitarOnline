@@ -94,6 +94,50 @@ Production-ready modular monolith backend for an online guitar school.
   - `curl -fsS http://localhost:8000/ready`
   - `curl -fsS http://localhost:8000/metrics | grep -E "^(http_requests_total|http_request_duration_seconds)"`
 
+## Production Config Matrix
+
+### Runtime `.env` keys
+
+| Key | Required | Scope | Notes |
+| --- | --- | --- | --- |
+| `APP_ENV` | Yes | app/workers | Use `production` for prod controls. |
+| `SECRET_KEY` | Yes | app/workers | Canonical JWT signing secret unless `JWT_SECRET` is set. |
+| `JWT_SECRET` | No | app/workers | Backward-compatible alias; when set, overrides `SECRET_KEY`. |
+| `DATABASE_URL` | Yes | app/workers | Async SQLAlchemy DSN for API and workers. |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Yes | compose `db` | Required by PostgreSQL container in production compose. |
+| `AUTH_RATE_LIMIT_BACKEND` | Yes | app/workers | `redis` recommended for production (`memory` only with explicit ack). |
+| `REDIS_URL` | Conditionally yes | app/workers | Mandatory when `AUTH_RATE_LIMIT_BACKEND=redis`. |
+| `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` | Conditionally yes | app/workers | Must be `true` only for `memory` backend in production. |
+| `FRONTEND_ADMIN_ORIGIN` | Yes | app CORS | Allowed origins for admin frontend CORS policy. |
+| `ADMIN_UI_API_BASE_URL` | No | admin-ui profile | Build-time API base for `web-admin` Docker profile. |
+| `ADMIN_UI_BASE_PATH` | No | admin-ui profile | Build-time base path for `web-admin` (`/admin/` by default). |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | No | monitoring | Defaults exist, but set explicit secure values in production. |
+
+### CI/CD secrets
+
+| Secret | Required | Workflow | Notes |
+| --- | --- | --- | --- |
+| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify | Target server host/IP. |
+| `DEPLOY_USER` | Yes | deploy, backup-restore-verify | SSH user. |
+| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify | Absolute path on target host. |
+| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify | SSH authentication key. |
+| `PROD_ENV_FILE_B64` | Yes | deploy | Base64 payload used to write `${DEPLOY_PATH}/.env`. |
+| `DEPLOY_PORT` | No | deploy, backup-restore-verify | Defaults to `22`. |
+| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify | Optional host-key pinning override. |
+| `AUTO_DEPLOY_ENABLED` | No | deploy | `true` enables push-triggered deploy on `main`. |
+
+### Precedence Rules
+
+1. JWT secret precedence: `JWT_SECRET` overrides `SECRET_KEY` when both are set.
+2. Rate limiter backend:
+   - `AUTH_RATE_LIMIT_BACKEND=redis` requires `REDIS_URL`;
+   - `AUTH_RATE_LIMIT_BACKEND=memory` in production requires
+     `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`.
+3. Deploy source of truth: `PROD_ENV_FILE_B64` is decoded by deploy workflow and overwrites
+   `${DEPLOY_PATH}/.env` on target host.
+4. Admin UI profile wiring:
+   - `ADMIN_UI_API_BASE_URL` and `ADMIN_UI_BASE_PATH` apply only when `--profile admin-ui` is enabled.
+
 ### One-Click Deploy Pipeline
 
 - GitHub Actions workflow:

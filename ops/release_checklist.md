@@ -6,6 +6,7 @@ Use this checklist before promoting a build to a target environment.
 
 - Confirm target commit/tag and change log.
 - Confirm environment variables are prepared (preferred: `PROD_ENV_FILE_B64` GitHub secret for deploy workflow; fallback: manual `.env`).
+- Verify runtime env + CI/CD secrets against `README.md` section `Production Config Matrix`.
 - If `.env` changed, refresh GitHub secret:
   - preferred one-command sync:
     - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1`

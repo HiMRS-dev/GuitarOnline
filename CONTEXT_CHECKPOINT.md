@@ -3375,6 +3375,18 @@ Implemented in codebase:
   - README security-gate command now includes `tests/test_pii_field_visibility.py`,
   - release checklist pre-deploy security gate command updated to include PII test.
 
+6. `H6` production config baseline docs consolidation:
+- added centralized production configuration matrix in `README.md`:
+  - runtime `.env` keys matrix (`required` vs `conditional` vs `optional`),
+  - CI/CD secrets matrix for deploy and backup-restore workflows,
+  - explicit precedence rules (secret-key alias, limiter backend, deploy env source, admin-ui profile scope).
+- added release-runbook cross-link:
+  - `ops/release_checklist.md` pre-deploy now explicitly requires verification against
+    README `Production Config Matrix`.
+- conflict-safe documentation strategy used:
+  - kept existing deploy section details,
+  - added matrix as authoritative consolidated source instead of replacing historical runbook notes.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
@@ -3387,6 +3399,7 @@ Verification tasks added/updated:
   - `python -m compileall tests/test_pii_field_visibility.py` -> success.
   - `rg -n ".{101}" tests/test_pii_field_visibility.py` -> no overlong lines found.
   - `rg -n "test_pii_field_visibility.py|PII|role-based PII|security regression gate" README.md ops/release_checklist.md` -> expected entries found.
+  - `rg -n "Production Config Matrix|Runtime `.env` keys|CI/CD secrets|Precedence Rules|JWT_SECRET overrides|PROD_ENV_FILE_B64" README.md ops/release_checklist.md` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

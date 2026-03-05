@@ -2119,6 +2119,23 @@ Implemented in codebase:
   - `README.md` workers and runbook sections updated,
   - `.env.example` includes HOLD-expirer worker variables.
 
+15. `B14` integration test: bulk-create + no-overlap:
+- added dedicated HTTP+DB integration scenario:
+  - `tests/test_admin_slot_bulk_create_integration.py`.
+- scenario flow:
+  - register/login `admin` and `teacher`,
+  - create seed slot via `POST /api/v1/admin/slots`,
+  - call `POST /api/v1/admin/slots/bulk-create` on same teacher/day window
+    to force overlap skips on part of generated candidates,
+  - validate response includes created slots and deterministic overlap skip reason.
+- DB assertion:
+  - integration test executes direct PostgreSQL self-join check on `availability_slots`
+    for target teacher/day window,
+  - verifies overlapping interval pairs count is `0` after bulk-create operation.
+- stack behavior:
+  - test uses bounded health probe and deterministic skip when local integration stack
+    at `http://localhost:8000/health` is unavailable.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_slot_stats.py` (service-level final-bucket aggregation + UTC/range/RBAC),
@@ -2130,6 +2147,7 @@ Verification tasks added/updated:
   - `tests/test_admin_teacher_detail.py` (service-level detail behavior + `404`/RBAC),
   - `tests/test_admin_teacher_moderation.py` (service-level verify/disable behavior + `404`/RBAC),
   - `tests/test_admin_slots_list.py` (service-level slot aggregation + UTC/range validation + RBAC),
+  - `tests/test_admin_slot_bulk_create_integration.py` (HTTP+DB no-overlap guarantee for bulk-create),
   - `tests/test_booking_rules.py` extended with HOLD expiration admin/system-path checks,
   - `tests/test_booking_holds_expirer_worker.py` (worker run-cycle uses system path + commits tx),
   - `tests/test_rbac_access_integration.py` extended with `/admin/teachers` and
@@ -2162,5 +2180,7 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_slot_stats_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run ruff check app/modules/booking/service.py app/workers/booking_holds_expirer.py tests/test_booking_rules.py tests/test_booking_holds_expirer_worker.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_booking_holds_expirer_worker.py` -> `11 passed`.
-- full local suite: `py -m poetry run pytest -q` -> `110 passed, 22 skipped`.
+- `py -m poetry run ruff check tests/test_admin_slot_bulk_create_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q -rs tests/test_admin_slot_bulk_create_integration.py` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `110 passed, 23 skipped`.
 

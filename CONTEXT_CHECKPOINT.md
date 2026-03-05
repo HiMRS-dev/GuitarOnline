@@ -3394,6 +3394,23 @@ Implemented in codebase:
 - `README.md` backup section now references release-checklist backup step as canonical execution path.
 - `ops/release_checklist.md` section `2) Backup` now starts with the same canonical script baseline.
 
+8. `H8` load sanity scenario (~1000 slots) added:
+- added reproducible runtime sanity script:
+  - `scripts/load_sanity.py`.
+- scenario behavior:
+  - registers isolated admin/teacher users,
+  - creates teacher profile,
+  - bulk-creates weekly slots with target close to `1000` (default `LOAD_SANITY_TARGET_SLOTS=1000`),
+  - queries `GET /api/v1/admin/slots` in the generated UTC range,
+  - validates non-failure and response envelope consistency (`items`, `total`, target threshold).
+- deterministic guardrails:
+  - rejects invalid/non-positive target,
+  - enforces bulk candidate upper bound (`1000`) before request,
+  - fails if bulk create accounting (`created + skipped`) mismatches generated candidates.
+- runbook integration:
+  - `README.md` deployment section includes load-sanity command and custom target override example,
+  - `ops/release_checklist.md` smoke section includes mandatory load-sanity execution and expected pass marker.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
@@ -3408,6 +3425,9 @@ Verification tasks added/updated:
   - `rg -n "test_pii_field_visibility.py|PII|role-based PII|security regression gate" README.md ops/release_checklist.md` -> expected entries found.
   - `rg -n "Production Config Matrix|Runtime `.env` keys|CI/CD secrets|Precedence Rules|JWT_SECRET overrides|PROD_ENV_FILE_B64" README.md ops/release_checklist.md` -> expected entries found.
   - `rg -n "Canonical minimum backup strategy|scripts/db_backup\\.ps1|scripts/db_restore\\.ps1|2\\) Backup" README.md ops/release_checklist.md` -> expected entries found.
+  - `python -m compileall scripts/load_sanity.py` -> success.
+  - `rg -n ".{101}" scripts/load_sanity.py` -> no overlong lines found.
+  - `rg -n "load_sanity.py|Load sanity passed|LOAD_SANITY_TARGET_SLOTS|~1000" README.md ops/release_checklist.md scripts/load_sanity.py` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

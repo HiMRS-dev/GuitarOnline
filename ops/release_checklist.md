@@ -66,6 +66,9 @@ Use this checklist before promoting a build to a target environment.
 
 - Required scripted smoke run:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
+- Load sanity scenario (~1000 slots + admin slots envelope checks):
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
+  - expected output includes `Load sanity passed`.
 - Explicit health/readiness/metrics verification (do not skip):
   - `curl -fsS http://localhost:8000/health`
   - `curl -fsS http://localhost:8000/ready`

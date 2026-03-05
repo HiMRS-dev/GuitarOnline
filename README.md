@@ -89,6 +89,10 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
 - Run post-deploy smoke script:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
+- Run load sanity scenario (~1000 weekly slots + admin list envelope checks):
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
+  - optional custom target (must stay within bulk-create cap):
+    - `docker compose -f docker-compose.prod.yml exec -T -e LOAD_SANITY_TARGET_SLOTS=900 app python scripts/load_sanity.py`
 - Explicit ops probe verification after smoke:
   - `curl -fsS http://localhost:8000/health`
   - `curl -fsS http://localhost:8000/ready`

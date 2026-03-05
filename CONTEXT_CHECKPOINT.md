@@ -2461,6 +2461,33 @@ Implemented in codebase:
   - existing student-scoped endpoint `GET /api/v1/billing/packages/students/{student_id}`
     remains unchanged.
 
+3. `D3` admin manual package creation with price snapshot + audit:
+- added migration:
+  - `alembic/versions/20260305_0008_package_price_snapshot_fields.py`,
+    introduces nullable package snapshot fields:
+    - `price_amount`,
+    - `price_currency`.
+- billing package model/repository extended for snapshot persistence:
+  - `LessonPackage.price_amount`,
+  - `LessonPackage.price_currency`,
+  - repository create path supports optional snapshot arguments.
+- added explicit admin endpoint:
+  - `POST /api/v1/admin/packages`.
+- admin create contract implemented with required fields:
+  - `student_id`,
+  - `lessons_total`,
+  - `expires_at_utc`,
+  - `price_amount`,
+  - `price_currency`.
+- billing service added dedicated admin creation path:
+  - `BillingService.create_admin_package(...)`.
+- required audit action added per Epic D decision:
+  - `admin.package.create`.
+- compatibility conflict resolved:
+  - existing legacy endpoint `POST /api/v1/billing/packages` remains available
+    and creates packages without price snapshot (`null` fields) to avoid breaking
+    existing portal/integration flows.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2468,6 +2495,12 @@ Verification tasks added/updated:
   - `tests/test_admin_packages_list.py` (service-level filtering, serialization, admin RBAC guard).
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/packages` RBAC check (`401/403/200`).
+  - `tests/test_billing_payment_rules.py` extended with admin-package-create checks:
+    - price snapshot persistence,
+    - `admin.package.create` audit action,
+    - role/expiration validations.
+  - `tests/test_rbac_access_integration.py` extended with
+    `POST /admin/packages` RBAC check (`401/403/201`).
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2475,4 +2508,7 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_packages_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_admin_packages_list.py tests/test_admin_bookings_list.py tests/test_admin_kpi_overview.py` -> `9 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_packages_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/billing/models.py app/modules/billing/repository.py app/modules/billing/schemas.py app/modules/billing/service.py app/modules/admin/router.py app/modules/admin/schemas.py app/modules/admin/repository.py tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_rbac_access_integration.py alembic/versions/20260305_0008_package_price_snapshot_fields.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_admin_kpi_overview.py` -> `21 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_packages_endpoint_returns_401_403_and_200_by_role or admin_create_package_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

@@ -10,7 +10,7 @@ import pytest
 
 import app.modules.billing.service as billing_service_module
 from app.core.enums import PackageStatusEnum, PaymentStatusEnum, RoleEnum
-from app.modules.billing.schemas import PaymentCreate
+from app.modules.billing.schemas import PackageCreateAdmin, PaymentCreate
 from app.modules.billing.service import BillingService
 from app.shared.exceptions import BusinessRuleException, UnauthorizedException
 
@@ -34,6 +34,8 @@ class FakePackage:
     expires_at: datetime
     lessons_total: int
     lessons_left: int
+    price_amount: Decimal | None = None
+    price_currency: str | None = None
 
 
 class FakeBillingRepository:
@@ -60,6 +62,27 @@ class FakeBillingRepository:
 
     async def get_package_by_id(self, package_id: UUID) -> FakePackage | None:
         return self._packages.get(package_id)
+
+    async def create_package(
+        self,
+        student_id: UUID,
+        lessons_total: int,
+        expires_at: datetime,
+        price_amount: Decimal | None = None,
+        price_currency: str | None = None,
+    ) -> FakePackage:
+        package = FakePackage(
+            id=uuid4(),
+            student_id=student_id,
+            status=PackageStatusEnum.ACTIVE,
+            expires_at=expires_at,
+            lessons_total=lessons_total,
+            lessons_left=lessons_total,
+            price_amount=price_amount,
+            price_currency=price_currency,
+        )
+        self._packages[package.id] = package
+        return package
 
     async def create_payment(
         self,
@@ -363,6 +386,73 @@ async def test_create_payment_rejects_inactive_package_without_side_effects() ->
     assert package.status == PackageStatusEnum.CANCELED
     assert len(audit_repo.audit_logs) == 0
     assert len(audit_repo.outbox_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_admin_package_stores_price_snapshot_and_writes_admin_audit() -> None:
+    admin = make_actor(RoleEnum.ADMIN)
+    service, audit_repo = make_service()
+
+    package = await service.create_admin_package(
+        PackageCreateAdmin(
+            student_id=uuid4(),
+            lessons_total=12,
+            expires_at=datetime.now(UTC) + timedelta(days=30),
+            price_amount=Decimal("149.00"),
+            price_currency="usd",
+        ),
+        admin,
+    )
+
+    assert package.lessons_total == 12
+    assert package.lessons_left == 12
+    assert package.price_amount == Decimal("149.00")
+    assert package.price_currency == "USD"
+    assert len(audit_repo.audit_logs) == 1
+    assert audit_repo.audit_logs[0]["action"] == "admin.package.create"
+    assert audit_repo.audit_logs[0]["payload"]["price_amount"] == "149.00"
+    assert audit_repo.audit_logs[0]["payload"]["price_currency"] == "USD"
+    assert len(audit_repo.outbox_events) == 1
+    assert audit_repo.outbox_events[0]["event_type"] == "billing.package.created"
+
+
+@pytest.mark.asyncio
+async def test_create_admin_package_rejects_past_expiration() -> None:
+    admin = make_actor(RoleEnum.ADMIN)
+    service, audit_repo = make_service()
+
+    with pytest.raises(BusinessRuleException):
+        await service.create_admin_package(
+            PackageCreateAdmin(
+                student_id=uuid4(),
+                lessons_total=8,
+                expires_at=datetime.now(UTC) - timedelta(minutes=1),
+                price_amount=Decimal("99.00"),
+                price_currency="USD",
+            ),
+            admin,
+        )
+
+    assert len(audit_repo.audit_logs) == 0
+    assert len(audit_repo.outbox_events) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_admin_package_requires_admin() -> None:
+    student = make_actor(RoleEnum.STUDENT)
+    service, _ = make_service()
+
+    with pytest.raises(UnauthorizedException):
+        await service.create_admin_package(
+            PackageCreateAdmin(
+                student_id=uuid4(),
+                lessons_total=8,
+                expires_at=datetime.now(UTC) + timedelta(days=10),
+                price_amount=Decimal("99.00"),
+                price_currency="USD",
+            ),
+            student,
+        )
 
 
 @pytest.mark.asyncio

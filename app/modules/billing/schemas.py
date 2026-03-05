@@ -26,6 +26,22 @@ class PackageCreate(BaseModel):
         return ensure_utc(value)
 
 
+class PackageCreateAdmin(BaseModel):
+    """Create lesson package request with price snapshot (admin contract)."""
+
+    student_id: UUID
+    lessons_total: int = Field(ge=1)
+    expires_at: datetime
+    price_amount: Decimal = Field(gt=0)
+    price_currency: str = Field(default="USD", min_length=3, max_length=3)
+
+    @field_validator("expires_at", mode="after")
+    @classmethod
+    def normalize_expires_at_to_utc(cls, value: datetime) -> datetime:
+        """Normalize package expiration datetime to UTC."""
+        return ensure_utc(value)
+
+
 class PackageRead(BaseModel):
     """Lesson package response schema."""
 
@@ -35,6 +51,8 @@ class PackageRead(BaseModel):
     student_id: UUID
     lessons_total: int
     lessons_left: int
+    price_amount: Decimal | None
+    price_currency: str | None
     expires_at: datetime
     status: PackageStatusEnum
     created_at: datetime

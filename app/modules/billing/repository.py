@@ -24,11 +24,15 @@ class BillingRepository:
         student_id: UUID,
         lessons_total: int,
         expires_at: datetime,
+        price_amount: Decimal | None = None,
+        price_currency: str | None = None,
     ) -> LessonPackage:
         package = LessonPackage(
             student_id=student_id,
             lessons_total=lessons_total,
             lessons_left=lessons_total,
+            price_amount=price_amount,
+            price_currency=price_currency.upper() if price_currency is not None else None,
             expires_at=expires_at,
             status=PackageStatusEnum.ACTIVE,
         )

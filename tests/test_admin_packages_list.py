@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -46,6 +47,8 @@ def make_item() -> dict:
         "student_id": uuid4(),
         "lessons_total": 12,
         "lessons_left": 4,
+        "price_amount": Decimal("149.00"),
+        "price_currency": "USD",
         "expires_at_utc": datetime(2026, 4, 1, 10, 0, tzinfo=UTC),
         "status": PackageStatusEnum.ACTIVE,
         "created_at_utc": datetime(2026, 3, 1, 10, 0, tzinfo=UTC),
@@ -72,6 +75,8 @@ async def test_admin_packages_list_passes_filters_and_serializes_rows() -> None:
     assert total == 1
     assert items[0].package_id == item["package_id"]
     assert items[0].status == PackageStatusEnum.ACTIVE
+    assert items[0].price_amount == Decimal("149.00")
+    assert items[0].price_currency == "USD"
     assert repository.calls == [
         {
             "student_id": student_id,

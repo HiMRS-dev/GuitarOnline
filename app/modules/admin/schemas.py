@@ -239,6 +239,8 @@ class AdminPackageListItemRead(BaseModel):
                 "student_id": "a46d9185-3369-4f6f-9506-5e01d5fdbd26",
                 "lessons_total": 10,
                 "lessons_left": 4,
+                "price_amount": "120.00",
+                "price_currency": "USD",
                 "expires_at_utc": "2026-04-07T12:00:00+00:00",
                 "status": "active",
                 "created_at_utc": "2026-03-04T10:15:00+00:00",
@@ -251,6 +253,38 @@ class AdminPackageListItemRead(BaseModel):
     student_id: UUID
     lessons_total: int
     lessons_left: int
+    price_amount: Decimal | None = None
+    price_currency: str | None = None
+    expires_at_utc: datetime
+    status: PackageStatusEnum
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
+class AdminPackageCreateRequest(BaseModel):
+    """Admin request schema for manual package creation with price snapshot."""
+
+    student_id: UUID
+    lessons_total: int = Field(ge=1)
+    expires_at_utc: datetime
+    price_amount: Decimal = Field(gt=0)
+    price_currency: str = Field(default="USD", min_length=3, max_length=3)
+
+    @field_validator("expires_at_utc", mode="after")
+    @classmethod
+    def normalize_datetime_to_utc(cls, value: datetime) -> datetime:
+        return ensure_utc(value)
+
+
+class AdminPackageCreateRead(BaseModel):
+    """Admin response schema for created package with price snapshot."""
+
+    package_id: UUID
+    student_id: UUID
+    lessons_total: int
+    lessons_left: int
+    price_amount: Decimal | None
+    price_currency: str | None
     expires_at_utc: datetime
     status: PackageStatusEnum
     created_at_utc: datetime

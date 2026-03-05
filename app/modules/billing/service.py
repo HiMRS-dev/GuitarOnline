@@ -14,7 +14,7 @@ from app.core.enums import PackageStatusEnum, PaymentStatusEnum, RoleEnum
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.models import LessonPackage, Payment
 from app.modules.billing.repository import BillingRepository
-from app.modules.billing.schemas import PackageCreate, PaymentCreate
+from app.modules.billing.schemas import PackageCreate, PackageCreateAdmin, PaymentCreate
 from app.modules.identity.models import User
 from app.shared.exceptions import BusinessRuleException, NotFoundException, UnauthorizedException
 from app.shared.utils import ensure_utc, utc_now
@@ -79,6 +79,8 @@ class BillingService:
             payload.student_id,
             payload.lessons_total,
             expires_at,
+            price_amount=None,
+            price_currency=None,
         )
         await self.audit_repository.create_audit_log(
             actor_id=actor.id,
@@ -99,6 +101,54 @@ class BillingService:
                 "package_id": str(package.id),
                 "student_id": str(package.student_id),
                 "lessons_total": package.lessons_total,
+            },
+        )
+        return package
+
+    async def create_admin_package(
+        self,
+        payload: PackageCreateAdmin,
+        actor: User,
+    ) -> LessonPackage:
+        """Create admin package with price snapshot and admin audit action."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can create lesson packages")
+
+        expires_at = ensure_utc(payload.expires_at)
+        if expires_at <= utc_now():
+            raise BusinessRuleException("Package expiration must be in the future")
+
+        price_currency = payload.price_currency.upper()
+        package = await self.repository.create_package(
+            payload.student_id,
+            payload.lessons_total,
+            expires_at,
+            price_amount=Decimal(payload.price_amount),
+            price_currency=price_currency,
+        )
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="admin.package.create",
+            entity_type="lesson_package",
+            entity_id=str(package.id),
+            payload={
+                "student_id": str(package.student_id),
+                "lessons_total": package.lessons_total,
+                "price_amount": str(package.price_amount),
+                "price_currency": package.price_currency,
+                "expires_at": package.expires_at.isoformat(),
+            },
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(package.id),
+            event_type="billing.package.created",
+            payload={
+                "package_id": str(package.id),
+                "student_id": str(package.student_id),
+                "lessons_total": package.lessons_total,
+                "price_amount": str(package.price_amount),
+                "price_currency": package.price_currency,
             },
         )
         return package

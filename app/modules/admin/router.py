@@ -16,6 +16,8 @@ from app.modules.admin.schemas import (
     AdminBookingRescheduleRequest,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminPackageCreateRead,
+    AdminPackageCreateRequest,
     AdminPackageListItemRead,
     AdminSlotBlockRead,
     AdminSlotBlockRequest,
@@ -29,6 +31,8 @@ from app.modules.admin.schemas import (
     AdminTeacherListItemRead,
 )
 from app.modules.admin.service import AdminService, get_admin_service
+from app.modules.billing.schemas import PackageCreateAdmin
+from app.modules.billing.service import BillingService, get_billing_service
 from app.modules.booking.schemas import BookingCancelRequest, BookingRead, BookingRescheduleRequest
 from app.modules.booking.service import BookingService, get_booking_service
 from app.modules.identity.service import require_roles
@@ -207,6 +211,41 @@ async def list_admin_packages(
         offset=pagination.offset,
     )
     return build_page(items, total, pagination)
+
+
+@router.post(
+    "/packages",
+    response_model=AdminPackageCreateRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_admin_package(
+    payload: AdminPackageCreateRequest,
+    service: BillingService = Depends(get_billing_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminPackageCreateRead:
+    """Create manual package with price snapshot under admin contract."""
+    package = await service.create_admin_package(
+        PackageCreateAdmin(
+            student_id=payload.student_id,
+            lessons_total=payload.lessons_total,
+            expires_at=payload.expires_at_utc,
+            price_amount=payload.price_amount,
+            price_currency=payload.price_currency,
+        ),
+        current_user,
+    )
+    return AdminPackageCreateRead(
+        package_id=package.id,
+        student_id=package.student_id,
+        lessons_total=package.lessons_total,
+        lessons_left=package.lessons_left,
+        price_amount=package.price_amount,
+        price_currency=package.price_currency,
+        expires_at_utc=package.expires_at,
+        status=package.status,
+        created_at_utc=package.created_at,
+        updated_at_utc=package.updated_at,
+    )
 
 
 @router.post("/bookings/{booking_id}/cancel", response_model=BookingRead)

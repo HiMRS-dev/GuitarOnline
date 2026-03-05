@@ -31,6 +31,8 @@ class LessonPackage(BaseModelMixin, Base):
     )
     lessons_total: Mapped[int] = mapped_column(nullable=False)
     lessons_left: Mapped[int] = mapped_column(nullable=False)
+    price_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    price_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[PackageStatusEnum] = mapped_column(
         SAEnum(PackageStatusEnum, name="package_status_enum", native_enum=False),

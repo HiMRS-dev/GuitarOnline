@@ -1,6 +1,12 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 
+import { AdminLayout } from "./admin/AdminLayout";
+import { CalendarPage } from "./admin/pages/CalendarPage";
+import { KpiPage } from "./admin/pages/KpiPage";
+import { PackagesPage } from "./admin/pages/PackagesPage";
+import { StudentsPage } from "./admin/pages/StudentsPage";
+import { TeachersPage } from "./admin/pages/TeachersPage";
 import { getCurrentUser, login } from "./features/auth/api";
 import { clearTokenPair, loadTokenPair, saveTokenPair } from "./features/auth/storage";
 import type { TokenPair } from "./features/auth/types";
@@ -37,10 +43,17 @@ export function App() {
         path="/admin"
         element={
           <ProtectedAdminRoute tokens={tokens} onInvalidSession={handleSignOut}>
-            <AdminHome onSignOut={handleSignOut} />
+            <AdminLayout onSignOut={handleSignOut} />
           </ProtectedAdminRoute>
         }
-      />
+      >
+        <Route index element={<Navigate to="teachers" replace />} />
+        <Route path="teachers" element={<TeachersPage />} />
+        <Route path="calendar" element={<CalendarPage />} />
+        <Route path="students" element={<StudentsPage />} />
+        <Route path="packages" element={<PackagesPage />} />
+        <Route path="kpi" element={<KpiPage />} />
+      </Route>
       <Route path="*" element={<Navigate to={tokens ? "/admin" : "/login"} replace />} />
     </Routes>
   );
@@ -205,27 +218,4 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
   }
 
   return <>{children}</>;
-}
-
-type AdminHomeProps = {
-  onSignOut: () => void;
-};
-
-function AdminHome({ onSignOut }: AdminHomeProps) {
-  return (
-    <main className="app-shell">
-      <section className="hero">
-        <p className="eyebrow">Admin Area</p>
-        <h1>Protected Route Active</h1>
-        <p className="summary">
-          Session token exists and admin role check passed via <code>/identity/users/me</code>.
-        </p>
-      </section>
-      <section className="card">
-        <button type="button" onClick={onSignOut}>
-          Sign out
-        </button>
-      </section>
-    </main>
-  );
 }

@@ -339,6 +339,42 @@ async def test_admin_slots_endpoint_returns_401_403_and_200_by_role(
 
 
 @pytest.mark.asyncio
+async def test_admin_create_slot_endpoint_returns_401_403_and_201_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    teacher = await _register_and_login(api_client, "teacher")
+    start_at = datetime.now(UTC) + timedelta(days=3, hours=2)
+    end_at = start_at + timedelta(hours=1)
+    payload = {
+        "teacher_id": str(teacher.id),
+        "start_at_utc": start_at.isoformat(),
+        "end_at_utc": end_at.isoformat(),
+    }
+
+    no_token_response = await api_client.post("/admin/slots", json=payload)
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(student.access_token),
+        json=payload,
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+        json=payload,
+    )
+    _assert_status(admin_response, 201)
+    body = admin_response.json()
+    assert body["teacher_id"] == str(teacher.id)
+    assert body["slot_status"] == "open"
+
+
+@pytest.mark.asyncio
 async def test_teacher_profile_create_forbidden_for_student_and_allowed_for_teacher(
     api_client: httpx.AsyncClient,
 ) -> None:

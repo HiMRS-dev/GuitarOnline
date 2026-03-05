@@ -40,6 +40,25 @@ class SchedulingRepository:
         stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
         return await self.session.scalar(stmt)
 
+    async def find_overlapping_slot(
+        self,
+        teacher_id: UUID,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> AvailabilitySlot | None:
+        """Return first overlapping slot for teacher if any exists."""
+        stmt = (
+            select(AvailabilitySlot)
+            .where(
+                AvailabilitySlot.teacher_id == teacher_id,
+                AvailabilitySlot.start_at < end_at,
+                AvailabilitySlot.end_at > start_at,
+            )
+            .order_by(AvailabilitySlot.start_at.asc())
+            .limit(1)
+        )
+        return await self.session.scalar(stmt)
+
     async def list_open_slots(
         self,
         teacher_id: UUID | None,

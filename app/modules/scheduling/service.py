@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.enums import RoleEnum, SlotStatusEnum
 from app.modules.audit.repository import AuditRepository
@@ -16,6 +17,8 @@ from app.modules.scheduling.repository import SchedulingRepository
 from app.modules.scheduling.schemas import SlotCreate
 from app.shared.exceptions import BusinessRuleException, NotFoundException, UnauthorizedException
 from app.shared.utils import ensure_utc, utc_now
+
+settings = get_settings()
 
 
 class SchedulingService:
@@ -41,6 +44,26 @@ class SchedulingService:
             raise BusinessRuleException("Slot end_at must be after start_at")
         if start_at <= utc_now():
             raise BusinessRuleException("Slot start_at must be in the future")
+        duration_minutes = int((end_at - start_at).total_seconds() // 60)
+        if duration_minutes < settings.slot_min_duration_minutes:
+            raise BusinessRuleException(
+                f"Slot duration must be at least {settings.slot_min_duration_minutes} minutes",
+            )
+
+        overlapping_slot = await self.repository.find_overlapping_slot(
+            teacher_id=payload.teacher_id,
+            start_at=start_at,
+            end_at=end_at,
+        )
+        if overlapping_slot is not None:
+            raise BusinessRuleException(
+                "Slot overlaps with an existing slot for this teacher",
+                details={
+                    "overlap_slot_id": str(overlapping_slot.id),
+                    "overlap_start_at_utc": overlapping_slot.start_at.isoformat(),
+                    "overlap_end_at_utc": overlapping_slot.end_at.isoformat(),
+                },
+            )
 
         slot = await self.repository.create_slot(payload.teacher_id, actor.id, start_at, end_at)
         await self.audit_repository.create_audit_log(

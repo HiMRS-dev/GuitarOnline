@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     booking_hold_minutes: int = 10
     booking_refund_window_hours: int = 24
+    slot_min_duration_minutes: int = 30
 
     redis_url: str | None = None
 

@@ -13,12 +13,16 @@ from app.modules.admin.schemas import (
     AdminActionRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminSlotCreateRead,
+    AdminSlotCreateRequest,
     AdminSlotListItemRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
 )
 from app.modules.admin.service import AdminService, get_admin_service
 from app.modules.identity.service import require_roles
+from app.modules.scheduling.schemas import SlotCreate
+from app.modules.scheduling.service import SchedulingService, get_scheduling_service
 from app.shared.pagination import Page, build_page, get_pagination_params
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -98,6 +102,33 @@ async def disable_admin_teacher(
 ) -> AdminTeacherDetailRead:
     """Disable teacher profile from admin panel."""
     return await service.disable_teacher(current_user, teacher_id=teacher_id)
+
+
+@router.post("/slots", response_model=AdminSlotCreateRead, status_code=status.HTTP_201_CREATED)
+async def create_admin_slot(
+    payload: AdminSlotCreateRequest,
+    service: SchedulingService = Depends(get_scheduling_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminSlotCreateRead:
+    """Create availability slot with strict admin validation."""
+    slot = await service.create_slot(
+        SlotCreate(
+            teacher_id=payload.teacher_id,
+            start_at=payload.start_at_utc,
+            end_at=payload.end_at_utc,
+        ),
+        current_user,
+    )
+    return AdminSlotCreateRead(
+        slot_id=slot.id,
+        teacher_id=slot.teacher_id,
+        created_by_admin_id=slot.created_by_admin_id,
+        start_at_utc=slot.start_at,
+        end_at_utc=slot.end_at,
+        slot_status=slot.status,
+        created_at_utc=slot.created_at,
+        updated_at_utc=slot.updated_at,
+    )
 
 
 @router.get("/slots", response_model=Page[AdminSlotListItemRead])

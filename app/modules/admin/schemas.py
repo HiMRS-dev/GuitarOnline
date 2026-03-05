@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import (
     BookingStatusEnum,
@@ -14,6 +14,7 @@ from app.core.enums import (
     SlotStatusEnum,
     TeacherStatusEnum,
 )
+from app.shared.utils import ensure_utc
 
 
 class AdminActionCreate(BaseModel):
@@ -199,6 +200,48 @@ class AdminSlotListItemRead(BaseModel):
     booking_id: UUID | None
     booking_status: BookingStatusEnum | None
     aggregated_booking_status: SlotBookingAggregateStatusEnum
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
+class AdminSlotCreateRequest(BaseModel):
+    """Admin request schema for single slot creation."""
+
+    teacher_id: UUID
+    start_at_utc: datetime
+    end_at_utc: datetime
+
+    @field_validator("start_at_utc", "end_at_utc", mode="after")
+    @classmethod
+    def normalize_datetime_to_utc(cls, value: datetime) -> datetime:
+        """Normalize incoming datetimes to UTC."""
+        return ensure_utc(value)
+
+
+class AdminSlotCreateRead(BaseModel):
+    """Admin response schema for created slot."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "slot_id": "41fc173a-0a17-4ebf-8687-951714f1f55f",
+                "teacher_id": "8a937f92-0132-4691-b735-c224078afaef",
+                "created_by_admin_id": "c4ea1016-8586-4602-9fbe-c1100d2057a1",
+                "start_at_utc": "2026-03-07T12:00:00+00:00",
+                "end_at_utc": "2026-03-07T13:00:00+00:00",
+                "slot_status": "open",
+                "created_at_utc": "2026-03-05T10:20:00+00:00",
+                "updated_at_utc": "2026-03-05T10:20:00+00:00",
+            },
+        },
+    )
+
+    slot_id: UUID
+    teacher_id: UUID
+    created_by_admin_id: UUID
+    start_at_utc: datetime
+    end_at_utc: datetime
+    slot_status: SlotStatusEnum
     created_at_utc: datetime
     updated_at_utc: datetime
 

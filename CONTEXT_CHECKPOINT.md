@@ -2557,6 +2557,16 @@ Implemented in codebase:
     `Booking package is required`.
 - regression coverage added for explicit confirm-without-package path.
 
+8. `D8` idempotent lesson consumption on repeated `complete`:
+- idempotency marker implemented in lessons domain:
+  - `lessons.consumed_at`.
+- completion logic guarantees one-time package consumption:
+  - first `complete` call consumes reserved lesson,
+  - repeated `complete` calls return stable completed state without second consume.
+- legacy safety path included:
+  - if lesson is already `completed` with missing `consumed_at`, service backfills marker
+    without extra package charge.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2586,6 +2596,8 @@ Verification tasks added/updated:
   - `tests/test_packages_expirer_worker.py` (worker cycle uses system expiration path + commits tx).
   - `tests/test_booking_rules.py` extended with
     confirm-without-package clear-error assertion (`Booking package is required`).
+  - `tests/test_lessons_complete.py` extended with repeated-complete idempotency assertion
+    (`consume_calls == 1` across two calls).
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2606,4 +2618,6 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_billing_payment_rules.py tests/test_packages_expirer_worker.py tests/test_booking_holds_expirer_worker.py` -> `19 passed`.
 - `py -m poetry run ruff check tests/test_booking_rules.py app/modules/booking/service.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_billing_payment_rules.py` -> `37 passed`.
+- `py -m poetry run ruff check tests/test_lessons_complete.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_lessons_complete.py tests/test_lessons_no_show.py` -> `13 passed`.
 

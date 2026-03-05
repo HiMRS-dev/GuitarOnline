@@ -149,6 +149,44 @@ async def test_complete_lesson_teacher_owns_lesson_and_consumes_reserved(
 
 
 @pytest.mark.asyncio
+async def test_complete_lesson_is_idempotent_on_repeated_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 3, 6, 11, 0, tzinfo=UTC)
+    monkeypatch.setattr(lessons_service_module, "utc_now", lambda: fixed_now)
+
+    teacher_id = uuid4()
+    booking_id = uuid4()
+    package_id = uuid4()
+    lesson = make_lesson(
+        status=LessonStatusEnum.SCHEDULED,
+        teacher_id=teacher_id,
+        booking_id=booking_id,
+    )
+    package = FakePackage(id=package_id, lessons_left=5, lessons_reserved=1)
+    service = make_service(
+        lesson=lesson,
+        booking_id=booking_id,
+        package_id=package_id,
+        package=package,
+    )
+    billing_repo = service.billing_repository
+    assert billing_repo is not None
+    teacher = make_actor(RoleEnum.TEACHER, actor_id=teacher_id)
+
+    first = await service.complete_lesson(lesson.id, teacher)
+    second = await service.complete_lesson(lesson.id, teacher)
+
+    assert first.status == LessonStatusEnum.COMPLETED
+    assert second.status == LessonStatusEnum.COMPLETED
+    assert first.consumed_at == fixed_now
+    assert second.consumed_at == fixed_now
+    assert package.lessons_left == 4
+    assert package.lessons_reserved == 0
+    assert billing_repo.consume_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_complete_lesson_is_idempotent_when_already_completed_with_consumed_at() -> None:
     teacher_id = uuid4()
     booking_id = uuid4()

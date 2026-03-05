@@ -172,18 +172,22 @@ async def _list_my_bookings(client: httpx.AsyncClient, user: AuthUser) -> list[d
     return response.json()["items"]
 
 
-async def _find_lesson_id_by_booking(
-    client: httpx.AsyncClient,
-    teacher: AuthUser,
-    booking_id: str,
-) -> str:
+async def _list_teacher_lessons(client: httpx.AsyncClient, teacher: AuthUser) -> list[dict]:
     response = await client.get(
         "/teacher/lessons",
         headers=_auth_headers(teacher.access_token),
         params={"limit": 100, "offset": 0},
     )
     _assert_status(response, 200)
-    for lesson in response.json()["items"]:
+    return response.json()["items"]
+
+
+async def _find_lesson_id_by_booking(
+    client: httpx.AsyncClient,
+    teacher: AuthUser,
+    booking_id: str,
+) -> str:
+    for lesson in await _list_teacher_lessons(client, teacher):
         if lesson.get("booking_id") == booking_id:
             return str(lesson["id"])
     raise AssertionError(f"Lesson for booking {booking_id} not found")
@@ -318,6 +322,63 @@ async def test_student_hold_confirm_reserves_package_capacity(
     assert confirmed_booking["status"] == "confirmed"
     assert package_after_confirm["lessons_left"] == 5
     assert package_after_confirm["lessons_reserved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_confirm_creates_single_lesson_and_repeat_confirm_is_idempotent(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
+
+    package = await _create_package(api_client, admin, student, lessons_total=5)
+    slot = await _create_slot(api_client, admin, teacher, hours_from_now=60)
+
+    hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={"slot_id": slot["id"], "package_id": package["id"]},
+    )
+    _assert_status(hold_response, 200)
+    hold_booking = hold_response.json()
+    booking_id = hold_booking["id"]
+
+    first_confirm_response = await api_client.post(
+        f"/booking/{booking_id}/confirm",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(first_confirm_response, 200)
+    first_confirmed_booking = first_confirm_response.json()
+
+    second_confirm_response = await api_client.post(
+        f"/booking/{booking_id}/confirm",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(second_confirm_response, 200)
+    second_confirmed_booking = second_confirm_response.json()
+
+    package_after_second_confirm = await _get_package_for_student(
+        api_client,
+        student,
+        package["id"],
+    )
+    teacher_lessons = await _list_teacher_lessons(api_client, teacher)
+    lessons_for_booking = [
+        lesson for lesson in teacher_lessons if lesson.get("booking_id") == booking_id
+    ]
+
+    assert first_confirmed_booking["status"] == "confirmed"
+    assert second_confirmed_booking["status"] == "confirmed"
+    assert first_confirmed_booking["id"] == booking_id
+    assert second_confirmed_booking["id"] == booking_id
+    assert package_after_second_confirm["lessons_left"] == 5
+    assert package_after_second_confirm["lessons_reserved"] == 1
+    assert len(lessons_for_booking) == 1
+    assert lessons_for_booking[0]["booking_id"] == booking_id
+    assert lessons_for_booking[0]["teacher_id"] == str(teacher.id)
+    assert lessons_for_booking[0]["student_id"] == str(student.id)
 
 
 @pytest.mark.asyncio

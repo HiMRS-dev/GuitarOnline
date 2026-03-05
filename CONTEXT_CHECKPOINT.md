@@ -2856,6 +2856,23 @@ Implemented in codebase:
   - no raw report diffs or sensitive full before/after content snapshots.
 - no-op updates do not emit audit entries.
 
+9. `E10` integration regression for lesson creation on confirm:
+- integration scenario added:
+  - `tests/test_booking_billing_integration.py::test_confirm_creates_single_lesson_and_repeat_confirm_is_idempotent`.
+- scenario locks contract:
+  - first `confirm` creates lesson linked to booking,
+  - repeated `confirm` returns same booking and does not create duplicate lesson.
+- linkage assertions included:
+  - lesson has expected `booking_id`,
+  - lesson has expected `teacher_id`,
+  - lesson has expected `student_id`.
+
+10. `E1` lesson creation invariant (`booking confirm -> lesson 1:1`) finalized:
+- invariant preserved in booking domain logic:
+  - confirm path keeps idempotent helper `_ensure_lesson_for_confirmed_booking(...)`.
+- regression coverage expanded via `E10` integration scenario:
+  - one lesson per booking under repeated confirm contract.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
@@ -2893,6 +2910,9 @@ Verification tasks added/updated:
   - `tests/test_teacher_lesson_report_audit.py` added:
     - audit entry written with changed fields metadata,
     - no audit entry when report payload does not change lesson fields.
+  - `tests/test_booking_billing_integration.py` extended with E10 regression:
+    - confirm creates one lesson,
+    - repeated confirm remains lesson-idempotent with stable linkage fields.
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2916,4 +2936,7 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py tests/test_lesson_recording_url.py tests/test_lesson_meeting_url.py` -> `15 passed`.
 - `py -m poetry run ruff check app/modules/lessons/service.py tests/test_teacher_lesson_report_audit.py tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py tests/test_lesson_recording_url.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_teacher_lesson_report_audit.py tests/test_lesson_report_moderation.py tests/test_teacher_lesson_report.py tests/test_lesson_recording_url.py` -> `13 passed`.
+- `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k confirm_creates_single_lesson_and_repeat_confirm_is_idempotent` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_student_lessons_access.py tests/test_teacher_lesson_report_audit.py` -> `25 passed`.
 

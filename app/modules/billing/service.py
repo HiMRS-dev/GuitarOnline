@@ -221,14 +221,23 @@ class BillingService:
         if actor.role.name != RoleEnum.ADMIN:
             raise UnauthorizedException("Only admin can expire packages")
 
+        return await self.expire_packages_system(actor_id=actor.id, trigger="admin_expire_packages")
+
+    async def expire_packages_system(
+        self,
+        *,
+        actor_id: UUID | None = None,
+        trigger: str = "system_expire_packages",
+    ) -> int:
+        """Expire all active packages past expiration timestamp without user-token context."""
         now = utc_now()
         packages = await self.repository.find_packages_to_expire(now)
         for package in packages:
             await self._expire_package(
                 package,
-                actor_id=actor.id,
+                actor_id=actor_id,
                 now=now,
-                trigger="admin_expire_packages",
+                trigger=trigger,
             )
         return len(packages)
 

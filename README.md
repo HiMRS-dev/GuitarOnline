@@ -44,6 +44,7 @@ Production-ready modular monolith backend for an online guitar school.
   - `app` (FastAPI API),
   - `outbox-worker` (notifications outbox consumer loop),
   - `booking-holds-expirer` (periodic HOLD expiration worker),
+  - `packages-expirer` (periodic package expiration worker),
   - `prometheus` (metrics scraping backend, port `9090`),
   - `alertmanager` (alert routing backend, port `9093`),
   - `grafana` (dashboards UI, port `3000`).
@@ -170,6 +171,10 @@ Production-ready modular monolith backend for an online guitar school.
   - `poetry run python -m app.workers.booking_holds_expirer`
 - Run booking HOLD expiration worker in polling mode:
   - `BOOKING_HOLDS_EXPIRER_MODE=loop poetry run python -m app.workers.booking_holds_expirer`
+- Run package expiration worker once:
+  - `poetry run python -m app.workers.packages_expirer`
+- Run package expiration worker in polling mode:
+  - `PACKAGES_EXPIRER_MODE=loop poetry run python -m app.workers.packages_expirer`
 
 ## Frontend MVP Portal
 
@@ -301,7 +306,8 @@ Production-ready modular monolith backend for an online guitar school.
    - worker `booking-holds-expirer` should clear them automatically,
    - if worker is disabled, run `POST /api/v1/booking/holds/expire` manually.
 4. If `overdue_active_packages > 0`:
-   - run `POST /api/v1/billing/packages/expire`
+   - worker `packages-expirer` should clear them automatically,
+   - if worker is disabled, run `POST /api/v1/billing/packages/expire` manually.
 5. If `outbox_failed_dead_letter > 0`:
    - inspect `/api/v1/audit/outbox/pending` and `notifications` records,
    - reprocess only after root-cause fix.

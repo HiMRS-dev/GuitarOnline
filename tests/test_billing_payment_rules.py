@@ -508,6 +508,31 @@ async def test_expire_packages_marks_active_overdue_packages() -> None:
 
 
 @pytest.mark.asyncio
+async def test_expire_packages_system_works_without_actor() -> None:
+    student_id = uuid4()
+    now = datetime.now(UTC)
+    expired_candidate = FakePackage(
+        id=uuid4(),
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=now - timedelta(hours=1),
+        lessons_total=10,
+        lessons_left=3,
+    )
+    service, audit_repo = make_service(packages={expired_candidate.id: expired_candidate})
+
+    updated = await service.expire_packages_system(trigger="worker_expire_packages")
+
+    assert updated == 1
+    assert expired_candidate.status == PackageStatusEnum.EXPIRED
+    assert len(audit_repo.audit_logs) == 1
+    assert audit_repo.audit_logs[0]["actor_id"] is None
+    assert audit_repo.audit_logs[0]["payload"]["trigger"] == "worker_expire_packages"
+    assert len(audit_repo.outbox_events) == 1
+    assert audit_repo.outbox_events[0]["event_type"] == "billing.package.expired"
+
+
+@pytest.mark.asyncio
 async def test_expire_packages_requires_admin() -> None:
     service, _ = make_service()
     student = make_actor(RoleEnum.STUDENT)

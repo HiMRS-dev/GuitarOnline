@@ -2527,6 +2527,27 @@ Implemented in codebase:
 - compatibility preserved:
   - existing `PATCH /lessons/{id}` endpoint remains available.
 
+6. `D6` scheduled package expiration worker/cron path:
+- system expiration path added in billing domain:
+  - `BillingService.expire_packages_system(...)` runs expiration without user-token context.
+- existing admin endpoint flow preserved and delegated:
+  - `POST /api/v1/billing/packages/expire` keeps admin RBAC and now delegates
+    to shared expiration core.
+- added dedicated worker executable:
+  - `app/workers/packages_expirer.py`.
+- worker execution model:
+  - `once` mode (single cycle),
+  - `loop` mode (polling cycle).
+- worker env vars introduced:
+  - `PACKAGES_EXPIRER_MODE`,
+  - `PACKAGES_EXPIRER_POLL_SECONDS`,
+  - `PACKAGES_EXPIRER_LOG_LEVEL`.
+- production compose wiring added:
+  - `docker-compose.prod.yml` includes service `packages-expirer` in loop mode.
+- runtime docs updated:
+  - `.env.example` worker vars,
+  - `README.md` workers list, worker run commands, operational runbook package-expirer note.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2551,6 +2572,9 @@ Verification tasks added/updated:
     booking/package not-found handling, idempotent consumption behavior).
   - `tests/test_rbac_access_integration.py` extended with
     `/lessons/{lesson_id}/complete` RBAC check (`401/403/200`).
+  - `tests/test_billing_payment_rules.py` extended with
+    `expire_packages_system(...)` coverage (no-actor system path + trigger audit).
+  - `tests/test_packages_expirer_worker.py` (worker cycle uses system expiration path + commits tx).
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2567,4 +2591,6 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py app/modules/lessons/router.py tests/test_lessons_complete.py tests/test_rbac_access_integration.py alembic/versions/20260306_0010_lesson_consumed_at.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_lessons_complete.py tests/test_lessons_no_show.py tests/test_booking_rules.py tests/test_billing_payment_rules.py` -> `47 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "lesson_complete_endpoint_returns_401_403_and_200_by_role or admin_create_package_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/billing/service.py app/workers/packages_expirer.py tests/test_packages_expirer_worker.py tests/test_billing_payment_rules.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_billing_payment_rules.py tests/test_packages_expirer_worker.py tests/test_booking_holds_expirer_worker.py` -> `19 passed`.
 

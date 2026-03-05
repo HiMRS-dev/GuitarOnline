@@ -93,6 +93,24 @@ services:
         condition: service_healthy
     command: python -m app.workers.booking_holds_expirer
 
+  packages-expirer:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PACKAGES_EXPIRER_MODE: loop
+      PACKAGES_EXPIRER_POLL_SECONDS: 3600
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AUTH_RATE_LIMIT_BACKEND: ${AUTH_RATE_LIMIT_BACKEND:-redis}
+      AUTH_RATE_LIMIT_REDIS_NAMESPACE: ${AUTH_RATE_LIMIT_REDIS_NAMESPACE:-auth_rate_limit}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m app.workers.packages_expirer
+
   prometheus:
     image: prom/prometheus:v3.5.0
     pull_policy: if_not_present

@@ -77,6 +77,19 @@ class BookingRepository:
         )
         return (await self.session.scalars(stmt)).all()
 
+    async def get_active_booking_for_slot(self, slot_id: UUID) -> Booking | None:
+        """Return active booking (HOLD/CONFIRMED) for slot if present."""
+        stmt = (
+            select(Booking)
+            .where(
+                Booking.slot_id == slot_id,
+                Booking.status.in_((BookingStatusEnum.HOLD, BookingStatusEnum.CONFIRMED)),
+            )
+            .order_by(Booking.created_at.desc())
+            .limit(1)
+        )
+        return await self.session.scalar(stmt)
+
     async def get_reschedule_successor(self, booking_id: UUID) -> Booking | None:
         stmt = (
             select(Booking)

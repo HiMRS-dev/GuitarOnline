@@ -367,6 +367,61 @@ async def test_cancel_less_than_24h_does_not_return_lesson(
 
 
 @pytest.mark.asyncio
+async def test_rebook_same_slot_after_cancel_succeeds_with_active_booking_uniqueness(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
+
+    package = await _create_package(api_client, admin, student, lessons_total=5)
+    slot = await _create_slot(api_client, admin, teacher, hours_from_now=30)
+    _, first_confirmed_booking = await _hold_and_confirm_booking(
+        api_client,
+        student,
+        slot_id=slot["id"],
+        package_id=package["id"],
+    )
+
+    first_cancel_response = await api_client.post(
+        f"/booking/{first_confirmed_booking['id']}/cancel",
+        headers=_auth_headers(student.access_token),
+        json={"reason": "Rebook same slot"},
+    )
+    _assert_status(first_cancel_response, 200)
+    first_canceled_booking = first_cancel_response.json()
+    assert first_canceled_booking["status"] == "canceled"
+
+    second_hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={"slot_id": slot["id"], "package_id": package["id"]},
+    )
+    _assert_status(second_hold_response, 200)
+    second_hold_booking = second_hold_response.json()
+
+    second_confirm_response = await api_client.post(
+        f"/booking/{second_hold_booking['id']}/confirm",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(second_confirm_response, 200)
+    second_confirmed_booking = second_confirm_response.json()
+
+    package_after_rebook = await _get_package_for_student(api_client, student, package["id"])
+    student_bookings = await _list_my_bookings(api_client, student)
+    first_booking_after_rebook = _find_booking(student_bookings, first_confirmed_booking["id"])
+    second_booking_after_rebook = _find_booking(student_bookings, second_confirmed_booking["id"])
+    active_booking_count = await _count_active_bookings_for_slot(UUID(slot["id"]))
+
+    assert first_booking_after_rebook["status"] == "canceled"
+    assert second_booking_after_rebook["status"] == "confirmed"
+    assert second_booking_after_rebook["slot_id"] == slot["id"]
+    assert package_after_rebook["lessons_left"] == 4
+    assert active_booking_count == 1
+
+
+@pytest.mark.asyncio
 async def test_reschedule_keeps_balance_and_links_bookings(
     api_client: httpx.AsyncClient,
     auth_users: AuthUsers,

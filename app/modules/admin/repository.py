@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -31,6 +31,11 @@ from app.modules.notifications.models import Notification
 from app.modules.scheduling.models import AvailabilitySlot
 from app.modules.teachers.models import TeacherProfile, TeacherProfileTag
 from app.shared.utils import utc_now
+
+ACTIVE_BOOKING_STATUSES: tuple[BookingStatusEnum, ...] = (
+    BookingStatusEnum.HOLD,
+    BookingStatusEnum.CONFIRMED,
+)
 
 
 class AdminRepository:
@@ -304,7 +309,13 @@ class AdminRepository:
                 AvailabilitySlot,
                 Booking.id.label("booking_id"),
                 Booking.status.label("booking_status"),
-            ).outerjoin(Booking, Booking.slot_id == AvailabilitySlot.id)
+            ).outerjoin(
+                Booking,
+                and_(
+                    Booking.slot_id == AvailabilitySlot.id,
+                    Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+                ),
+            )
         )
 
         if teacher_id is not None:
@@ -482,7 +493,13 @@ class AdminRepository:
                 Booking.status.label("booking_status"),
                 Lesson.status.label("lesson_status"),
             )
-            .outerjoin(Booking, Booking.slot_id == AvailabilitySlot.id)
+            .outerjoin(
+                Booking,
+                and_(
+                    Booking.slot_id == AvailabilitySlot.id,
+                    Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+                ),
+            )
             .outerjoin(Lesson, Lesson.booking_id == Booking.id)
         )
         if from_utc is not None:

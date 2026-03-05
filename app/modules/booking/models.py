@@ -27,7 +27,7 @@ class Booking(BaseModelMixin, Base):
     slot_id: Mapped[UUID] = mapped_column(
         ForeignKey("availability_slots.id", ondelete="RESTRICT"),
         nullable=False,
-        unique=True,
+        index=True,
     )
     student_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),

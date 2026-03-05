@@ -119,6 +119,14 @@ class FakeBookingRepository:
             and booking.hold_expires_at <= now
         ]
 
+    async def get_active_booking_for_slot(self, slot_id: UUID) -> FakeBooking | None:
+        for booking in self._bookings.values():
+            if booking.slot_id != slot_id:
+                continue
+            if booking.status in (BookingStatusEnum.HOLD, BookingStatusEnum.CONFIRMED):
+                return booking
+        return None
+
     async def get_reschedule_successor(self, booking_id: UUID) -> FakeBooking | None:
         for booking in self._bookings.values():
             if booking.rescheduled_from_booking_id == booking_id:
@@ -307,6 +315,118 @@ async def test_hold_sets_10_minute_expiration(monkeypatch: pytest.MonkeyPatch) -
 
     assert booking.status == BookingStatusEnum.HOLD
     assert booking.hold_expires_at == fixed_now + timedelta(minutes=settings.booking_hold_minutes)
+    assert slot.status == SlotStatusEnum.HOLD
+
+
+@pytest.mark.asyncio
+async def test_hold_rejects_when_slot_has_active_booking_even_if_slot_status_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    other_student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+    existing_booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=24),
+        end_at=fixed_now + timedelta(hours=25),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=10,
+        lessons_left=10,
+    )
+    existing_booking = FakeBooking(
+        id=existing_booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=other_student_id,
+        teacher_id=teacher_id,
+        package_id=uuid4(),
+        status=BookingStatusEnum.CONFIRMED,
+    )
+
+    service, booking_repo, _, _, _, _ = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+        bookings={existing_booking_id: existing_booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    with pytest.raises(BusinessRuleException, match="Slot is not available"):
+        await service.hold_booking(
+            BookingHoldRequest(slot_id=slot_id, package_id=package_id),
+            actor,
+        )
+
+    assert len(booking_repo._bookings) == 1
+    assert slot.status == SlotStatusEnum.OPEN
+
+
+@pytest.mark.asyncio
+async def test_hold_allows_rebooking_when_only_terminal_booking_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+    old_booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=24),
+        end_at=fixed_now + timedelta(hours=25),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=10,
+        lessons_left=10,
+    )
+    old_booking = FakeBooking(
+        id=old_booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CANCELED,
+    )
+
+    service, booking_repo, _, _, _, _ = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+        bookings={old_booking_id: old_booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    new_hold = await service.hold_booking(
+        BookingHoldRequest(slot_id=slot_id, package_id=package_id),
+        actor,
+    )
+
+    assert new_hold.status == BookingStatusEnum.HOLD
+    assert new_hold.slot_id == slot_id
+    assert len(booking_repo._bookings) == 2
     assert slot.status == SlotStatusEnum.HOLD
 
 

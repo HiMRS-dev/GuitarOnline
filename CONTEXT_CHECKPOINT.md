@@ -2345,6 +2345,28 @@ Implemented in codebase:
   - admin KPI lesson counters aggregate `no_show` into `lessons_completed`
     so `lessons_total` remains consistent.
 
+9. `C10` consistency hardening for `slot_status` vs `booking_status`:
+- resolved active-booking uniqueness conflict on booking schema:
+  - added migration `alembic/versions/20260305_0006_active_booking_slot_uniqueness.py`,
+  - replaced unconditional `uq_bookings_slot_id` with partial unique index
+    `uq_bookings_slot_id_active` scoped to active states (`hold`, `confirmed`).
+- ORM alignment:
+  - `Booking.slot_id` uniqueness flag removed at model level (kept indexed).
+- HOLD flow consistency guard added:
+  - `_hold_booking_for_student(...)` now explicitly checks
+    `BookingRepository.get_active_booking_for_slot(slot_id)` and rejects
+    hold creation when any active booking exists, even if slot row is stale-`open`.
+- admin slot projections normalized for re-book lifecycle:
+  - `AdminRepository.list_slots(...)` now joins only active bookings,
+  - `AdminRepository.list_slot_status_snapshots(...)` now joins only active bookings.
+- slot stats bucket consistency updated:
+  - terminal booking statuses (`canceled`/`expired`) no longer force `canceled` bucket,
+    so `open` slots with only historical terminal bookings are counted as `open`
+    unless slot/lesson state is terminal.
+- integration contract added:
+  - re-booking same slot after cancellation now succeeds and keeps DB invariant:
+    only one active booking exists per slot.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
@@ -2369,6 +2391,13 @@ Verification tasks added/updated:
   - `tests/test_admin_slot_stats.py` extended with `lesson_status=no_show` terminal bucket mapping.
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/lessons/{lesson_id}/no-show` RBAC + successful admin path.
+  - `tests/test_booking_rules.py` extended with C10 hold consistency guards:
+    - reject hold when slot has active booking despite stale-`open` slot status,
+    - allow re-book hold when only terminal booking exists.
+  - `tests/test_booking_billing_integration.py` extended with
+    re-book same slot scenario after cancellation (active-booking uniqueness contract).
+  - `tests/test_admin_slot_stats.py` updated for C10 bucket mapping where
+    `booking_status=expired/canceled` does not force terminal bucket without slot/lesson terminal state.
 
 Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2390,4 +2419,8 @@ Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0005_lesson_no_show_status.py app/modules/lessons/service.py app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py tests/test_lessons_no_show.py tests/test_admin_slot_stats.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_lessons_no_show.py tests/test_admin_slot_stats.py` -> `10 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_lesson_no_show_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/booking/models.py app/modules/booking/repository.py app/modules/booking/service.py app/modules/admin/repository.py app/modules/admin/service.py alembic/versions/20260305_0006_active_booking_slot_uniqueness.py tests/test_booking_rules.py tests/test_booking_billing_integration.py tests/test_admin_slot_stats.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_admin_slot_stats.py` -> `23 passed`.
+- `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "rebook_same_slot_after_cancel_succeeds_with_active_booking_uniqueness or concurrent_hold_attempts_on_same_slot_allow_only_one_success"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run pytest -q tests/test_admin_slots_list.py tests/test_admin_bookings_list.py` -> `8 passed`.
 

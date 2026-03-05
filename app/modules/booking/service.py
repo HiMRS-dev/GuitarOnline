@@ -129,6 +129,9 @@ class BookingService:
             raise BusinessRuleException("Slot is not available")
         if slot.start_at <= utc_now():
             raise BusinessRuleException("Cannot book a slot in the past")
+        active_booking = await self.booking_repository.get_active_booking_for_slot(slot.id)
+        if active_booking is not None:
+            raise BusinessRuleException("Slot is not available")
 
         package = await self.billing_repository.get_package_by_id(package_id)
         if package is None:

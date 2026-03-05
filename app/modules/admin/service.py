@@ -397,8 +397,6 @@ class AdminService:
             return "canceled"
         if slot_status in {SlotStatusEnum.CANCELED, SlotStatusEnum.BLOCKED}:
             return "canceled"
-        if booking_status in {BookingStatusEnum.CANCELED, BookingStatusEnum.EXPIRED}:
-            return "canceled"
         if slot_status == SlotStatusEnum.BOOKED or booking_status == BookingStatusEnum.CONFIRMED:
             return "confirmed"
         if slot_status == SlotStatusEnum.HOLD or booking_status == BookingStatusEnum.HOLD:

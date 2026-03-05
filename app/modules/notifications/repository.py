@@ -25,10 +25,12 @@ class NotificationsRepository:
         template_key: str | None,
         title: str,
         body: str,
+        idempotency_key: str | None = None,
     ) -> Notification:
         notification = Notification(
             user_id=user_id,
             channel=channel,
+            idempotency_key=idempotency_key,
             template_key=template_key,
             title=title,
             body=body,
@@ -36,6 +38,10 @@ class NotificationsRepository:
         self.session.add(notification)
         await self.session.flush()
         return notification
+
+    async def get_by_idempotency_key(self, idempotency_key: str) -> Notification | None:
+        stmt = select(Notification).where(Notification.idempotency_key == idempotency_key)
+        return await self.session.scalar(stmt)
 
     async def get_notification_by_id(self, notification_id: UUID) -> Notification | None:
         stmt = select(Notification).where(Notification.id == notification_id)

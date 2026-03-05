@@ -24,6 +24,11 @@ class Notification(BaseModelMixin, Base):
         index=True,
     )
     channel: Mapped[str] = mapped_column(String(32), default="email", nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(191),
+        nullable=True,
+        unique=True,
+    )
     template_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)

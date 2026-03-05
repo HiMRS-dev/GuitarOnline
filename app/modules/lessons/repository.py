@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.enums import RoleEnum
+from app.core.enums import LessonStatusEnum, RoleEnum
 from app.modules.lessons.models import Lesson
 
 
@@ -90,6 +90,25 @@ class LessonsRepository:
         stmt = base_stmt.order_by(Lesson.scheduled_start_at.asc()).limit(limit).offset(offset)
         items = (await self.session.scalars(stmt)).all()
         return items, total
+
+    async def list_scheduled_lessons_starting_between(
+        self,
+        *,
+        from_utc,
+        to_utc,
+        limit: int,
+    ) -> list[Lesson]:
+        stmt = (
+            select(Lesson)
+            .where(
+                Lesson.status == LessonStatusEnum.SCHEDULED,
+                Lesson.scheduled_start_at >= from_utc,
+                Lesson.scheduled_start_at <= to_utc,
+            )
+            .order_by(Lesson.scheduled_start_at.asc())
+            .limit(limit)
+        )
+        return (await self.session.scalars(stmt)).all()
 
     async def update_lesson(self, lesson: Lesson, **changes) -> Lesson:
         for key, value in changes.items():

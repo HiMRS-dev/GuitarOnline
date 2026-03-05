@@ -3028,6 +3028,27 @@ Implemented in codebase:
 - response contract added:
   - `AdminNotificationListItemRead` (`notification_id`, recipient, channel, template, status, sent/create/update timestamps).
 
+6. `F6` reminder 24h worker:
+- added reminder generation worker service:
+  - `app/modules/notifications/reminder_worker.py` (`LessonReminder24hWorker`).
+- reminder scan behavior implemented:
+  - selects `scheduled` lessons starting within next 24 hours (`now .. now+24h`),
+  - creates `lesson_reminder_24h` notifications for lesson student recipients.
+- periodic executable job added:
+  - `app/workers/lesson_reminder_24h_worker.py`,
+  - default poll interval `3600s` (hourly).
+- idempotency contract implemented using notification-level key:
+  - key format: `lesson:{lesson_id}:lesson_reminder_24h:{date}`.
+- notifications persistence extended for idempotency:
+  - ORM field `Notification.idempotency_key`,
+  - migration `alembic/versions/20260306_0016_notification_idempotency_key.py`,
+  - unique DB index `uq_notifications_idempotency_key`.
+- notifications repository extended:
+  - optional `idempotency_key` on create path,
+  - `get_by_idempotency_key(...)` helper for duplicate suppression.
+- lessons repository extended:
+  - `list_scheduled_lessons_starting_between(...)` for reminder candidate scan.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_notification_templates.py` added for:
@@ -3065,4 +3086,5 @@ Latest local checks:
 - `python -m compileall app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> success.
 - `python -m compileall app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_notifications_list.py tests/test_rbac_access_integration.py` -> success.
+- `python -m compileall app/modules/notifications/models.py app/modules/notifications/repository.py app/modules/notifications/reminder_worker.py app/modules/lessons/repository.py app/workers/lesson_reminder_24h_worker.py alembic/versions/20260306_0016_notification_idempotency_key.py` -> success.
 

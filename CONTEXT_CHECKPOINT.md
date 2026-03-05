@@ -3211,6 +3211,32 @@ Implemented in codebase:
   - avoids silent failures and ambiguous empty states.
 - added dedicated layout styles for teacher split-view list/detail in `web-admin/src/styles.css`.
 
+7. `G8` + `G9` + `G10` + `G11` + `G12` calendar features:
+- calendar data API client implemented:
+  - `web-admin/src/features/slots/api.ts`,
+  - `web-admin/src/features/slots/types.ts`.
+- FullCalendar week/day view integrated in `Calendar` section:
+  - `@fullcalendar/react`,
+  - `@fullcalendar/timegrid`,
+  - `@fullcalendar/interaction`.
+- teacher filter integrated with persisted selection:
+  - uses `GET /admin/teachers`,
+  - stores selected `teacher_id` in browser storage key `go_admin_calendar_teacher_id`.
+- status legend added with canonical slot-status mapping:
+  - `open`,
+  - `hold`,
+  - `booked` (confirmed),
+  - `blocked`,
+  - `canceled`.
+- slot operation modals implemented and bound to endpoints:
+  - create slot -> `POST /admin/slots`,
+  - block slot -> `POST /admin/slots/{slot_id}/block`,
+  - bulk create -> `POST /admin/slots/bulk-create`.
+- deterministic endpoint-unavailable mode added for calendar dependencies:
+  - explicit unavailable states for missing teachers/slots endpoint group.
+- UI styling expanded for calendar toolbar, legend, event actions, and modal forms.
+- `web-admin/package.json` updated with FullCalendar dependencies.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
@@ -3219,6 +3245,7 @@ Verification tasks added/updated:
   - `rg -n ".{101}" web-admin/src` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/shared/api/client.ts web-admin/src/features/auth/api.ts web-admin/src/App.tsx` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/features/teachers/types.ts web-admin/src/styles.css` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/slots/api.ts web-admin/src/features/slots/types.ts web-admin/src/styles.css` -> no overlong lines found.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.core.enums import NotificationStatusEnum, OutboxStatusEnum
+from app.modules.notifications.delivery import DeliveryMessage, DeliveryResult
 from app.modules.notifications.outbox_worker import NotificationsOutboxWorker
 
 
@@ -120,10 +121,24 @@ class FakeBillingRepository:
         return self.payment_to_student.get(payment_id)
 
 
+class FakeDeliveryClient:
+    def __init__(self, *, fail: bool = False, error_message: str = "delivery failed") -> None:
+        self.fail = fail
+        self.error_message = error_message
+        self.messages: list[DeliveryMessage] = []
+
+    async def send(self, message: DeliveryMessage) -> DeliveryResult:
+        self.messages.append(message)
+        if self.fail:
+            return DeliveryResult(success=False, error_message=self.error_message)
+        return DeliveryResult(success=True)
+
+
 def make_worker(
     events: list[FakeOutboxEvent],
     *,
     payment_to_student: dict[UUID, UUID] | None = None,
+    delivery_client: FakeDeliveryClient | None = None,
     now: datetime | None = None,
     base_backoff_seconds: int = 30,
 ) -> tuple[NotificationsOutboxWorker, FakeAuditRepository, FakeNotificationsRepository]:
@@ -135,6 +150,7 @@ def make_worker(
         audit_repository=audit_repo,  # type: ignore[arg-type]
         notifications_repository=notifications_repo,  # type: ignore[arg-type]
         billing_repository=billing_repo,  # type: ignore[arg-type]
+        delivery_client=delivery_client,
         now_provider=lambda: now_point,
         base_backoff_seconds=base_backoff_seconds,
     )
@@ -160,6 +176,30 @@ async def test_worker_processes_booking_confirmed_into_notification() -> None:
     assert event.status == OutboxStatusEnum.PROCESSED
     assert len(notifications_repo.notifications) == 1
     assert notifications_repo.notifications[0].user_id == student_id
+    assert notifications_repo.notifications[0].status == NotificationStatusEnum.SENT
+
+
+@pytest.mark.asyncio
+async def test_worker_calls_delivery_client_before_marking_sent() -> None:
+    student_id = uuid4()
+    delivery_client = FakeDeliveryClient()
+    event = FakeOutboxEvent(
+        id=uuid4(),
+        event_type="booking.confirmed",
+        payload={"student_id": str(student_id), "booking_id": str(uuid4())},
+    )
+    worker, _, notifications_repo = make_worker(
+        [event],
+        delivery_client=delivery_client,
+        now=datetime(2026, 2, 23, 12, 0, tzinfo=UTC),
+    )
+
+    stats = await worker.run_once()
+
+    assert stats["processed"] == 1
+    assert stats["dispatched"] == 1
+    assert len(delivery_client.messages) == 1
+    assert delivery_client.messages[0].user_id == student_id
     assert notifications_repo.notifications[0].status == NotificationStatusEnum.SENT
 
 
@@ -229,6 +269,31 @@ async def test_worker_requeues_failed_event_after_backoff() -> None:
     assert stats["processed"] == 1
     assert event.status == OutboxStatusEnum.PROCESSED
     assert len(notifications_repo.notifications) == 1
+
+
+@pytest.mark.asyncio
+async def test_worker_persists_failed_notification_when_delivery_client_fails() -> None:
+    student_id = uuid4()
+    delivery_client = FakeDeliveryClient(fail=True, error_message="stub send failed")
+    event = FakeOutboxEvent(
+        id=uuid4(),
+        event_type="booking.confirmed",
+        payload={"student_id": str(student_id), "booking_id": str(uuid4())},
+    )
+    worker, _, notifications_repo = make_worker(
+        [event],
+        delivery_client=delivery_client,
+        now=datetime(2026, 2, 23, 12, 0, tzinfo=UTC),
+    )
+
+    stats = await worker.run_once()
+
+    assert stats == {"requeued": 0, "processed": 0, "failed": 1, "dispatched": 0}
+    assert event.status == OutboxStatusEnum.FAILED
+    assert event.error_message == "stub send failed"
+    assert len(delivery_client.messages) == 1
+    assert len(notifications_repo.notifications) == 1
+    assert notifications_repo.notifications[0].status == NotificationStatusEnum.FAILED
 
 
 @pytest.mark.asyncio

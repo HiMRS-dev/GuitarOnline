@@ -2964,6 +2964,19 @@ Implemented in codebase:
   - migration: `alembic/versions/20260306_0015_notification_template_key.py`.
 - notifications API/service contract updated to accept/store canonical template key on manual create flow.
 
+2. `F2` email delivery stub strategy:
+- introduced explicit delivery client contract and stub provider:
+  - `app/modules/notifications/delivery.py`.
+- stub provider behavior:
+  - writes delivery attempts to application logs,
+  - returns successful send result without external provider dependency.
+- outbox worker delivery flow hardened to use delivery client contract:
+  - creates notification record first (journal-first),
+  - invokes delivery client,
+  - marks notification `sent` on success,
+  - marks notification `failed` on delivery error/result failure before failing outbox event.
+- no new outbox table introduced; existing outbox + `notifications` journal retained.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_notification_templates.py` added for:
@@ -2971,9 +2984,13 @@ Verification tasks added/updated:
     - legacy alias normalization,
     - unknown-key guard.
   - `tests/test_outbox_notifications_worker.py` updated for repository signature compatibility.
+  - `tests/test_outbox_notifications_worker.py` extended for delivery-stub behavior:
+    - delivery client invocation on success path,
+    - notification journal persistence with `failed` status on delivery failure.
 
 Latest local checks:
 - `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).
 - `python -m pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`No module named pytest` in active Python environment).
 - `python -m compileall app/core/enums.py app/modules/notifications tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> success.
+- `python -m compileall app/modules/notifications/delivery.py app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
 

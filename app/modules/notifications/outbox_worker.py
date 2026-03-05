@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -10,8 +11,15 @@ from app.core.enums import NotificationStatusEnum
 from app.modules.audit.models import OutboxEvent
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.repository import BillingRepository
+from app.modules.notifications.delivery import (
+    DeliveryClient,
+    DeliveryMessage,
+    StubEmailDeliveryClient,
+)
 from app.modules.notifications.repository import NotificationsRepository
 from app.shared.utils import utc_now
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -20,6 +28,7 @@ class NotificationMessage:
     title: str
     body: str
     channel: str = "email"
+    template_key: str | None = None
 
 
 class NotificationsOutboxWorker:
@@ -35,6 +44,7 @@ class NotificationsOutboxWorker:
         max_retries: int = 5,
         base_backoff_seconds: int = 30,
         max_backoff_seconds: int = 300,
+        delivery_client: DeliveryClient | None = None,
         now_provider=utc_now,
     ) -> None:
         self.audit_repository = audit_repository
@@ -44,6 +54,7 @@ class NotificationsOutboxWorker:
         self.max_retries = max_retries
         self.base_backoff_seconds = base_backoff_seconds
         self.max_backoff_seconds = max_backoff_seconds
+        self.delivery_client = delivery_client or StubEmailDeliveryClient()
         self.now_provider = now_provider
 
     async def run_once(self) -> dict[str, int]:
@@ -59,14 +70,60 @@ class NotificationsOutboxWorker:
                     notification = await self.notifications_repository.create_notification(
                         user_id=message.user_id,
                         channel=message.channel,
-                        template_key=None,
+                        template_key=message.template_key,
                         title=message.title,
                         body=message.body,
                     )
+                    delivery_message = DeliveryMessage(
+                        notification_id=notification.id,
+                        user_id=message.user_id,
+                        channel=message.channel,
+                        template_key=message.template_key,
+                        title=message.title,
+                        body=message.body,
+                    )
+                    try:
+                        delivery_result = await self.delivery_client.send(delivery_message)
+                    except Exception:
+                        await self.notifications_repository.set_status(
+                            notification,
+                            NotificationStatusEnum.FAILED,
+                            None,
+                        )
+                        logger.exception(
+                            "Notification delivery failed: notification_id=%s channel=%s",
+                            notification.id,
+                            message.channel,
+                        )
+                        raise
+
+                    if not delivery_result.success:
+                        error_message = (
+                            delivery_result.error_message or "Notification delivery failed"
+                        )
+                        await self.notifications_repository.set_status(
+                            notification,
+                            NotificationStatusEnum.FAILED,
+                            None,
+                        )
+                        logger.warning(
+                            "Notification delivery failed: notification_id=%s channel=%s "
+                            "error=%s",
+                            notification.id,
+                            message.channel,
+                            error_message,
+                        )
+                        raise RuntimeError(error_message)
+
                     await self.notifications_repository.set_status(
                         notification,
                         NotificationStatusEnum.SENT,
                         self.now_provider(),
+                    )
+                    logger.info(
+                        "Notification delivery succeeded: notification_id=%s channel=%s",
+                        notification.id,
+                        message.channel,
                     )
                     stats["dispatched"] += 1
 

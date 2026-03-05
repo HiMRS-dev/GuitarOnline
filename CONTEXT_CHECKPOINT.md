@@ -2209,15 +2209,41 @@ Implemented in codebase:
   - UTC normalization for date-time filters,
   - strict range rule `from_utc <= to_utc`.
 
+2. `C2` admin booking cancel endpoint (reason + admin trace + 24h policy reuse):
+- added admin-only endpoint:
+  - `POST /api/v1/admin/bookings/{booking_id}/cancel`.
+- explicit admin cancel contract now requires non-empty reason:
+  - `AdminBookingCancelRequest.reason` (`min_length=1`, `max_length=512`).
+- endpoint is implemented as admin wrapper over booking cancel core:
+  - delegates to `BookingService.cancel_booking(...)`,
+  - preserves existing 24h refund policy behavior from booking domain core.
+- conflict resolution applied:
+  - existing public cancel payload allows nullable reason (`BookingCancelRequest`),
+  - admin flow now enforces required reason via dedicated admin schema without
+    breaking student/teacher public API compatibility.
+- audit trace hardening for admin cancel:
+  - `admin.booking.cancel` payload now includes:
+    - `booking_id`,
+    - `admin_id`,
+    - `reason`,
+    - `refund_returned`,
+    - `refund_policy_applied` (`refunded` / `no_refund`),
+    - final booking status.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
+  - `tests/test_booking_rules.py` extended with admin cancel audit payload assertions,
   - `tests/test_rbac_access_integration.py` extended with
-    `/admin/bookings` RBAC check (`401/403/200`).
+    `/admin/bookings` RBAC check (`401/403/200`),
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/bookings/{booking_id}/cancel` RBAC + successful admin-cancel path.
 
 Latest local checks:
-- `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_bookings_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_admin_bookings_list.py` -> `4 passed`.
+- `py -m poetry run pytest -q tests/test_booking_rules.py` -> `11 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_bookings_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `114 passed, 24 skipped`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_cancel_booking_endpoint_returns_401_403_and_200_by_role"` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `115 passed, 25 skipped`.
 

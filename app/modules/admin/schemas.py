@@ -214,6 +214,12 @@ class AdminBookingListItemRead(BaseModel):
     updated_at_utc: datetime
 
 
+class AdminBookingCancelRequest(BaseModel):
+    """Admin request schema for booking cancellation."""
+
+    reason: str = Field(min_length=1, max_length=512)
+
+
 class AdminSlotListItemRead(BaseModel):
     """Admin slot list item with aggregated booking status."""
 

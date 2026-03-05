@@ -198,6 +198,7 @@ class FakeLessonsRepository:
 class FakeAuditRepository:
     def __init__(self) -> None:
         self.events: list[dict] = []
+        self.audit_logs: list[dict] = []
 
     async def create_outbox_event(
         self,
@@ -211,6 +212,24 @@ class FakeAuditRepository:
                 "aggregate_type": aggregate_type,
                 "aggregate_id": aggregate_id,
                 "event_type": event_type,
+                "payload": payload,
+            },
+        )
+
+    async def create_audit_log(
+        self,
+        actor_id,
+        action: str,
+        entity_type: str,
+        entity_id: str | None,
+        payload: dict,
+    ) -> None:
+        self.audit_logs.append(
+            {
+                "actor_id": actor_id,
+                "action": action,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
                 "payload": payload,
             },
         )
@@ -500,6 +519,71 @@ async def test_cancel_less_than_24h_burns_lesson(monkeypatch: pytest.MonkeyPatch
     assert billing_repo.return_calls == 0
     assert package.lessons_left == 3
     assert slot.status == SlotStatusEnum.OPEN
+
+
+@pytest.mark.asyncio
+async def test_admin_cancel_writes_audit_with_refund_decision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    admin_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+    booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=30),
+        end_at=fixed_now + timedelta(hours=31),
+        status=SlotStatusEnum.BOOKED,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=8,
+        lessons_left=3,
+    )
+    booking = FakeBooking(
+        id=booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CONFIRMED,
+    )
+
+    service, _, _, _, _, audit_repo = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+        bookings={booking_id: booking},
+    )
+    admin_actor = make_actor(admin_id, RoleEnum.ADMIN)
+
+    canceled = await service.cancel_booking(
+        booking_id,
+        BookingCancelRequest(reason="Admin policy cancel"),
+        admin_actor,
+    )
+
+    assert canceled.status == BookingStatusEnum.CANCELED
+    assert canceled.refund_returned is True
+    assert len(audit_repo.audit_logs) == 1
+    log = audit_repo.audit_logs[0]
+    assert log["action"] == "admin.booking.cancel"
+    assert log["entity_id"] == str(booking_id)
+    assert log["payload"]["booking_id"] == str(booking_id)
+    assert log["payload"]["admin_id"] == str(admin_id)
+    assert log["payload"]["reason"] == "Admin policy cancel"
+    assert log["payload"]["refund_returned"] is True
+    assert log["payload"]["refund_policy_applied"] == "refunded"
 
 
 @pytest.mark.asyncio

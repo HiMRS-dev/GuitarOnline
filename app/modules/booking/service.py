@@ -275,8 +275,11 @@ class BookingService:
                 entity_type="booking",
                 entity_id=str(booking.id),
                 payload={
+                    "booking_id": str(booking.id),
+                    "admin_id": str(actor.id),
                     "reason": payload.reason,
                     "refund_returned": refund_returned,
+                    "refund_policy_applied": "refunded" if refund_returned else "no_refund",
                     "booking_status": str(booking.status),
                 },
             )

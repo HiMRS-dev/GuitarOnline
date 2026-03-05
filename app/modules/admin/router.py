@@ -11,6 +11,7 @@ from app.core.enums import BookingStatusEnum, RoleEnum, TeacherStatusEnum
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminActionRead,
+    AdminBookingCancelRequest,
     AdminBookingListItemRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
@@ -26,6 +27,8 @@ from app.modules.admin.schemas import (
     AdminTeacherListItemRead,
 )
 from app.modules.admin.service import AdminService, get_admin_service
+from app.modules.booking.schemas import BookingCancelRequest, BookingRead
+from app.modules.booking.service import BookingService, get_booking_service
 from app.modules.identity.service import require_roles
 from app.modules.scheduling.schemas import SlotCreate
 from app.modules.scheduling.service import SchedulingService, get_scheduling_service
@@ -181,6 +184,22 @@ async def list_admin_bookings(
         offset=pagination.offset,
     )
     return build_page(items, total, pagination)
+
+
+@router.post("/bookings/{booking_id}/cancel", response_model=BookingRead)
+async def cancel_admin_booking(
+    booking_id: UUID,
+    payload: AdminBookingCancelRequest,
+    service: BookingService = Depends(get_booking_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> BookingRead:
+    """Cancel booking via admin-only flow with explicit reason."""
+    booking = await service.cancel_booking(
+        booking_id,
+        BookingCancelRequest(reason=payload.reason),
+        current_user,
+    )
+    return BookingRead.model_validate(booking)
 
 
 @router.delete("/slots/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)

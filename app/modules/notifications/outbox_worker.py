@@ -59,6 +59,7 @@ class NotificationsOutboxWorker:
                     notification = await self.notifications_repository.create_notification(
                         user_id=message.user_id,
                         channel=message.channel,
+                        template_key=None,
                         title=message.title,
                         body=message.body,
                     )

@@ -15,6 +15,7 @@ class NotificationCreate(BaseModel):
 
     user_id: UUID
     channel: str = Field(default="email", max_length=32)
+    template_key: str | None = Field(default=None, max_length=64)
     title: str = Field(min_length=1, max_length=255)
     body: str = Field(min_length=1)
 
@@ -33,6 +34,7 @@ class NotificationRead(BaseModel):
     id: UUID
     user_id: UUID
     channel: str
+    template_key: str | None
     title: str
     body: str
     status: NotificationStatusEnum

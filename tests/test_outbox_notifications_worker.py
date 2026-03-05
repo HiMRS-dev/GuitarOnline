@@ -28,6 +28,7 @@ class FakeNotification:
     id: UUID
     user_id: UUID
     channel: str
+    template_key: str | None
     title: str
     body: str
     status: NotificationStatusEnum = NotificationStatusEnum.PENDING
@@ -85,6 +86,7 @@ class FakeNotificationsRepository:
         self,
         user_id: UUID,
         channel: str,
+        template_key: str | None,
         title: str,
         body: str,
     ) -> FakeNotification:
@@ -92,6 +94,7 @@ class FakeNotificationsRepository:
             id=uuid4(),
             user_id=user_id,
             channel=channel,
+            template_key=template_key,
             title=title,
             body=body,
         )

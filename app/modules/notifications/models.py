@@ -24,6 +24,7 @@ class Notification(BaseModelMixin, Base):
         index=True,
     )
     channel: Mapped[str] = mapped_column(String(32), default="email", nullable=False)
+    template_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[NotificationStatusEnum] = mapped_column(

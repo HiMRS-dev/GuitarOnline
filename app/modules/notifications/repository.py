@@ -22,10 +22,17 @@ class NotificationsRepository:
         self,
         user_id: UUID,
         channel: str,
+        template_key: str | None,
         title: str,
         body: str,
     ) -> Notification:
-        notification = Notification(user_id=user_id, channel=channel, title=title, body=body)
+        notification = Notification(
+            user_id=user_id,
+            channel=channel,
+            template_key=template_key,
+            title=title,
+            body=body,
+        )
         self.session.add(notification)
         await self.session.flush()
         return notification

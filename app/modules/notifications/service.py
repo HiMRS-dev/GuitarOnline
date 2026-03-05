@@ -15,7 +15,8 @@ from app.modules.notifications.schemas import (
     NotificationCreate,
     NotificationDeliveryMetricsRead,
 )
-from app.shared.exceptions import NotFoundException, UnauthorizedException
+from app.modules.notifications.templates import normalize_template_key
+from app.shared.exceptions import BusinessRuleException, NotFoundException, UnauthorizedException
 from app.shared.utils import utc_now
 
 
@@ -38,9 +39,18 @@ class NotificationsService:
         """Create notification entity."""
         if actor.role.name not in (RoleEnum.ADMIN, RoleEnum.TEACHER):
             raise UnauthorizedException("Only admin and teacher can create notifications")
+
+        template_key: str | None = None
+        if payload.template_key is not None:
+            try:
+                template_key = normalize_template_key(payload.template_key).value
+            except ValueError as exc:
+                raise BusinessRuleException(str(exc)) from exc
+
         return await self.repository.create_notification(
             user_id=payload.user_id,
             channel=payload.channel,
+            template_key=template_key,
             title=payload.title,
             body=payload.body,
         )

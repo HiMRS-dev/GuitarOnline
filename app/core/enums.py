@@ -81,6 +81,14 @@ class NotificationStatusEnum(StrEnum):
     FAILED = "failed"
 
 
+class NotificationTemplateKeyEnum(StrEnum):
+    """Supported notification template keys."""
+
+    BOOKING_CONFIRMED = "booking_confirmed"
+    BOOKING_CANCELED = "booking_canceled"
+    LESSON_REMINDER_24H = "lesson_reminder_24h"
+
+
 class OutboxStatusEnum(StrEnum):
     """Outbox event status for integration publishing."""
 

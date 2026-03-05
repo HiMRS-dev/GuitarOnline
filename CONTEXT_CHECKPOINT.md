@@ -2944,3 +2944,36 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "teacher_lessons_endpoint_returns_401_403_and_200_by_role or me_lessons_alias_endpoint_returns_401_403_and_200_by_role or lessons_my_endpoint_returns_401_403_and_200_by_role or teacher_lesson_report_endpoint_returns_401_403_and_200_by_role"` -> `4 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "confirm_creates_single_lesson_and_repeat_confirm_is_idempotent or confirm_reserves_and_complete_consumes_package_capacity"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 
+## 36) Epic F Implementation Progress (Started 2026-03-06)
+
+Implemented in codebase:
+
+1. `F1` notification template contract:
+- added explicit notification template key contract:
+  - `booking_confirmed`,
+  - `booking_canceled`,
+  - `lesson_reminder_24h`.
+- implemented code-based template registry and render helpers:
+  - `app/modules/notifications/templates.py`.
+- legacy alias support added for transition:
+  - `booking_cancelled` normalizes to `booking_canceled`.
+- added `NotificationTemplateKeyEnum` to shared enums:
+  - `app/core/enums.py`.
+- notifications persistence extended with template token journal field:
+  - ORM: `Notification.template_key`,
+  - migration: `alembic/versions/20260306_0015_notification_template_key.py`.
+- notifications API/service contract updated to accept/store canonical template key on manual create flow.
+
+Verification tasks added/updated:
+- tests:
+  - `tests/test_notification_templates.py` added for:
+    - canonical key rendering,
+    - legacy alias normalization,
+    - unknown-key guard.
+  - `tests/test_outbox_notifications_worker.py` updated for repository signature compatibility.
+
+Latest local checks:
+- `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).
+- `python -m pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`No module named pytest` in active Python environment).
+- `python -m compileall app/core/enums.py app/modules/notifications tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> success.
+

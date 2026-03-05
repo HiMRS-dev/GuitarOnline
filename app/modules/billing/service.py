@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
@@ -13,6 +14,7 @@ from app.core.database import get_db_session
 from app.core.enums import PackageStatusEnum, PaymentStatusEnum, RoleEnum
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.models import LessonPackage, Payment
+from app.modules.billing.providers import PaymentProviderRegistry
 from app.modules.billing.repository import BillingRepository
 from app.modules.billing.schemas import PackageCreate, PackageCreateAdmin, PaymentCreate
 from app.modules.identity.models import User
@@ -27,9 +29,11 @@ class BillingService:
         self,
         repository: BillingRepository,
         audit_repository: AuditRepository,
+        provider_registry: PaymentProviderRegistry | None = None,
     ) -> None:
         self.repository = repository
         self.audit_repository = audit_repository
+        self.provider_registry = provider_registry or PaymentProviderRegistry()
 
     @staticmethod
     def _available_lessons(package: LessonPackage) -> int:
@@ -69,6 +73,82 @@ class BillingService:
                 "trigger": trigger,
             },
         )
+
+    @staticmethod
+    def _allowed_payment_transitions() -> dict[PaymentStatusEnum, set[PaymentStatusEnum]]:
+        return {
+            PaymentStatusEnum.PENDING: {PaymentStatusEnum.SUCCEEDED, PaymentStatusEnum.FAILED},
+            PaymentStatusEnum.FAILED: {PaymentStatusEnum.PENDING, PaymentStatusEnum.SUCCEEDED},
+            PaymentStatusEnum.SUCCEEDED: {PaymentStatusEnum.REFUNDED},
+            PaymentStatusEnum.REFUNDED: set(),
+        }
+
+    @staticmethod
+    def _resolve_paid_at_for_status(
+        payment: Payment,
+        *,
+        status: PaymentStatusEnum,
+        paid_at: datetime | None,
+    ) -> datetime | None:
+        if status == PaymentStatusEnum.SUCCEEDED:
+            return ensure_utc(paid_at) if paid_at is not None else payment.paid_at or utc_now()
+        if status == PaymentStatusEnum.REFUNDED:
+            return payment.paid_at
+        return None
+
+    async def _set_payment_status(
+        self,
+        *,
+        payment: Payment,
+        status: PaymentStatusEnum,
+        actor_id: UUID | None,
+        action: str,
+        paid_at: datetime | None = None,
+        payload_extra: dict[str, Any] | None = None,
+    ) -> Payment:
+        previous_status = payment.status
+        if status == previous_status:
+            return payment
+
+        allowed_transitions = self._allowed_payment_transitions()
+        if status not in allowed_transitions[previous_status]:
+            raise BusinessRuleException(
+                f"Invalid payment status transition: {previous_status} -> {status}",
+            )
+
+        resolved_paid_at = self._resolve_paid_at_for_status(
+            payment,
+            status=status,
+            paid_at=paid_at,
+        )
+        payment = await self.repository.set_payment_status(payment, status, resolved_paid_at)
+
+        payload: dict[str, Any] = {
+            "from_status": str(previous_status),
+            "to_status": str(status),
+            "paid_at": payment.paid_at.isoformat() if payment.paid_at is not None else None,
+        }
+        if payload_extra:
+            payload.update(payload_extra)
+
+        await self.audit_repository.create_audit_log(
+            actor_id=actor_id,
+            action=action,
+            entity_type="payment",
+            entity_id=str(payment.id),
+            payload=payload,
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(payment.id),
+            event_type="billing.payment.status.updated",
+            payload={
+                "payment_id": str(payment.id),
+                "from_status": str(previous_status),
+                "to_status": str(status),
+            },
+        )
+        return payment
 
     async def create_package(self, payload: PackageCreate, actor: User) -> LessonPackage:
         """Create lessons package for a student."""
@@ -267,11 +347,21 @@ class BillingService:
         if package.status != PackageStatusEnum.ACTIVE:
             raise BusinessRuleException("Package is not active")
 
+        provider = self.provider_registry.resolve(payload.provider_name)
+        provider_create_result = await provider.create_payment(
+            package_id=package.id,
+            amount=str(payload.amount),
+            currency=payload.currency,
+            external_reference=payload.external_reference,
+        )
+
         payment = await self.repository.create_payment(
             package_id=payload.package_id,
             amount=Decimal(payload.amount),
             currency=payload.currency,
-            external_reference=payload.external_reference,
+            external_reference=(
+                provider_create_result.external_reference or payload.external_reference
+            ),
         )
         await self.audit_repository.create_audit_log(
             actor_id=actor.id,
@@ -283,6 +373,8 @@ class BillingService:
                 "amount": str(payment.amount),
                 "currency": payment.currency,
                 "external_reference": payment.external_reference,
+                "provider_name": provider.name,
+                "provider_payment_id": provider_create_result.provider_payment_id,
             },
         )
         await self.audit_repository.create_outbox_event(
@@ -293,8 +385,18 @@ class BillingService:
                 "payment_id": str(payment.id),
                 "package_id": str(payment.package_id),
                 "status": str(payment.status),
+                "provider_name": provider.name,
             },
         )
+        if provider_create_result.status != payment.status:
+            payment = await self._set_payment_status(
+                payment=payment,
+                status=provider_create_result.status,
+                actor_id=actor.id,
+                action="billing.payment.provider.status.sync",
+                paid_at=provider_create_result.paid_at,
+                payload_extra={"provider_name": provider.name},
+            )
         return payment
 
     async def update_payment_status(
@@ -311,51 +413,42 @@ class BillingService:
         if payment is None:
             raise NotFoundException("Payment not found")
 
-        if payment.status == status:
-            return payment
-        previous_status = payment.status
-
-        allowed_transitions: dict[PaymentStatusEnum, set[PaymentStatusEnum]] = {
-            PaymentStatusEnum.PENDING: {PaymentStatusEnum.SUCCEEDED, PaymentStatusEnum.FAILED},
-            PaymentStatusEnum.FAILED: {PaymentStatusEnum.PENDING, PaymentStatusEnum.SUCCEEDED},
-            PaymentStatusEnum.SUCCEEDED: {PaymentStatusEnum.REFUNDED},
-            PaymentStatusEnum.REFUNDED: set(),
-        }
-        if status not in allowed_transitions[payment.status]:
-            raise BusinessRuleException(
-                f"Invalid payment status transition: {payment.status} -> {status}",
-            )
-
-        if status == PaymentStatusEnum.SUCCEEDED:
-            paid_at = payment.paid_at or utc_now()
-        elif status == PaymentStatusEnum.REFUNDED:
-            paid_at = payment.paid_at
-        else:
-            paid_at = None
-
-        payment = await self.repository.set_payment_status(payment, status, paid_at)
-        await self.audit_repository.create_audit_log(
+        return await self._set_payment_status(
+            payment=payment,
+            status=status,
             actor_id=actor.id,
             action="billing.payment.status.update",
-            entity_type="payment",
-            entity_id=str(payment.id),
-            payload={
-                "from_status": str(previous_status),
-                "to_status": str(status),
-                "paid_at": payment.paid_at.isoformat() if payment.paid_at is not None else None,
-            },
         )
-        await self.audit_repository.create_outbox_event(
-            aggregate_type="billing",
-            aggregate_id=str(payment.id),
-            event_type="billing.payment.status.updated",
-            payload={
-                "payment_id": str(payment.id),
-                "from_status": str(previous_status),
-                "to_status": str(status),
-            },
+
+    async def handle_payment_webhook(
+        self,
+        provider_name: str,
+        payload: dict[str, Any],
+    ) -> Payment | None:
+        """Resolve and apply provider webhook status update."""
+        provider = self.provider_registry.resolve(provider_name)
+        webhook_result = await provider.handle_webhook(payload)
+        if webhook_result is None or webhook_result.status is None:
+            return None
+
+        payment: Payment | None = None
+        if webhook_result.payment_id is not None:
+            payment = await self.repository.get_payment_by_id(webhook_result.payment_id)
+        if payment is None and webhook_result.external_reference:
+            payment = await self.repository.get_payment_by_external_reference(
+                webhook_result.external_reference,
+            )
+        if payment is None:
+            raise NotFoundException("Payment not found for webhook payload")
+
+        return await self._set_payment_status(
+            payment=payment,
+            status=webhook_result.status,
+            actor_id=None,
+            action="billing.payment.webhook.update",
+            paid_at=webhook_result.paid_at,
+            payload_extra={"provider_name": provider.name},
         )
-        return payment
 
 
 async def get_billing_service(session: AsyncSession = Depends(get_db_session)) -> BillingService:

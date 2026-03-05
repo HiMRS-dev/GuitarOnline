@@ -4,12 +4,18 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 
 import app.modules.billing.service as billing_service_module
 from app.core.enums import PackageStatusEnum, PaymentStatusEnum, RoleEnum
+from app.modules.billing.providers import (
+    PaymentProviderCreateResult,
+    PaymentProviderRegistry,
+    PaymentWebhookResult,
+)
 from app.modules.billing.schemas import PackageCreateAdmin, PaymentCreate
 from app.modules.billing.service import BillingService
 from app.shared.exceptions import BusinessRuleException, UnauthorizedException
@@ -50,6 +56,15 @@ class FakeBillingRepository:
 
     async def get_payment_by_id(self, payment_id: UUID) -> FakePayment | None:
         return self._payments.get(payment_id)
+
+    async def get_payment_by_external_reference(
+        self,
+        external_reference: str,
+    ) -> FakePayment | None:
+        for payment in self._payments.values():
+            if payment.external_reference == external_reference:
+                return payment
+        return None
 
     async def set_payment_status(
         self,
@@ -160,6 +175,50 @@ class FakeAuditRepository:
         )
 
 
+class FakePaymentProvider:
+    def __init__(
+        self,
+        *,
+        create_result: PaymentProviderCreateResult | None = None,
+        webhook_result: PaymentWebhookResult | None = None,
+        webhook_result_by_payload: dict[str, PaymentWebhookResult | None] | None = None,
+    ) -> None:
+        self._create_result = create_result or PaymentProviderCreateResult()
+        self._webhook_result = webhook_result
+        self._webhook_result_by_payload = webhook_result_by_payload or {}
+        self.create_calls: list[dict[str, Any]] = []
+        self.webhook_calls: list[dict[str, Any]] = []
+
+    @property
+    def name(self) -> str:
+        return "manual_paid"
+
+    async def create_payment(
+        self,
+        *,
+        package_id: UUID,
+        amount: str,
+        currency: str,
+        external_reference: str | None,
+    ) -> PaymentProviderCreateResult:
+        self.create_calls.append(
+            {
+                "package_id": package_id,
+                "amount": amount,
+                "currency": currency,
+                "external_reference": external_reference,
+            },
+        )
+        return self._create_result
+
+    async def handle_webhook(self, payload: dict[str, Any]) -> PaymentWebhookResult | None:
+        self.webhook_calls.append(payload)
+        key = str(payload.get("event"))
+        if key in self._webhook_result_by_payload:
+            return self._webhook_result_by_payload[key]
+        return self._webhook_result
+
+
 def make_actor(role: RoleEnum) -> SimpleNamespace:
     return SimpleNamespace(id=uuid4(), role=SimpleNamespace(name=role))
 
@@ -167,11 +226,13 @@ def make_actor(role: RoleEnum) -> SimpleNamespace:
 def make_service(
     payments: dict[UUID, FakePayment] | None = None,
     packages: dict[UUID, FakePackage] | None = None,
+    provider_registry: PaymentProviderRegistry | None = None,
 ) -> tuple[BillingService, FakeAuditRepository]:
     audit_repo = FakeAuditRepository()
     service = BillingService(
         repository=FakeBillingRepository(payments=payments, packages=packages),
         audit_repository=audit_repo,
+        provider_registry=provider_registry,
     )
     return service, audit_repo
 
@@ -539,3 +600,101 @@ async def test_expire_packages_requires_admin() -> None:
 
     with pytest.raises(UnauthorizedException):
         await service.expire_packages(student)
+
+
+@pytest.mark.asyncio
+async def test_create_payment_routes_through_provider_abstraction() -> None:
+    student_id = uuid4()
+    package_id = uuid4()
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=datetime.now(UTC) + timedelta(days=2),
+        lessons_total=10,
+        lessons_left=10,
+    )
+    provider = FakePaymentProvider(
+        create_result=PaymentProviderCreateResult(
+            status=PaymentStatusEnum.PENDING,
+            external_reference="provider-ref-001",
+            provider_payment_id="provider-pay-001",
+        ),
+    )
+    service, audit_repo = make_service(
+        packages={package_id: package},
+        provider_registry=PaymentProviderRegistry(providers=[provider]),
+    )
+    admin = make_actor(RoleEnum.ADMIN)
+
+    payment = await service.create_payment(
+        PaymentCreate(
+            package_id=package_id,
+            amount=Decimal("59.00"),
+            currency="usd",
+            provider_name="manual_paid",
+            external_reference=None,
+        ),
+        admin,
+    )
+
+    assert len(provider.create_calls) == 1
+    assert provider.create_calls[0]["package_id"] == package_id
+    assert payment.external_reference == "provider-ref-001"
+    assert audit_repo.audit_logs[0]["payload"]["provider_name"] == "manual_paid"
+    assert audit_repo.audit_logs[0]["payload"]["provider_payment_id"] == "provider-pay-001"
+
+
+@pytest.mark.asyncio
+async def test_handle_payment_webhook_updates_payment_status_by_provider_result() -> None:
+    payment_id = uuid4()
+    payment = FakePayment(
+        id=payment_id,
+        package_id=uuid4(),
+        status=PaymentStatusEnum.PENDING,
+        paid_at=None,
+        external_reference="provider-ref-200",
+    )
+    provider = FakePaymentProvider(
+        webhook_result_by_payload={
+            "payment.succeeded": PaymentWebhookResult(
+                external_reference="provider-ref-200",
+                status=PaymentStatusEnum.SUCCEEDED,
+            ),
+        },
+    )
+    service, audit_repo = make_service(
+        payments={payment_id: payment},
+        provider_registry=PaymentProviderRegistry(providers=[provider]),
+    )
+
+    updated = await service.handle_payment_webhook(
+        "manual_paid",
+        {"event": "payment.succeeded"},
+    )
+
+    assert updated is not None
+    assert updated.id == payment_id
+    assert updated.status == PaymentStatusEnum.SUCCEEDED
+    assert updated.paid_at is not None
+    assert len(provider.webhook_calls) == 1
+    assert audit_repo.audit_logs[0]["action"] == "billing.payment.webhook.update"
+    assert audit_repo.audit_logs[0]["actor_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_handle_payment_webhook_returns_none_when_provider_ignores_payload() -> None:
+    provider = FakePaymentProvider(webhook_result=None)
+    service, audit_repo = make_service(
+        provider_registry=PaymentProviderRegistry(providers=[provider]),
+    )
+
+    result = await service.handle_payment_webhook(
+        "manual_paid",
+        {"event": "ignored"},
+    )
+
+    assert result is None
+    assert len(provider.webhook_calls) == 1
+    assert audit_repo.audit_logs == []
+    assert audit_repo.outbox_events == []

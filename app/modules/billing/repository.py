@@ -83,6 +83,13 @@ class BillingRepository:
         stmt = select(Payment).where(Payment.id == payment_id)
         return await self.session.scalar(stmt)
 
+    async def get_payment_by_external_reference(
+        self,
+        external_reference: str,
+    ) -> Payment | None:
+        stmt = select(Payment).where(Payment.external_reference == external_reference)
+        return await self.session.scalar(stmt)
+
     async def get_payment_student_id(self, payment_id: UUID) -> UUID | None:
         stmt = (
             select(LessonPackage.student_id)

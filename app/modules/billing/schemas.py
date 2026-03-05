@@ -66,6 +66,7 @@ class PaymentCreate(BaseModel):
     package_id: UUID
     amount: Decimal = Field(gt=0)
     currency: str = Field(default="USD", min_length=3, max_length=3)
+    provider_name: str = Field(default="manual_paid", min_length=1, max_length=64)
     external_reference: str | None = None
 
 

@@ -2567,6 +2567,27 @@ Implemented in codebase:
   - if lesson is already `completed` with missing `consumed_at`, service backfills marker
     without extra package charge.
 
+9. `D9` payment provider abstraction v1 (`create_payment`, `handle_webhook`, `manual_paid`):
+- provider abstraction layer added in billing domain:
+  - `app/modules/billing/providers.py` with contracts:
+    - `PaymentProvider` protocol,
+    - `PaymentProviderRegistry`,
+    - provider results DTOs (`PaymentProviderCreateResult`, `PaymentWebhookResult`).
+- `manual_paid` provider implemented as default v1 provider:
+  - `create_payment(...)` resolves manual provider intent,
+  - `handle_webhook(...)` parses manual webhook payload into normalized internal status update.
+- billing service refactored to use provider abstraction instead of direct provider-agnostic branch logic:
+  - `BillingService.create_payment(...)` resolves provider via registry and routes create operation,
+  - provider result is mapped into payment creation/audit payload,
+  - `BillingService.handle_payment_webhook(...)` added for provider webhook routing and status application.
+- payment status transition logic unified:
+  - shared internal transition helper introduced (`_set_payment_status`) and reused by:
+    - admin status update path,
+    - webhook status update path.
+- compatibility preserved:
+  - existing payment API contracts remain valid (legacy clients can omit `provider_name`,
+    defaults to `manual_paid`).
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2598,6 +2619,10 @@ Verification tasks added/updated:
     confirm-without-package clear-error assertion (`Booking package is required`).
   - `tests/test_lessons_complete.py` extended with repeated-complete idempotency assertion
     (`consume_calls == 1` across two calls).
+  - `tests/test_billing_payment_rules.py` extended with provider-abstraction coverage:
+    - payment create path routes via provider registry,
+    - webhook path updates payment status through provider result,
+    - ignored webhook payload produces no side-effects.
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2620,4 +2645,6 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_billing_payment_rules.py` -> `37 passed`.
 - `py -m poetry run ruff check tests/test_lessons_complete.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_lessons_complete.py tests/test_lessons_no_show.py` -> `13 passed`.
+- `py -m poetry run ruff check app/modules/billing/providers.py app/modules/billing/service.py app/modules/billing/repository.py app/modules/billing/schemas.py tests/test_billing_payment_rules.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_billing_payment_rules.py` -> `20 passed`.
 

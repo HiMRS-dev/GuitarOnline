@@ -28,6 +28,7 @@ class FakeSchedulingRepository:
     def __init__(self, existing_slots: list[FakeSlot] | None = None) -> None:
         self.existing_slots = existing_slots or []
         self.created_slots: list[FakeSlot] = []
+        self.locked_teacher_ids: list[UUID] = []
 
     async def create_slot(
         self,
@@ -62,6 +63,9 @@ class FakeSchedulingRepository:
             if slot.start_at < end_at and slot.end_at > start_at:
                 return slot
         return None
+
+    async def lock_teacher_for_slot_mutation(self, teacher_id: UUID) -> None:
+        self.locked_teacher_ids.append(teacher_id)
 
 
 class FakeAuditRepository:
@@ -126,6 +130,8 @@ async def test_admin_bulk_create_slots_creates_and_skips_with_summary_audit() ->
     assert len(created) == 1
     assert len(skipped) == 1
     assert "overlaps with an existing slot" in skipped[0]["reason"]
+    assert repository.locked_teacher_ids
+    assert all(item == teacher_id for item in repository.locked_teacher_ids)
     assert len(audit_repository.logs) == 2
     assert audit_repository.logs[-1]["action"] == "admin.slot.bulk_create"
     assert audit_repository.logs[-1]["payload"]["created_count"] == 1

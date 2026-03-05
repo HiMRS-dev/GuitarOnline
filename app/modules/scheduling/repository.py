@@ -9,6 +9,7 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.enums import SlotStatusEnum
+from app.modules.identity.models import User
 from app.modules.scheduling.models import AvailabilitySlot
 
 
@@ -39,6 +40,11 @@ class SchedulingRepository:
     async def get_slot_by_id(self, slot_id: UUID) -> AvailabilitySlot | None:
         stmt = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
         return await self.session.scalar(stmt)
+
+    async def lock_teacher_for_slot_mutation(self, teacher_id: UUID) -> None:
+        """Acquire row lock for teacher to serialize slot mutations."""
+        stmt = select(User.id).where(User.id == teacher_id).with_for_update()
+        await self.session.execute(stmt)
 
     async def find_overlapping_slot(
         self,

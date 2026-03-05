@@ -29,6 +29,7 @@ class FakeSchedulingRepository:
     def __init__(self, overlapping_slot: FakeSlot | None = None) -> None:
         self.overlapping_slot = overlapping_slot
         self.created_slots: list[FakeSlot] = []
+        self.locked_teacher_ids: list[UUID] = []
 
     async def create_slot(
         self,
@@ -65,6 +66,9 @@ class FakeSchedulingRepository:
             and self.overlapping_slot.end_at > start_at
         )
         return self.overlapping_slot if overlaps else None
+
+    async def lock_teacher_for_slot_mutation(self, teacher_id: UUID) -> None:
+        self.locked_teacher_ids.append(teacher_id)
 
 
 class FakeAuditRepository:
@@ -112,6 +116,7 @@ async def test_admin_create_slot_succeeds_and_writes_audit() -> None:
     assert slot.teacher_id == teacher_id
     assert slot.created_by_admin_id == admin.id
     assert slot.status == SlotStatusEnum.OPEN
+    assert repository.locked_teacher_ids == [teacher_id]
     assert len(audit_repository.logs) == 1
     assert audit_repository.logs[0]["action"] == "admin.slot.create"
 

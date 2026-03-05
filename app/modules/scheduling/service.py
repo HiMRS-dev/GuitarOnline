@@ -51,6 +51,7 @@ class SchedulingService:
                 f"Slot duration must be at least {settings.slot_min_duration_minutes} minutes",
             )
 
+        await self.repository.lock_teacher_for_slot_mutation(payload.teacher_id)
         overlapping_slot = await self.repository.find_overlapping_slot(
             teacher_id=payload.teacher_id,
             start_at=start_at,

@@ -31,6 +31,8 @@ from app.modules.admin.service import AdminService, get_admin_service
 from app.modules.booking.schemas import BookingCancelRequest, BookingRead, BookingRescheduleRequest
 from app.modules.booking.service import BookingService, get_booking_service
 from app.modules.identity.service import require_roles
+from app.modules.lessons.schemas import LessonRead
+from app.modules.lessons.service import LessonsService, get_lessons_service
 from app.modules.scheduling.schemas import SlotCreate
 from app.modules.scheduling.service import SchedulingService, get_scheduling_service
 from app.shared.pagination import Page, build_page, get_pagination_params
@@ -217,6 +219,17 @@ async def reschedule_admin_booking(
         current_user,
     )
     return BookingRead.model_validate(booking)
+
+
+@router.post("/lessons/{lesson_id}/no-show", response_model=LessonRead)
+async def mark_admin_lesson_no_show(
+    lesson_id: UUID,
+    service: LessonsService = Depends(get_lessons_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> LessonRead:
+    """Mark lesson as NO_SHOW via admin-only operation."""
+    lesson = await service.mark_no_show(lesson_id, current_user)
+    return LessonRead.model_validate(lesson)
 
 
 @router.delete("/slots/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
-from app.core.enums import RoleEnum
+from app.core.enums import LessonStatusEnum, RoleEnum
 from app.modules.identity.models import User
 from app.modules.lessons.models import Lesson
 from app.modules.lessons.repository import LessonsRepository
@@ -60,6 +62,21 @@ class LessonsService:
             raise UnauthorizedException("Teacher can update only own lessons")
 
         return await self.repository.update_lesson(lesson, **payload.model_dump(exclude_none=True))
+
+    async def mark_no_show(self, lesson_id: UUID, actor: User) -> Lesson:
+        """Mark lesson as NO_SHOW via admin-only operation."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can mark lesson as no-show")
+
+        lesson = await self.repository.get_lesson_by_id(lesson_id)
+        if lesson is None:
+            raise NotFoundException("Lesson not found")
+        if lesson.status == LessonStatusEnum.NO_SHOW:
+            return lesson
+        if lesson.status != LessonStatusEnum.SCHEDULED:
+            raise ConflictException("Only scheduled lesson can be marked as no-show")
+
+        return await self.repository.update_lesson(lesson, status=LessonStatusEnum.NO_SHOW)
 
     async def list_lessons(self, actor: User, limit: int, offset: int) -> tuple[list[Lesson], int]:
         """List lessons according to actor role."""

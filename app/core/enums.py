@@ -69,6 +69,7 @@ class LessonStatusEnum(StrEnum):
     SCHEDULED = "scheduled"
     COMPLETED = "completed"
     CANCELED = "canceled"
+    NO_SHOW = "no_show"
 
 
 class NotificationStatusEnum(StrEnum):

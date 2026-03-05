@@ -523,7 +523,10 @@ class AdminRepository:
         bookings_expired = booking_counts.get(BookingStatusEnum.EXPIRED, 0)
 
         lessons_scheduled = lesson_counts.get(LessonStatusEnum.SCHEDULED, 0)
-        lessons_completed = lesson_counts.get(LessonStatusEnum.COMPLETED, 0)
+        lessons_completed = lesson_counts.get(LessonStatusEnum.COMPLETED, 0) + lesson_counts.get(
+            LessonStatusEnum.NO_SHOW,
+            0,
+        )
         lessons_canceled = lesson_counts.get(LessonStatusEnum.CANCELED, 0)
 
         payments_pending = payment_counts.get(PaymentStatusEnum.PENDING, 0)

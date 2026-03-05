@@ -2325,6 +2325,26 @@ Implemented in codebase:
   - `old_booking_id`,
   - `new_booking_id`.
 
+8. `C9` lesson `NO_SHOW` status + admin no-show operation:
+- `LessonStatusEnum` extended with terminal status:
+  - `no_show`.
+- migration added:
+  - `alembic/versions/20260305_0005_lesson_no_show_status.py`,
+    updates `lesson_status_enum` and includes downgrade mapping
+    (`no_show` -> `canceled`).
+- added admin-only endpoint:
+  - `POST /api/v1/admin/lessons/{lesson_id}/no-show`.
+- implemented service-level transition guard in lessons domain:
+  - allowed: `scheduled -> no_show`,
+  - idempotent: repeated `no_show` keeps state unchanged,
+  - rejected: `completed/canceled -> no_show` with deterministic conflict error.
+- conflict resolution applied for operational stats:
+  - admin slot stats now treat `lesson.no_show` as terminal `completed` bucket
+    to avoid stale `confirmed` visibility.
+- KPI consistency hardened:
+  - admin KPI lesson counters aggregate `no_show` into `lessons_completed`
+    so `lessons_total` remains consistent.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
@@ -2345,6 +2365,10 @@ Verification tasks added/updated:
   - `tests/test_booking_rules.py` extended with cancel refund boundary coverage.
   - `tests/test_booking_rules.py` extended with
     admin cancel/reschedule audit payload key assertions (`actor_id`, slot ids, booking id).
+  - `tests/test_lessons_no_show.py` (service-level no-show transition matrix, idempotency, RBAC guard).
+  - `tests/test_admin_slot_stats.py` extended with `lesson_status=no_show` terminal bucket mapping.
+  - `tests/test_rbac_access_integration.py` extended with
+    `/admin/lessons/{lesson_id}/no-show` RBAC + successful admin path.
 
 Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2363,4 +2387,7 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/booking/service.py tests/test_booking_rules.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_booking_rules.py` -> `17 passed`.
 - full local suite: `py -m poetry run pytest -q` -> `124 passed, 28 skipped`.
+- `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0005_lesson_no_show_status.py app/modules/lessons/service.py app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py tests/test_lessons_no_show.py tests/test_admin_slot_stats.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_lessons_no_show.py tests/test_admin_slot_stats.py` -> `10 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_lesson_no_show_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

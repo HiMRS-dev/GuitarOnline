@@ -391,7 +391,7 @@ class AdminService:
         booking_status: BookingStatusEnum | None,
         lesson_status: LessonStatusEnum | None,
     ) -> str:
-        if lesson_status == LessonStatusEnum.COMPLETED:
+        if lesson_status in {LessonStatusEnum.COMPLETED, LessonStatusEnum.NO_SHOW}:
             return "completed"
         if lesson_status == LessonStatusEnum.CANCELED:
             return "canceled"

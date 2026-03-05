@@ -55,6 +55,7 @@ async def test_admin_slot_stats_aggregates_with_priority_per_slot() -> None:
     slot6 = uuid4()
     slot7 = uuid4()
     slot8 = uuid4()
+    slot9 = uuid4()
     rows = [
         make_row(
             slot_id=slot1,
@@ -110,6 +111,12 @@ async def test_admin_slot_stats_aggregates_with_priority_per_slot() -> None:
             booking_status=BookingStatusEnum.CONFIRMED,
             lesson_status=LessonStatusEnum.COMPLETED,
         ),
+        make_row(
+            slot_id=slot9,
+            slot_status=SlotStatusEnum.BOOKED,
+            booking_status=BookingStatusEnum.CONFIRMED,
+            lesson_status=LessonStatusEnum.NO_SHOW,
+        ),
     ]
     repository = FakeAdminRepository(rows=rows)
     service = AdminService(repository=repository)  # type: ignore[arg-type]
@@ -121,12 +128,12 @@ async def test_admin_slot_stats_aggregates_with_priority_per_slot() -> None:
         to_utc=None,
     )
 
-    assert result.total_slots == 8
+    assert result.total_slots == 9
     assert result.open_slots == 1
     assert result.held_slots == 1
     assert result.confirmed_slots == 1
     assert result.canceled_slots == 3
-    assert result.completed_slots == 2
+    assert result.completed_slots == 3
     assert repository.calls == [{"from_utc": None, "to_utc": None}]
 
 

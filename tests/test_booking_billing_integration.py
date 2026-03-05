@@ -172,6 +172,23 @@ async def _list_my_bookings(client: httpx.AsyncClient, user: AuthUser) -> list[d
     return response.json()["items"]
 
 
+async def _find_lesson_id_by_booking(
+    client: httpx.AsyncClient,
+    teacher: AuthUser,
+    booking_id: str,
+) -> str:
+    response = await client.get(
+        "/lessons/my",
+        headers=_auth_headers(teacher.access_token),
+        params={"limit": 100, "offset": 0},
+    )
+    _assert_status(response, 200)
+    for lesson in response.json()["items"]:
+        if lesson.get("booking_id") == booking_id:
+            return str(lesson["id"])
+    raise AssertionError(f"Lesson for booking {booking_id} not found")
+
+
 def _find_booking(bookings: list[dict], booking_id: str) -> dict:
     for booking in bookings:
         if booking["id"] == booking_id:
@@ -464,6 +481,47 @@ async def test_reschedule_keeps_balance_and_links_bookings(
     assert package_after_reschedule["lessons_reserved"] == 1
     assert old_slot["id"] in open_slot_ids
     assert new_slot["id"] not in open_slot_ids
+
+
+@pytest.mark.asyncio
+async def test_confirm_reserves_and_complete_consumes_package_capacity(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
+
+    package = await _create_package(api_client, admin, student, lessons_total=5)
+    slot = await _create_slot(api_client, admin, teacher, hours_from_now=48)
+    _, confirmed_booking = await _hold_and_confirm_booking(
+        api_client,
+        student,
+        slot_id=slot["id"],
+        package_id=package["id"],
+    )
+
+    package_after_confirm = await _get_package_for_student(api_client, student, package["id"])
+    assert package_after_confirm["lessons_left"] == 5
+    assert package_after_confirm["lessons_reserved"] == 1
+
+    lesson_id = await _find_lesson_id_by_booking(
+        api_client,
+        teacher,
+        booking_id=confirmed_booking["id"],
+    )
+    complete_response = await api_client.post(
+        f"/lessons/{lesson_id}/complete",
+        headers=_auth_headers(teacher.access_token),
+    )
+    _assert_status(complete_response, 200)
+    completed_lesson = complete_response.json()
+    package_after_complete = await _get_package_for_student(api_client, student, package["id"])
+
+    assert completed_lesson["status"] == "completed"
+    assert completed_lesson["consumed_at"] is not None
+    assert package_after_complete["lessons_left"] == 4
+    assert package_after_complete["lessons_reserved"] == 0
 
 
 @pytest.mark.asyncio

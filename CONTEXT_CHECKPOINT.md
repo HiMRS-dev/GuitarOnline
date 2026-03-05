@@ -2638,6 +2638,22 @@ Implemented in codebase:
 - docs updated:
   - `README.md` Admin Operations section now documents sales KPI endpoint.
 
+12. `D12` integration contract update (`confirm` reserves, `complete` consumes):
+- integration scenario added to booking/billing suite:
+  - `tests/test_booking_billing_integration.py::test_confirm_reserves_and_complete_consumes_package_capacity`.
+- validated contract in one end-to-end flow:
+  - after `hold + confirm`:
+    - `lessons_left` unchanged,
+    - `lessons_reserved` incremented.
+  - after `POST /lessons/{lesson_id}/complete`:
+    - lesson transitions to `completed` with `consumed_at`,
+    - package transitions to consumption state:
+      - `lessons_left` decremented,
+      - `lessons_reserved` decremented.
+- compatibility note:
+  - prior reserve-model integration assertions remain intact; new scenario explicitly
+    locks the confirm->complete consumption contract.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2682,6 +2698,9 @@ Verification tasks added/updated:
     - admin-only access and invalid-range guard.
   - `tests/test_rbac_access_integration.py` extended with
     `/admin/kpi/sales` RBAC check (`401/403/200`).
+  - `tests/test_booking_billing_integration.py` extended with D12 scenario:
+    - confirm reserves,
+    - lesson complete consumes reserved lesson.
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2711,4 +2730,6 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_sales.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_admin_kpi_sales.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `7 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_sales_kpi_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k confirm_reserves_and_complete_consumes_package_capacity` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

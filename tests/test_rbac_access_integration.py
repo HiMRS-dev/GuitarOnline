@@ -179,7 +179,7 @@ async def test_teacher_lessons_endpoint_returns_401_403_and_200_by_role(
 
 
 @pytest.mark.asyncio
-async def test_me_lessons_alias_endpoint_returns_401_and_200_for_authorized_roles(
+async def test_me_lessons_alias_endpoint_returns_401_403_and_200_by_role(
     api_client: httpx.AsyncClient,
 ) -> None:
     teacher = await _register_and_login(api_client, "teacher")
@@ -201,10 +201,33 @@ async def test_me_lessons_alias_endpoint_returns_401_and_200_for_authorized_role
         "/me/lessons",
         headers=_auth_headers(teacher.access_token),
     )
-    _assert_status(teacher_response, 200)
-    teacher_payload = teacher_response.json()
-    assert "items" in teacher_payload
-    assert isinstance(teacher_payload["items"], list)
+    _assert_status(teacher_response, 403)
+
+
+@pytest.mark.asyncio
+async def test_lessons_my_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    teacher = await _register_and_login(api_client, "teacher")
+    student = await _register_and_login(api_client, "student")
+
+    no_token_response = await api_client.get("/lessons/my")
+    _assert_status(no_token_response, 401)
+
+    teacher_response = await api_client.get(
+        "/lessons/my",
+        headers=_auth_headers(teacher.access_token),
+    )
+    _assert_status(teacher_response, 403)
+
+    student_response = await api_client.get(
+        "/lessons/my",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(student_response, 200)
+    student_payload = student_response.json()
+    assert "items" in student_payload
+    assert isinstance(student_payload["items"], list)
 
 
 @pytest.mark.asyncio
@@ -725,7 +748,7 @@ async def test_admin_lesson_no_show_endpoint_returns_401_403_and_200_by_role(
     _assert_status(confirm_response, 200)
 
     teacher_lessons_response = await api_client.get(
-        "/lessons/my?limit=20&offset=0",
+        "/teacher/lessons?limit=20&offset=0",
         headers=_auth_headers(teacher.access_token),
     )
     _assert_status(teacher_lessons_response, 200)
@@ -804,7 +827,7 @@ async def test_lesson_complete_endpoint_returns_401_403_and_200_by_role(
     _assert_status(confirm_response, 200)
 
     teacher_lessons_response = await api_client.get(
-        "/lessons/my?limit=20&offset=0",
+        "/teacher/lessons?limit=20&offset=0",
         headers=_auth_headers(teacher.access_token),
     )
     _assert_status(teacher_lessons_response, 200)

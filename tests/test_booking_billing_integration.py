@@ -178,7 +178,7 @@ async def _find_lesson_id_by_booking(
     booking_id: str,
 ) -> str:
     response = await client.get(
-        "/lessons/my",
+        "/teacher/lessons",
         headers=_auth_headers(teacher.access_token),
         params={"limit": 100, "offset": 0},
     )

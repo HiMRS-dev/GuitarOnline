@@ -213,8 +213,16 @@ class LessonsService:
         )
 
     async def list_lessons(self, actor: User, limit: int, offset: int) -> tuple[list[Lesson], int]:
-        """List lessons according to actor role."""
-        return await self.repository.list_lessons_for_user(actor.id, actor.role.name, limit, offset)
+        """List lessons for current student."""
+        if actor.role.name != RoleEnum.STUDENT:
+            raise UnauthorizedException("Only student can list own lessons")
+
+        return await self.repository.list_lessons_for_user(
+            actor.id,
+            RoleEnum.STUDENT,
+            limit,
+            offset,
+        )
 
     async def list_teacher_lessons(
         self,

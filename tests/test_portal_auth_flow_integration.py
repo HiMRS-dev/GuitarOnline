@@ -106,7 +106,10 @@ async def test_portal_student_sequence_register_login_refresh_and_data_endpoints
 ) -> None:
     student = await _register_and_login(api_client, "student")
 
-    me_response = await api_client.get("/identity/users/me", headers=_auth_headers(student.access_token))
+    me_response = await api_client.get(
+        "/identity/users/me",
+        headers=_auth_headers(student.access_token),
+    )
     _assert_status(me_response, 200)
     me_payload = me_response.json()
     assert me_payload["id"] == str(student.user_id)
@@ -158,7 +161,7 @@ async def test_portal_teacher_and_admin_sequences_for_role_specific_endpoints(
     admin = await _register_and_login(api_client, "admin")
 
     lessons_response = await api_client.get(
-        "/lessons/my",
+        "/teacher/lessons",
         headers=_auth_headers(teacher.access_token),
         params={"limit": 20, "offset": 0},
     )

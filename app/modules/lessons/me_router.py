@@ -17,7 +17,7 @@ router = APIRouter(prefix="/me", tags=["lessons"])
 async def list_my_lessons_alias(
     pagination=Depends(get_pagination_params),
     service: LessonsService = Depends(get_lessons_service),
-    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER, RoleEnum.STUDENT)),
+    current_user=Depends(require_roles(RoleEnum.STUDENT)),
 ) -> Page[LessonRead]:
     """Alias for /lessons/my contract stability."""
     items, total = await service.list_lessons(current_user, pagination.limit, pagination.offset)

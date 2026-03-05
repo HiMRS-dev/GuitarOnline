@@ -2801,6 +2801,19 @@ Implemented in codebase:
   - new router `app/modules/lessons/me_router.py`,
   - mounted in `app/main.py`.
 
+5. `E6` access boundaries hardening (teacher/student endpoint isolation):
+- student endpoints restricted to student role only:
+  - `GET /api/v1/lessons/my`,
+  - `GET /api/v1/me/lessons`.
+- service-level boundary enforced for student listing path:
+  - `LessonsService.list_lessons(...)` now rejects non-student actors with explicit error.
+- teacher flows migrated to teacher endpoint contract:
+  - teacher lesson lookups in integration test helpers and RBAC scenarios now use
+    `GET /api/v1/teacher/lessons`.
+- conflict resolved with existing integration harness:
+  - updated portal and booking/billing integration test paths to avoid implicit teacher access
+    through student aliases.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
@@ -2818,7 +2831,14 @@ Verification tasks added/updated:
     - template-missing guard,
     - mixed manual+template conflict guard.
   - `tests/test_rbac_access_integration.py` extended with
-    `/me/lessons` alias RBAC/availability check (`401/200` for authorized roles).
+    `/me/lessons` alias RBAC check (`401/403/200`).
+  - `tests/test_student_lessons_access.py` added (service-level student-only guard for list path).
+  - `tests/test_rbac_access_integration.py` extended with:
+    - `/me/lessons` student-only check (`401/403/200`),
+    - `/lessons/my` student-only check (`401/403/200`).
+  - integration helper/path updates:
+    - `tests/test_booking_billing_integration.py` teacher lesson lookup switched to `/teacher/lessons`,
+    - `tests/test_portal_auth_flow_integration.py` teacher sequence switched to `/teacher/lessons`.
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2831,5 +2851,9 @@ Latest local checks:
 - `py -m poetry run pytest -q tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py tests/test_teacher_lessons_list.py tests/test_lessons_complete.py` -> `18 passed`.
 - `py -m poetry run ruff check app/main.py app/modules/lessons/me_router.py tests/test_rbac_access_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_teacher_lessons_list.py tests/test_teacher_lesson_report.py tests/test_lesson_meeting_url.py` -> `11 passed`.
-- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k me_lessons_alias_endpoint_returns_401_and_200_for_authorized_roles` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k me_lessons_alias_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/lessons/router.py app/modules/lessons/me_router.py app/modules/lessons/service.py tests/test_student_lessons_access.py tests/test_booking_billing_integration.py tests/test_portal_auth_flow_integration.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_student_lessons_access.py tests/test_teacher_lessons_list.py tests/test_teacher_lesson_report.py tests/test_lesson_meeting_url.py` -> `14 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "me_lessons_alias_endpoint_returns_401_403_and_200_by_role or lessons_my_endpoint_returns_401_403_and_200_by_role or teacher_lesson_report_endpoint_returns_401_403_and_200_by_role"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run pytest -q -rs tests/test_portal_auth_flow_integration.py -k portal_teacher_and_admin_sequences_for_role_specific_endpoints` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

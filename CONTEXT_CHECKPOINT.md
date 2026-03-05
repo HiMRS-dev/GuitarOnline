@@ -2289,6 +2289,22 @@ Implemented in codebase:
     - forced DB setup where slot start already passed while HOLD still unexpired,
     - confirm endpoint returns deterministic business-rule `422`.
 
+6. `C7` unified 24h policy helper + boundary tests:
+- extracted reusable refund policy helper:
+  - `app/modules/booking/policy.py::can_refund_by_policy(...)`.
+- cancel flow now reuses shared helper:
+  - `BookingService.cancel_booking(...)` no longer contains inline hour math.
+- helper semantics aligned with approved rule:
+  - refund is allowed only when `slot_start - now > 24h` (strictly greater).
+- boundary coverage added:
+  - `23:59:59` -> no refund,
+  - `24:00:00` -> no refund,
+  - `24:00:01` -> refund.
+- coverage includes:
+  - policy-unit tests (`tests/test_booking_policy.py`),
+  - booking cancel flow boundary tests (`tests/test_booking_rules.py`),
+    confirming helper behavior is applied in business flow.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_bookings_list.py` (service-level filters, UTC normalization, range validation, RBAC),
@@ -2305,6 +2321,8 @@ Verification tasks added/updated:
   - `tests/test_booking_rules.py` extended with confirm/reschedule past-slot invariant checks.
   - `tests/test_booking_billing_integration.py` extended with confirm reject scenario
     for past slot + unexpired HOLD.
+  - `tests/test_booking_policy.py` (policy helper 24h boundary coverage).
+  - `tests/test_booking_rules.py` extended with cancel refund boundary coverage.
 
 Latest local checks:
 - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/schemas.py app/modules/booking/service.py tests/test_booking_rules.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2318,5 +2336,7 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/booking/service.py tests/test_booking_rules.py tests/test_booking_billing_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_booking_rules.py` -> `14 passed`.
 - `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "concurrent_hold_attempts_on_same_slot_allow_only_one_success or confirm_rejects_hold_when_slot_start_already_passed"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `118 passed, 28 skipped`.
+- `py -m poetry run ruff check app/modules/booking/policy.py app/modules/booking/service.py tests/test_booking_policy.py tests/test_booking_rules.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_booking_policy.py tests/test_booking_rules.py` -> `20 passed`.
+- full local suite: `py -m poetry run pytest -q` -> `124 passed, 28 skipped`.
 

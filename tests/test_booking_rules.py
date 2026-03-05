@@ -580,6 +580,74 @@ async def test_cancel_less_than_24h_burns_lesson(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("offset_seconds", "expect_refund"),
+    [
+        (24 * 3600 - 1, False),  # 23:59:59
+        (24 * 3600, False),  # 24:00:00
+        (24 * 3600 + 1, True),  # 24:00:01
+    ],
+)
+async def test_cancel_refund_policy_boundary_cases(
+    monkeypatch: pytest.MonkeyPatch,
+    offset_seconds: int,
+    expect_refund: bool,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+    booking_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(seconds=offset_seconds),
+        end_at=fixed_now + timedelta(seconds=offset_seconds + 3600),
+        status=SlotStatusEnum.BOOKED,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=8,
+        lessons_left=3,
+    )
+    booking = FakeBooking(
+        id=booking_id,
+        slot_id=slot_id,
+        slot=slot,
+        student_id=student_id,
+        teacher_id=teacher_id,
+        package_id=package_id,
+        status=BookingStatusEnum.CONFIRMED,
+    )
+
+    service, _, billing_repo, _, _, _ = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+        bookings={booking_id: booking},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    canceled = await service.cancel_booking(
+        booking_id,
+        BookingCancelRequest(reason="boundary"),
+        actor,
+    )
+
+    assert canceled.refund_returned is expect_refund
+    if expect_refund:
+        assert billing_repo.return_calls == 1
+    else:
+        assert billing_repo.return_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_admin_cancel_writes_audit_with_refund_decision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

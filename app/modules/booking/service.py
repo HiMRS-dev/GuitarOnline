@@ -20,6 +20,7 @@ from app.core.enums import (
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.repository import BillingRepository
 from app.modules.booking.models import Booking
+from app.modules.booking.policy import can_refund_by_policy
 from app.modules.booking.repository import BookingRepository
 from app.modules.booking.schemas import (
     BookingCancelRequest,
@@ -259,8 +260,11 @@ class BookingService:
             if package is None:
                 raise NotFoundException("Package not found")
 
-            hours_before_lesson = (booking.slot.start_at - now).total_seconds() / 3600
-            if hours_before_lesson > settings.booking_refund_window_hours:
+            if can_refund_by_policy(
+                now_utc=now,
+                slot_start_utc=booking.slot.start_at,
+                refund_window_hours=settings.booking_refund_window_hours,
+            ):
                 await self.billing_repository.return_package_lesson(package)
                 refund_returned = True
 

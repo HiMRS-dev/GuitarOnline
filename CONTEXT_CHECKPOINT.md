@@ -3350,12 +3350,28 @@ Implemented in codebase:
   - `/metrics` with metrics-family grep validation.
 - README deployment runbook synchronized with the same explicit probe verification commands.
 
+4. `H4` security checklist gate (CORS + rate limits + response minimization):
+- added automated security-surface regression tests:
+  - `tests/test_security_surface.py`.
+- regression coverage includes:
+  - CORS middleware wiring uses `FRONTEND_ADMIN_ORIGIN` and strict middleware options,
+  - identity auth routes keep explicit rate-limit dependencies:
+    - register/login/refresh,
+  - identity endpoint response models remain minimized and do not expose
+    internal/sensitive fields (`password_hash`, `role_id`, `secret_key`).
+- security gate documentation updated:
+  - `README.md` security controls section now includes explicit regression-gate command,
+  - `ops/release_checklist.md` pre-deploy section now requires running that gate.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
   - `python -m compileall scripts/deploy_smoke_check.py` -> success.
   - `rg -n "Development Runbook|Backend local setup|Demo seed data|Workers local run|NOTIFICATIONS_OUTBOX_WORKER_MODE|lesson_reminder_24h_worker|web-admin local run" README.md` -> expected entries found.
   - `rg -n "deploy_smoke_check.py|health/readiness/metrics verification|/metrics" ops/release_checklist.md README.md` -> expected entries found.
+  - `python -m compileall tests/test_security_surface.py` -> success.
+  - `rg -n ".{101}" tests/test_security_surface.py` -> no overlong lines found.
+  - `rg -n "test_security_surface.py|security gate|FRONTEND_ADMIN_ORIGIN|response-model minimization" README.md ops/release_checklist.md` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

@@ -18,6 +18,8 @@ Use this checklist before promoting a build to a target environment.
   - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
 - Validate ops configuration:
   - `powershell -ExecutionPolicy Bypass -File scripts/validate_ops_configs.ps1`
+- Run security regression gate:
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py`
 - Optional image warmup (unstable network):
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1`
 - Optional maintenance silence before deploy (warning alerts by default):

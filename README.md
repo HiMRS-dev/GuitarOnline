@@ -207,6 +207,12 @@ Production-ready modular monolith backend for an online guitar school.
   - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` (required only when `AUTH_RATE_LIMIT_BACKEND=memory` in production)
 - CORS env:
   - `FRONTEND_ADMIN_ORIGIN` (comma-separated allowed origins for admin frontend)
+- Security gate regression checks:
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py`
+  - scope covered by this gate:
+    - CORS policy wiring,
+    - auth rate-limit dependencies,
+    - response-model minimization for identity endpoints (no password hash/internal secret fields).
 
 ## Workers
 

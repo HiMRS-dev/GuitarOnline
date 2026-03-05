@@ -31,6 +31,10 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml up --build -d`
 - Optional single-site reverse-proxy profile (one public entrypoint):
   - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml up --build -d`
+- Optional admin UI profile (`web-admin` static build):
+  - `docker compose -f docker-compose.prod.yml --profile admin-ui up --build -d`
+- Optional single-site + admin UI profile:
+  - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml --profile admin-ui up --build -d`
 - Optional real on-call routing profile (requires rendered on-call Alertmanager config):
   - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
   - `docker compose -f docker-compose.prod.yml -f docker-compose.alerting.yml up --build -d`
@@ -42,6 +46,7 @@ Production-ready modular monolith backend for an online guitar school.
   - `db` (PostgreSQL),
   - `redis` (shared auth rate-limiter state),
   - `app` (FastAPI API),
+  - `admin-ui` (optional `web-admin` static UI, enabled by `--profile admin-ui`),
   - `outbox-worker` (notifications outbox consumer loop),
   - `booking-holds-expirer` (periodic HOLD expiration worker),
   - `packages-expirer` (periodic package expiration worker),
@@ -110,6 +115,7 @@ Production-ready modular monolith backend for an online guitar school.
 - Canonical URLs behind proxy:
   - root: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/`
   - portal: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/portal`
+  - admin UI (when `--profile admin-ui` is enabled): `http://localhost:${PROXY_PUBLIC_PORT:-8080}/admin/`
   - API: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/api/v1`
   - docs: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/docs`
   - health: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/health`
@@ -121,6 +127,9 @@ Production-ready modular monolith backend for an online guitar school.
 - Note:
   - in proxy profile, host binding for `app:8000` is removed (`ports: []` override),
     so external traffic should use proxy URL only.
+  - for admin UI deployment, set:
+    - `ADMIN_UI_API_BASE_URL` (default `/api/v1`),
+    - `ADMIN_UI_BASE_PATH` (default `/admin/`).
 
 ## Migrations
 

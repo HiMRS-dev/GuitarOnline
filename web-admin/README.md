@@ -12,6 +12,8 @@ React + TypeScript admin UI scaffold powered by Vite.
    - `npm run dev`
 
 Default API base URL is provided by `VITE_API_BASE_URL`.
+Public app base path is configured with `VITE_BASE_PATH` (`/` for local dev, `/admin/`
+for reverse-proxy deployment).
 
 ## Auth Storage Strategy
 

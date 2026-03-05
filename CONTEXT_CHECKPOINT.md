@@ -3264,6 +3264,27 @@ Implemented in codebase:
 - deterministic unavailable states added for package/KPI endpoint dependencies.
 - dashboard/table/filter styles expanded for students/packages/KPI views.
 
+10. `G18` build/deploy option (`admin-ui`) with reverse-proxy integration:
+- added optional admin UI container artifacts:
+  - `web-admin/Dockerfile`,
+  - `web-admin/nginx.conf`,
+  - `web-admin/.dockerignore`.
+- production compose now supports optional `admin-ui` profile:
+  - service `admin-ui` in `docker-compose.prod.yml`,
+  - build args for runtime wiring:
+    - `ADMIN_UI_API_BASE_URL` -> `VITE_API_BASE_URL`,
+    - `ADMIN_UI_BASE_PATH` -> `VITE_BASE_PATH`.
+- reverse-proxy routing extended for admin UI:
+  - `ops/nginx/default.conf` routes `/admin/` to `admin-ui`,
+  - `/admin` redirects to `/admin/`.
+- conflict resolution implemented for static assets behind `/admin/`:
+  - `web-admin/vite.config.ts` now supports configurable `VITE_BASE_PATH`,
+  - docker profile defaults base path to `/admin/` to keep asset URLs and SPA routing consistent behind proxy.
+- env/docs updates:
+  - `.env.example` adds `ADMIN_UI_API_BASE_URL` and `ADMIN_UI_BASE_PATH`,
+  - `web-admin/.env.example` adds `VITE_BASE_PATH` for local/prod parity,
+  - `README.md` documents admin-ui compose profile commands and canonical `/admin/` URL behind proxy.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
@@ -3275,6 +3296,8 @@ Verification tasks added/updated:
   - `rg -n ".{101}" web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/slots/api.ts web-admin/src/features/slots/types.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/bookings/api.ts web-admin/src/features/bookings/types.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/admin/pages/StudentsPage.tsx web-admin/src/admin/pages/PackagesPage.tsx web-admin/src/admin/pages/KpiPage.tsx web-admin/src/features/packages/api.ts web-admin/src/features/packages/types.ts web-admin/src/features/kpi/api.ts web-admin/src/features/kpi/types.ts web-admin/src/styles.css` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/Dockerfile web-admin/nginx.conf web-admin/vite.config.ts web-admin/.env.example docker-compose.prod.yml .env.example ops/nginx/default.conf` -> no overlong lines found.
+  - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml --profile admin-ui config -q` -> passed.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

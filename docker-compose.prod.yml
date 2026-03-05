@@ -57,6 +57,23 @@ services:
       timeout: 5s
       retries: 5
 
+  admin-ui:
+    build:
+      context: ./web-admin
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${ADMIN_UI_API_BASE_URL:-/api/v1}
+        VITE_BASE_PATH: ${ADMIN_UI_BASE_PATH:-/admin/}
+    restart: unless-stopped
+    profiles: ["admin-ui"]
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
   outbox-worker:
     build: .
     restart: unless-stopped

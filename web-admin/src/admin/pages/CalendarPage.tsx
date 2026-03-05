@@ -6,6 +6,8 @@ import "@fullcalendar/timegrid/index.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiClientError } from "../../shared/api/client";
+import { listAdminBookings, rescheduleAdminBooking } from "../../features/bookings/api";
+import type { AdminBooking } from "../../features/bookings/types";
 import { listTeachers } from "../../features/teachers/api";
 import type { TeacherListItem } from "../../features/teachers/types";
 import {
@@ -58,9 +60,12 @@ export function CalendarPage() {
   const [range, setRange] = useState<UtcRange>(() => buildInitialRange());
   const [slots, setSlots] = useState<AdminSlot[]>([]);
   const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [bookings, setBookings] = useState<AdminBooking[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
 
   const [teachersUnavailable, setTeachersUnavailable] = useState(false);
   const [slotsUnavailable, setSlotsUnavailable] = useState(false);
+  const [bookingsUnavailable, setBookingsUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -68,10 +73,14 @@ export function CalendarPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showBlock, setShowBlock] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
 
   const [createStart, setCreateStart] = useState("");
   const [createEnd, setCreateEnd] = useState("");
   const [blockReason, setBlockReason] = useState("");
+  const [rescheduleBookingId, setRescheduleBookingId] = useState("");
+  const [rescheduleSlotId, setRescheduleSlotId] = useState("");
+  const [rescheduleReason, setRescheduleReason] = useState("");
 
   const [bulkDateFrom, setBulkDateFrom] = useState("");
   const [bulkDateTo, setBulkDateTo] = useState("");
@@ -149,12 +158,44 @@ export function CalendarPage() {
       });
   }, [range.fromUtc, range.toUtc, teacherId]);
 
+  const loadBookings = useCallback(() => {
+    if (!teacherId) {
+      setBookings([]);
+      setBookingsLoading(false);
+      return Promise.resolve();
+    }
+
+    setBookingsLoading(true);
+    return listAdminBookings({
+      teacherId,
+      fromUtc: range.fromUtc,
+      toUtc: range.toUtc
+    })
+      .then((page) => {
+        setBookings(page.items);
+      })
+      .catch((requestError) => {
+        if (
+          requestError instanceof ApiClientError &&
+          UNAVAILABLE_STATUSES.has(requestError.status)
+        ) {
+          setBookingsUnavailable(true);
+          return;
+        }
+        setError(requestError instanceof Error ? requestError.message : "Failed to load bookings");
+      })
+      .finally(() => {
+        setBookingsLoading(false);
+      });
+  }, [range.fromUtc, range.toUtc, teacherId]);
+
   useEffect(() => {
-    if (teachersUnavailable || slotsUnavailable) {
+    if (teachersUnavailable || slotsUnavailable || bookingsUnavailable) {
       return;
     }
     void loadSlots();
-  }, [loadSlots, slotsUnavailable, teachersUnavailable]);
+    void loadBookings();
+  }, [bookingsUnavailable, loadBookings, loadSlots, slotsUnavailable, teachersUnavailable]);
 
   const events = useMemo(
     () =>
@@ -231,6 +272,33 @@ export function CalendarPage() {
       );
     }
   }
+
+  async function handleRescheduleBooking() {
+    if (!rescheduleBookingId || !rescheduleSlotId || !rescheduleReason.trim()) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await rescheduleAdminBooking(rescheduleBookingId, {
+        new_slot_id: rescheduleSlotId,
+        reason: rescheduleReason.trim()
+      });
+      setShowReschedule(false);
+      setRescheduleBookingId("");
+      setRescheduleSlotId("");
+      setRescheduleReason("");
+      await Promise.all([loadSlots(), loadBookings()]);
+    } catch (requestError) {
+      setActionError(
+        requestError instanceof Error ? requestError.message : "Failed to reschedule booking"
+      );
+    }
+  }
+
+  const availableSlots = useMemo(
+    () => slots.filter((slot) => slot.slot_status === "open"),
+    [slots]
+  );
 
   if (teachersUnavailable) {
     return (
@@ -327,6 +395,61 @@ export function CalendarPage() {
             right: "timeGridWeek,timeGridDay"
           }}
         />
+      </article>
+
+      <article className="card bookings-panel">
+        <p className="eyebrow">Bookings</p>
+        <h2>Bookings Table</h2>
+        {bookingsUnavailable ? (
+          <p className="summary">
+            Endpoint unavailable: expected <code>GET /admin/bookings</code> and
+            <code>POST /admin/bookings/{`{id}`}/reschedule</code>.
+          </p>
+        ) : null}
+        {bookingsLoading ? <p className="summary">Loading bookings...</p> : null}
+        {!bookingsUnavailable && !bookingsLoading ? (
+          bookings.length ? (
+            <div className="bookings-table-wrap">
+              <table className="bookings-table">
+                <thead>
+                  <tr>
+                    <th>Booking</th>
+                    <th>Status</th>
+                    <th>Start (UTC)</th>
+                    <th>Slot</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookings.map((booking) => (
+                    <tr key={booking.booking_id}>
+                      <td>{booking.booking_id.slice(0, 8)}</td>
+                      <td>{booking.status}</td>
+                      <td>{new Date(booking.slot_start_at_utc).toISOString()}</td>
+                      <td>{booking.slot_id.slice(0, 8)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRescheduleBookingId(booking.booking_id);
+                            setRescheduleSlotId(availableSlots[0]?.slot_id ?? "");
+                            setRescheduleReason("Rescheduled from calendar");
+                            setShowReschedule(true);
+                          }}
+                          disabled={!availableSlots.length}
+                        >
+                          Reschedule
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="summary">No bookings in selected time range.</p>
+          )
+        ) : null}
       </article>
 
       {showCreate ? (
@@ -445,6 +568,43 @@ export function CalendarPage() {
                 Run
               </button>
               <button type="button" onClick={() => setShowBulk(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showReschedule ? (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <h2>Reschedule Booking</h2>
+            <label>
+              <span>New slot</span>
+              <select
+                value={rescheduleSlotId}
+                onChange={(event) => setRescheduleSlotId(event.target.value)}
+              >
+                <option value="">Select slot</option>
+                {availableSlots.map((slot) => (
+                  <option key={slot.slot_id} value={slot.slot_id}>
+                    {new Date(slot.start_at_utc).toISOString()} - {slot.slot_id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Reason</span>
+              <input
+                value={rescheduleReason}
+                onChange={(event) => setRescheduleReason(event.target.value)}
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" onClick={handleRescheduleBooking}>
+                Reschedule
+              </button>
+              <button type="button" onClick={() => setShowReschedule(false)}>
                 Cancel
               </button>
             </div>

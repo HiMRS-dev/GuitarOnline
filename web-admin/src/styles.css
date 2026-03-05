@@ -70,6 +70,14 @@ input {
   font: inherit;
 }
 
+select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid #c9d7e4;
+  font: inherit;
+}
+
 button {
   cursor: pointer;
   padding: 0.6rem 0.85rem;
@@ -287,6 +295,24 @@ button[disabled] {
   display: flex;
   gap: 0.4rem;
   justify-content: flex-end;
+}
+
+.bookings-table-wrap {
+  overflow-x: auto;
+}
+
+.bookings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.bookings-table th,
+.bookings-table td {
+  text-align: left;
+  padding: 0.4rem 0.45rem;
+  border-bottom: 1px solid #dde5ef;
+  white-space: nowrap;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 900px) {

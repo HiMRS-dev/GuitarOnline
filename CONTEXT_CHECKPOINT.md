@@ -3237,6 +3237,18 @@ Implemented in codebase:
 - UI styling expanded for calendar toolbar, legend, event actions, and modal forms.
 - `web-admin/package.json` updated with FullCalendar dependencies.
 
+8. `G13` + `G14` bookings flow UI:
+- added bookings API integration:
+  - `web-admin/src/features/bookings/api.ts`,
+  - `web-admin/src/features/bookings/types.ts`.
+- calendar section extended with bookings table bound to:
+  - `GET /admin/bookings` (teacher/range filtered).
+- reschedule modal implemented and bound to:
+  - `POST /admin/bookings/{id}/reschedule`.
+- reschedule UX uses available open slots from current calendar dataset for target slot selection.
+- deterministic unavailable mode implemented for booking endpoints in bookings panel.
+- table/modals styles extended for bookings operations.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
@@ -3246,6 +3258,7 @@ Verification tasks added/updated:
   - `rg -n ".{101}" web-admin/src/shared/api/client.ts web-admin/src/features/auth/api.ts web-admin/src/App.tsx` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/features/teachers/types.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/slots/api.ts web-admin/src/features/slots/types.ts web-admin/src/styles.css` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/bookings/api.ts web-admin/src/features/bookings/types.ts web-admin/src/styles.css` -> no overlong lines found.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

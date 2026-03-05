@@ -3183,12 +3183,27 @@ Implemented in codebase:
 - section pages scaffolded as deterministic placeholders for upcoming endpoint integrations.
 - responsive layout styling added for desktop/mobile behavior in `web-admin/src/styles.css`.
 
+5. `G5` API client core:
+- added typed HTTP client:
+  - `web-admin/src/shared/api/client.ts`.
+- implemented auth header injection using stored token pair.
+- implemented refresh-token retry flow:
+  - on `401`, client calls `POST /identity/auth/refresh`,
+  - stores rotated token pair on success,
+  - retries original request exactly once.
+- implemented normalized backend error handling:
+  - `ApiClientError` with HTTP status + normalized message.
+- migrated auth API calls to typed client:
+  - login request uses `apiClient.request(..., auth=false)`,
+  - current-user request uses authenticated client path.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src web-admin/README.md` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/App.tsx web-admin/src/main.tsx web-admin/src/features/auth/api.ts web-admin/src/features/auth/types.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/src/shared/api/client.ts web-admin/src/features/auth/api.ts web-admin/src/App.tsx` -> no overlong lines found.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

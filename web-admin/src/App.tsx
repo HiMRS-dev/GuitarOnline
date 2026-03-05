@@ -178,7 +178,7 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
 
     let active = true;
     setState("pending");
-    getCurrentUser(tokens.access_token)
+    getCurrentUser()
       .then((currentUser) => {
         if (!active) {
           return;

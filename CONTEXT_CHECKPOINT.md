@@ -2509,6 +2509,24 @@ Implemented in codebase:
   - package balance invariants in booking tests/integration contracts updated
     from confirm-time decrement to reservation-time semantics.
 
+5. `D5` lesson completion endpoint with reserve consumption trigger:
+- added migration:
+  - `alembic/versions/20260306_0010_lesson_consumed_at.py`,
+    introduces lesson consumption marker:
+    - `lessons.consumed_at` (nullable UTC).
+- lessons API contract extended:
+  - `POST /api/v1/lessons/{lesson_id}/complete` (teacher/admin only).
+- completion business flow implemented in lessons domain:
+  - only `scheduled` lesson can transition to `completed`,
+  - teacher can complete only own lesson; admin can complete any lesson,
+  - completion loads linked booking/package and consumes one reserved lesson
+    (`lessons_reserved - 1`, `lessons_left - 1`).
+- idempotency hardening included:
+  - repeated complete call on already completed lesson does not consume twice,
+    controlled by `consumed_at` marker.
+- compatibility preserved:
+  - existing `PATCH /lessons/{id}` endpoint remains available.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_kpi_overview.py` updated with `packages_depleted` snapshot field
@@ -2529,6 +2547,10 @@ Verification tasks added/updated:
   - `tests/test_booking_billing_integration.py` updated for reserve-model expectations:
     - confirm keeps `lessons_left` and increments `lessons_reserved`,
     - cancel/reschedule/re-book assertions adapted to reservation semantics.
+  - `tests/test_lessons_complete.py` (service-level completion flow, ownership/RBAC checks,
+    booking/package not-found handling, idempotent consumption behavior).
+  - `tests/test_rbac_access_integration.py` extended with
+    `/lessons/{lesson_id}/complete` RBAC check (`401/403/200`).
 
 Latest local checks:
 - `py -m poetry run ruff check app/core/enums.py alembic/versions/20260305_0007_package_status_depleted.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_kpi_overview.py` -> `All checks passed`.
@@ -2542,4 +2564,7 @@ Latest local checks:
 - `py -m poetry run ruff check app/modules/billing/models.py app/modules/billing/repository.py app/modules/billing/schemas.py app/modules/billing/service.py app/modules/booking/service.py app/modules/admin/schemas.py app/modules/admin/repository.py app/modules/admin/router.py app/modules/admin/contracts.py tests/test_booking_rules.py tests/test_booking_billing_integration.py tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_rbac_access_integration.py alembic/versions/20260306_0009_package_lessons_reserved.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_billing_payment_rules.py tests/test_admin_packages_list.py tests/test_admin_kpi_overview.py` -> `40 passed`.
 - `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k "student_hold_confirm_reserves_package_capacity or cancel_more_than_24h_returns_lesson or cancel_less_than_24h_does_not_return_lesson or rebook_same_slot_after_cancel_succeeds_with_active_booking_uniqueness or reschedule_keeps_balance_and_links_bookings"` -> `5 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- `py -m poetry run ruff check app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py app/modules/lessons/router.py tests/test_lessons_complete.py tests/test_rbac_access_integration.py alembic/versions/20260306_0010_lesson_consumed_at.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_lessons_complete.py tests/test_lessons_no_show.py tests/test_booking_rules.py tests/test_billing_payment_rules.py` -> `47 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "lesson_complete_endpoint_returns_401_403_and_200_by_role or admin_create_package_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

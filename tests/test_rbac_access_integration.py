@@ -666,6 +666,86 @@ async def test_admin_lesson_no_show_endpoint_returns_401_403_and_200_by_role(
 
 
 @pytest.mark.asyncio
+async def test_lesson_complete_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    teacher = await _register_and_login(api_client, "teacher")
+
+    package_response = await api_client.post(
+        "/admin/packages",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "student_id": str(student.id),
+            "lessons_total": 5,
+            "expires_at_utc": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+            "price_amount": "149.00",
+            "price_currency": "USD",
+        },
+    )
+    _assert_status(package_response, 201)
+    package_id = package_response.json()["package_id"]
+
+    start_at = datetime.now(UTC) + timedelta(days=12, hours=1)
+    end_at = start_at + timedelta(hours=1)
+    create_slot_response = await api_client.post(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+        json={
+            "teacher_id": str(teacher.id),
+            "start_at_utc": start_at.isoformat(),
+            "end_at_utc": end_at.isoformat(),
+        },
+    )
+    _assert_status(create_slot_response, 201)
+    slot_id = create_slot_response.json()["slot_id"]
+
+    hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={"slot_id": slot_id, "package_id": package_id},
+    )
+    _assert_status(hold_response, 200)
+    booking_id = hold_response.json()["id"]
+
+    confirm_response = await api_client.post(
+        f"/booking/{booking_id}/confirm",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(confirm_response, 200)
+
+    teacher_lessons_response = await api_client.get(
+        "/lessons/my?limit=20&offset=0",
+        headers=_auth_headers(teacher.access_token),
+    )
+    _assert_status(teacher_lessons_response, 200)
+    lesson_items = teacher_lessons_response.json()["items"]
+    lesson_id = next(
+        item["id"] for item in lesson_items if item.get("booking_id") == booking_id
+    )
+
+    no_token_response = await api_client.post(f"/lessons/{lesson_id}/complete")
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.post(
+        f"/lessons/{lesson_id}/complete",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(student_response, 403)
+
+    teacher_response = await api_client.post(
+        f"/lessons/{lesson_id}/complete",
+        headers=_auth_headers(teacher.access_token),
+    )
+    _assert_status(teacher_response, 200)
+    payload = teacher_response.json()
+    assert payload["id"] == lesson_id
+    assert payload["status"] == "completed"
+    assert payload["consumed_at"] is not None
+
+
+@pytest.mark.asyncio
 async def test_admin_slot_stats_endpoint_returns_401_403_and_200_by_role(
     api_client: httpx.AsyncClient,
 ) -> None:

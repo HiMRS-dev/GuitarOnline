@@ -42,5 +42,6 @@ class Lesson(BaseModelMixin, Base):
         nullable=False,
         index=True,
     )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     topic: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

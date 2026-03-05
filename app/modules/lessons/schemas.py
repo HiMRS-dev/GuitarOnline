@@ -49,6 +49,7 @@ class LessonRead(BaseModel):
     scheduled_start_at: datetime
     scheduled_end_at: datetime
     status: LessonStatusEnum
+    consumed_at: datetime | None
     topic: str | None
     notes: str | None
     created_at: datetime

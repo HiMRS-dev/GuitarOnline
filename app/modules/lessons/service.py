@@ -9,19 +9,28 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.core.enums import LessonStatusEnum, RoleEnum
+from app.modules.billing.repository import BillingRepository
+from app.modules.booking.repository import BookingRepository
 from app.modules.identity.models import User
 from app.modules.lessons.models import Lesson
 from app.modules.lessons.repository import LessonsRepository
 from app.modules.lessons.schemas import LessonCreate, LessonUpdate
 from app.shared.exceptions import ConflictException, NotFoundException, UnauthorizedException
-from app.shared.utils import ensure_utc
+from app.shared.utils import ensure_utc, utc_now
 
 
 class LessonsService:
     """Lessons domain service."""
 
-    def __init__(self, repository: LessonsRepository) -> None:
+    def __init__(
+        self,
+        repository: LessonsRepository,
+        billing_repository: BillingRepository | None = None,
+        booking_repository: BookingRepository | None = None,
+    ) -> None:
         self.repository = repository
+        self.billing_repository = billing_repository
+        self.booking_repository = booking_repository
 
     async def create_lesson(self, payload: LessonCreate, actor: User) -> Lesson:
         """Create lesson entity from booking data."""
@@ -78,6 +87,48 @@ class LessonsService:
 
         return await self.repository.update_lesson(lesson, status=LessonStatusEnum.NO_SHOW)
 
+    async def complete_lesson(self, lesson_id: UUID, actor: User) -> Lesson:
+        """Mark lesson as COMPLETED and consume reserved package lesson once."""
+        lesson = await self.repository.get_lesson_by_id(lesson_id)
+        if lesson is None:
+            raise NotFoundException("Lesson not found")
+
+        if actor.role.name not in (RoleEnum.ADMIN, RoleEnum.TEACHER):
+            raise UnauthorizedException("Only admin or teacher can complete lessons")
+        if actor.role.name == RoleEnum.TEACHER and lesson.teacher_id != actor.id:
+            raise UnauthorizedException("Teacher can complete only own lessons")
+
+        if lesson.status == LessonStatusEnum.COMPLETED:
+            if lesson.consumed_at is not None:
+                return lesson
+            return await self.repository.update_lesson(lesson, consumed_at=utc_now())
+        if lesson.status != LessonStatusEnum.SCHEDULED:
+            raise ConflictException("Only scheduled lesson can be completed")
+
+        if self.booking_repository is None or self.billing_repository is None:
+            raise RuntimeError("LessonsService is not configured for completion consumption")
+
+        booking = await self.booking_repository.get_booking_by_id(lesson.booking_id)
+        if booking is None:
+            raise NotFoundException("Booking not found")
+        if booking.package_id is None:
+            raise ConflictException("Lesson booking has no package")
+
+        package = await self.billing_repository.get_package_by_id(booking.package_id)
+        if package is None:
+            raise NotFoundException("Package not found")
+        if package.lessons_reserved <= 0:
+            raise ConflictException("No reserved lessons to consume")
+        if package.lessons_left <= 0:
+            raise ConflictException("No lessons left")
+
+        await self.billing_repository.consume_reserved_package_lesson(package)
+        return await self.repository.update_lesson(
+            lesson,
+            status=LessonStatusEnum.COMPLETED,
+            consumed_at=utc_now(),
+        )
+
     async def list_lessons(self, actor: User, limit: int, offset: int) -> tuple[list[Lesson], int]:
         """List lessons according to actor role."""
         return await self.repository.list_lessons_for_user(actor.id, actor.role.name, limit, offset)
@@ -85,4 +136,8 @@ class LessonsService:
 
 async def get_lessons_service(session: AsyncSession = Depends(get_db_session)) -> LessonsService:
     """Dependency provider for lessons service."""
-    return LessonsService(LessonsRepository(session))
+    return LessonsService(
+        repository=LessonsRepository(session),
+        billing_repository=BillingRepository(session),
+        booking_repository=BookingRepository(session),
+    )

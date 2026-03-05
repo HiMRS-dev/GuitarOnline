@@ -38,6 +38,17 @@ async def update_lesson(
     return LessonRead.model_validate(lesson)
 
 
+@router.post("/{lesson_id}/complete", response_model=LessonRead)
+async def complete_lesson(
+    lesson_id: UUID,
+    service: LessonsService = Depends(get_lessons_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN, RoleEnum.TEACHER)),
+) -> LessonRead:
+    """Mark lesson as completed and consume reserved package lesson."""
+    lesson = await service.complete_lesson(lesson_id, current_user)
+    return LessonRead.model_validate(lesson)
+
+
 @router.get("/my", response_model=Page[LessonRead])
 async def list_my_lessons(
     pagination=Depends(get_pagination_params),

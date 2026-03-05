@@ -69,6 +69,28 @@ class LessonsRepository:
         items = (await self.session.scalars(stmt)).all()
         return items, total
 
+    async def list_teacher_lessons(
+        self,
+        *,
+        teacher_id: UUID,
+        from_utc,
+        to_utc,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Lesson], int]:
+        base_stmt: Select[tuple[Lesson]] = select(Lesson).where(Lesson.teacher_id == teacher_id)
+        if from_utc is not None:
+            base_stmt = base_stmt.where(Lesson.scheduled_start_at >= from_utc)
+        if to_utc is not None:
+            base_stmt = base_stmt.where(Lesson.scheduled_start_at <= to_utc)
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int((await self.session.scalar(count_stmt)) or 0)
+
+        stmt = base_stmt.order_by(Lesson.scheduled_start_at.asc()).limit(limit).offset(offset)
+        items = (await self.session.scalars(stmt)).all()
+        return items, total
+
     async def update_lesson(self, lesson: Lesson, **changes) -> Lesson:
         for key, value in changes.items():
             if value is not None:

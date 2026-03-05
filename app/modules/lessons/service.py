@@ -15,7 +15,12 @@ from app.modules.identity.models import User
 from app.modules.lessons.models import Lesson
 from app.modules.lessons.repository import LessonsRepository
 from app.modules.lessons.schemas import LessonCreate, LessonUpdate
-from app.shared.exceptions import ConflictException, NotFoundException, UnauthorizedException
+from app.shared.exceptions import (
+    BusinessRuleException,
+    ConflictException,
+    NotFoundException,
+    UnauthorizedException,
+)
 from app.shared.utils import ensure_utc, utc_now
 
 
@@ -132,6 +137,36 @@ class LessonsService:
     async def list_lessons(self, actor: User, limit: int, offset: int) -> tuple[list[Lesson], int]:
         """List lessons according to actor role."""
         return await self.repository.list_lessons_for_user(actor.id, actor.role.name, limit, offset)
+
+    async def list_teacher_lessons(
+        self,
+        actor: User,
+        *,
+        from_utc,
+        to_utc,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Lesson], int]:
+        """List teacher-owned lessons with optional UTC range filters."""
+        if actor.role.name != RoleEnum.TEACHER:
+            raise UnauthorizedException("Only teacher can list teacher lessons")
+
+        normalized_from_utc = ensure_utc(from_utc) if from_utc is not None else None
+        normalized_to_utc = ensure_utc(to_utc) if to_utc is not None else None
+        if (
+            normalized_from_utc is not None
+            and normalized_to_utc is not None
+            and normalized_from_utc > normalized_to_utc
+        ):
+            raise BusinessRuleException("from_utc must be less than or equal to to_utc")
+
+        return await self.repository.list_teacher_lessons(
+            teacher_id=actor.id,
+            from_utc=normalized_from_utc,
+            to_utc=normalized_to_utc,
+            limit=limit,
+            offset=offset,
+        )
 
 
 async def get_lessons_service(session: AsyncSession = Depends(get_db_session)) -> LessonsService:

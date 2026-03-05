@@ -2733,3 +2733,31 @@ Latest local checks:
 - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed`.
 - `py -m poetry run pytest -q -rs tests/test_booking_billing_integration.py -k confirm_reserves_and_complete_consumes_package_capacity` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 
+## 35) Epic E Implementation Progress (Started 2026-03-05)
+
+Implemented in codebase:
+
+1. `E2` teacher lessons list endpoint (`GET /teacher/lessons`):
+- new teacher-scoped endpoint added:
+  - `GET /api/v1/teacher/lessons?from_utc&to_utc&limit&offset`.
+- repository-level range filtering added:
+  - `LessonsRepository.list_teacher_lessons(...)` with UTC range predicates on
+    `lessons.scheduled_start_at`.
+- service-level teacher-only guard and range validation added:
+  - `LessonsService.list_teacher_lessons(...)`,
+  - rejects invalid range (`from_utc > to_utc`) with explicit business error.
+- app routing wired:
+  - new router `app/modules/lessons/teacher_router.py`,
+  - mounted in `app/main.py`.
+
+Verification tasks added/updated:
+- tests:
+  - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
+  - `tests/test_rbac_access_integration.py` extended with
+    `/teacher/lessons` RBAC check (`401/403/200`).
+
+Latest local checks:
+- `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_teacher_lessons_list.py tests/test_lessons_complete.py tests/test_lessons_no_show.py` -> `16 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k teacher_lessons_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+

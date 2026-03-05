@@ -3,12 +3,36 @@ import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../shared/api/client";
 import { getTeacherDetail, listTeachers } from "../../features/teachers/api";
 import type { TeacherDetail, TeacherListItem } from "../../features/teachers/types";
+import {
+  ADMIN_TEACHERS_STATUS_STORAGE_KEY,
+  ADMIN_TEACHER_FILTER_STORAGE_KEY
+} from "../../shared/storage/adminFilters";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
+type TeacherStatusFilter = "all" | "pending" | "verified" | "disabled";
+
+const STATUS_FILTER_OPTIONS: Array<{ value: TeacherStatusFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "verified", label: "Verified" },
+  { value: "pending", label: "Pending" },
+  { value: "disabled", label: "Disabled" }
+];
+
+function normalizeStatusFilter(value: string | null): TeacherStatusFilter {
+  if (value === "pending" || value === "verified" || value === "disabled") {
+    return value;
+  }
+  return "all";
+}
 
 export function TeachersPage() {
   const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(
+    () => localStorage.getItem(ADMIN_TEACHER_FILTER_STORAGE_KEY) || null
+  );
+  const [statusFilter, setStatusFilter] = useState<TeacherStatusFilter>(() =>
+    normalizeStatusFilter(localStorage.getItem(ADMIN_TEACHERS_STATUS_STORAGE_KEY))
+  );
   const [teacherDetail, setTeacherDetail] = useState<TeacherDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,13 +43,20 @@ export function TeachersPage() {
     let active = true;
     setLoading(true);
     setError(null);
-    listTeachers()
+    setUnavailable(false);
+    listTeachers(statusFilter === "all" ? {} : { status: statusFilter })
       .then((page) => {
         if (!active) {
           return;
         }
         setTeachers(page.items);
-        setSelectedTeacherId(page.items[0]?.teacher_id ?? null);
+        setSelectedTeacherId((currentSelectedTeacherId) => {
+          const preferredTeacherId = currentSelectedTeacherId ?? page.items[0]?.teacher_id ?? null;
+          const hasPreferredTeacher = page.items.some(
+            (teacher) => teacher.teacher_id === preferredTeacherId
+          );
+          return hasPreferredTeacher ? preferredTeacherId : page.items[0]?.teacher_id ?? null;
+        });
       })
       .catch((requestError) => {
         if (!active) {
@@ -49,7 +80,19 @@ export function TeachersPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [statusFilter]);
+
+  useEffect(() => {
+    if (!selectedTeacherId) {
+      localStorage.removeItem(ADMIN_TEACHER_FILTER_STORAGE_KEY);
+      return;
+    }
+    localStorage.setItem(ADMIN_TEACHER_FILTER_STORAGE_KEY, selectedTeacherId);
+  }, [selectedTeacherId]);
+
+  useEffect(() => {
+    localStorage.setItem(ADMIN_TEACHERS_STATUS_STORAGE_KEY, statusFilter);
+  }, [statusFilter]);
 
   useEffect(() => {
     if (!selectedTeacherId || unavailable) {
@@ -119,6 +162,18 @@ export function TeachersPage() {
       <article className="card">
         <p className="eyebrow">Teachers</p>
         <h1>Teacher List</h1>
+        <div className="quick-filter-group" role="group" aria-label="Teacher status filters">
+          {STATUS_FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={statusFilter === option.value ? "quick-filter active" : "quick-filter"}
+              onClick={() => setStatusFilter(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
         {teachers.length === 0 ? (
           <p className="summary">No teachers found.</p>
         ) : (

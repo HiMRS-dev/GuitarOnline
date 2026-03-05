@@ -6,6 +6,7 @@ import "@fullcalendar/timegrid/index.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiClientError } from "../../shared/api/client";
+import { ADMIN_TEACHER_FILTER_STORAGE_KEY } from "../../shared/storage/adminFilters";
 import { listAdminBookings, rescheduleAdminBooking } from "../../features/bookings/api";
 import type { AdminBooking } from "../../features/bookings/types";
 import { listTeachers } from "../../features/teachers/api";
@@ -18,7 +19,6 @@ import {
 } from "../../features/slots/api";
 import type { AdminSlot } from "../../features/slots/types";
 
-const TEACHER_FILTER_STORAGE_KEY = "go_admin_calendar_teacher_id";
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 
 const SLOT_STATUS_META: Record<AdminSlot["slot_status"], { label: string; color: string }> = {
@@ -55,7 +55,7 @@ function toApiTime(value: string): string {
 export function CalendarPage() {
   const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
   const [teacherId, setTeacherId] = useState(
-    () => localStorage.getItem(TEACHER_FILTER_STORAGE_KEY) || ""
+    () => localStorage.getItem(ADMIN_TEACHER_FILTER_STORAGE_KEY) || ""
   );
   const [range, setRange] = useState<UtcRange>(() => buildInitialRange());
   const [slots, setSlots] = useState<AdminSlot[]>([]);
@@ -123,7 +123,7 @@ export function CalendarPage() {
     if (!teacherId) {
       return;
     }
-    localStorage.setItem(TEACHER_FILTER_STORAGE_KEY, teacherId);
+    localStorage.setItem(ADMIN_TEACHER_FILTER_STORAGE_KEY, teacherId);
   }, [teacherId]);
 
   const loadSlots = useCallback(() => {

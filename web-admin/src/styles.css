@@ -184,6 +184,25 @@ button[disabled] {
   gap: 0.5rem;
 }
 
+.quick-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.quick-filter {
+  background: #eff5fd;
+  color: #17354d;
+  border: 1px solid #c8d8e8;
+}
+
+.quick-filter.active {
+  background: #0f4b84;
+  border-color: #0f4b84;
+  color: #ffffff;
+}
+
 .teacher-item {
   text-align: left;
   width: 100%;

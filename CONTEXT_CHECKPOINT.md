@@ -3411,6 +3411,25 @@ Implemented in codebase:
   - `README.md` deployment section includes load-sanity command and custom target override example,
   - `ops/release_checklist.md` smoke section includes mandatory load-sanity execution and expected pass marker.
 
+9. `H9` admin UX polish (quick filters + persisted teacher selection):
+- added shared admin filter storage contract:
+  - `web-admin/src/shared/storage/adminFilters.ts`.
+- persisted teacher selection now works across admin workflow pages:
+  - `CalendarPage` and `TeachersPage` both use shared key
+    `go_admin_calendar_teacher_id` via `ADMIN_TEACHER_FILTER_STORAGE_KEY`.
+- added quick filters in teachers workflow:
+  - `TeachersPage` now supports one-click status filters:
+    - `All`,
+    - `Verified`,
+    - `Pending`,
+    - `Disabled`.
+- filter persistence:
+  - selected teacher status filter is persisted in browser storage key
+    `go_admin_teachers_status`.
+- teachers API adapter now supports status-filter query wiring:
+  - `listTeachers({ status })` maps to `GET /admin/teachers?status=...`.
+- UX styling added for quick-filter controls in `web-admin/src/styles.css`.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
@@ -3428,6 +3447,8 @@ Verification tasks added/updated:
   - `python -m compileall scripts/load_sanity.py` -> success.
   - `rg -n ".{101}" scripts/load_sanity.py` -> no overlong lines found.
   - `rg -n "load_sanity.py|Load sanity passed|LOAD_SANITY_TARGET_SLOTS|~1000" README.md ops/release_checklist.md scripts/load_sanity.py` -> expected entries found.
+  - `rg -n ".{101}" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/shared/storage/adminFilters.ts web-admin/src/styles.css` -> no overlong lines found.
+  - `rg -n "quick-filter|ADMIN_TEACHER_FILTER_STORAGE_KEY|go_admin_calendar_teacher_id|status filter" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/admin/pages/CalendarPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/shared/storage/adminFilters.ts web-admin/src/styles.css` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

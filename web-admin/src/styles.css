@@ -165,8 +165,47 @@ button[disabled] {
   min-height: 250px;
 }
 
+.teachers-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.teacher-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.teacher-item {
+  text-align: left;
+  width: 100%;
+  border: 1px solid #c9d7e4;
+  background: #fff;
+  color: #1d2f40;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.teacher-item.active {
+  border-color: #0f4b84;
+  background: #e9f2ff;
+}
+
+.teacher-item span {
+  display: block;
+  color: #496177;
+}
+
+.teacher-detail p {
+  margin: 0.5rem 0;
+}
+
 @media (max-width: 900px) {
   .admin-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .teachers-grid {
     grid-template-columns: 1fr;
   }
 }

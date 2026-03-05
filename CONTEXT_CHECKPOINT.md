@@ -3197,6 +3197,20 @@ Implemented in codebase:
   - login request uses `apiClient.request(..., auth=false)`,
   - current-user request uses authenticated client path.
 
+6. `G6` + `G7` teachers pages (list/detail + deterministic unavailable mode):
+- added teacher API integration layer:
+  - `web-admin/src/features/teachers/api.ts`,
+  - `web-admin/src/features/teachers/types.ts`.
+- `Teachers` section now calls:
+  - `GET /admin/teachers`,
+  - `GET /admin/teachers/{id}`.
+- interactive list/detail UI implemented in:
+  - `web-admin/src/admin/pages/TeachersPage.tsx`.
+- deterministic endpoint-unavailable behavior implemented:
+  - when API returns `404/405/501`, page shows explicit “Endpoint unavailable” state with expected endpoint names,
+  - avoids silent failures and ambiguous empty states.
+- added dedicated layout styles for teacher split-view list/detail in `web-admin/src/styles.css`.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" web-admin` -> no overlong lines found.
@@ -3204,6 +3218,7 @@ Verification tasks added/updated:
   - `rg -n ".{101}" web-admin/src/App.tsx web-admin/src/main.tsx web-admin/src/features/auth/api.ts web-admin/src/features/auth/types.ts web-admin/src/styles.css` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src` -> no overlong lines found.
   - `rg -n ".{101}" web-admin/src/shared/api/client.ts web-admin/src/features/auth/api.ts web-admin/src/App.tsx` -> no overlong lines found.
+  - `rg -n ".{101}" web-admin/src/admin/pages/TeachersPage.tsx web-admin/src/features/teachers/api.ts web-admin/src/features/teachers/types.ts web-admin/src/styles.css` -> no overlong lines found.
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).

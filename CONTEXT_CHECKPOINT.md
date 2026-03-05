@@ -3302,3 +3302,34 @@ Verification tasks added/updated:
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).
 
+## 38) Epic H Implementation Progress (Started 2026-03-06)
+
+Implemented in codebase:
+
+1. `H1` smoke script expansion (login + admin teacher list + slot create + hold + confirm):
+- expanded deployment smoke flow in:
+  - `scripts/deploy_smoke_check.py`.
+- smoke script now validates all previously covered health/static/auth probes and additionally runs
+  end-to-end operational steps:
+  - register + login `admin`, `teacher`, and `student` users,
+  - create teacher profile (`POST /api/v1/teachers/profiles`),
+  - fetch admin teachers list (`GET /api/v1/admin/teachers`),
+  - create admin slot (`POST /api/v1/admin/slots`),
+  - create admin package for student (`POST /api/v1/admin/packages`),
+  - create student HOLD (`POST /api/v1/booking/hold`),
+  - confirm booking (`POST /api/v1/booking/{id}/confirm`).
+- deterministic assertions added:
+  - admin teachers list must return at least one item,
+  - booking confirm result must end in `status=confirmed`.
+- script-level helper improvements for maintainability:
+  - added `request_json(...)` wrapper for JSON parsing,
+  - added `auth_headers(...)` helper for bearer auth reuse.
+
+Verification tasks added/updated:
+- static checks:
+  - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
+  - `python -m compileall scripts/deploy_smoke_check.py` -> success.
+
+Latest local checks:
+- runtime smoke execution was not performed in this shell session (local integration stack was not started).
+

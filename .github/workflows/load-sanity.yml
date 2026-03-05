@@ -90,5 +90,8 @@ jobs:
           ssh -p "${port}" "${remote}" "TARGET_SLOTS='${TARGET_SLOTS}' DEPLOY_PATH='${DEPLOY_PATH}' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "${DEPLOY_PATH}"
-          docker compose -f docker-compose.prod.yml exec -T -e LOAD_SANITY_TARGET_SLOTS="${TARGET_SLOTS}" app python scripts/load_sanity.py
+          docker compose -f docker-compose.prod.yml exec -T \
+            -e LOAD_SANITY_BASE_URL="http://localhost:8000" \
+            -e LOAD_SANITY_TARGET_SLOTS="${TARGET_SLOTS}" \
+            app python - < scripts/load_sanity.py
           REMOTE

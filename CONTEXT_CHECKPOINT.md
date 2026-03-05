@@ -2792,6 +2792,15 @@ Implemented in codebase:
   - `LessonRead` includes `meeting_url`,
   - `LessonUpdate` and teacher report payload support meeting URL fields.
 
+4. `E5` student lessons endpoint alias (`GET /me/lessons`):
+- contract alias added:
+  - `GET /api/v1/me/lessons`.
+- alias maps to existing lessons listing flow without behavior change:
+  - reuses `LessonsService.list_lessons(...)` (same as `/lessons/my`).
+- app routing wired:
+  - new router `app/modules/lessons/me_router.py`,
+  - mounted in `app/main.py`.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_teacher_lessons_list.py` added (service-level teacher scope + range validation).
@@ -2808,6 +2817,8 @@ Verification tasks added/updated:
     - template-based generation,
     - template-missing guard,
     - mixed manual+template conflict guard.
+  - `tests/test_rbac_access_integration.py` extended with
+    `/me/lessons` alias RBAC/availability check (`401/200` for authorized roles).
 
 Latest local checks:
 - `py -m poetry run ruff check app/main.py app/modules/lessons/repository.py app/modules/lessons/service.py app/modules/lessons/teacher_router.py tests/test_teacher_lessons_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
@@ -2818,4 +2829,7 @@ Latest local checks:
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "teacher_lessons_endpoint_returns_401_403_and_200_by_role or teacher_lesson_report_endpoint_returns_401_403_and_200_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run ruff check app/core/config.py app/modules/lessons/models.py app/modules/lessons/schemas.py app/modules/lessons/service.py alembic/versions/20260306_0013_lesson_meeting_url.py tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py` -> `All checks passed`.
 - `py -m poetry run pytest -q tests/test_lesson_meeting_url.py tests/test_teacher_lesson_report.py tests/test_teacher_lessons_list.py tests/test_lessons_complete.py` -> `18 passed`.
+- `py -m poetry run ruff check app/main.py app/modules/lessons/me_router.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_teacher_lessons_list.py tests/test_teacher_lesson_report.py tests/test_lesson_meeting_url.py` -> `11 passed`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k me_lessons_alias_endpoint_returns_401_and_200_for_authorized_roles` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 

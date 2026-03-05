@@ -22,6 +22,7 @@ from app.modules.booking.router import router as booking_router
 from app.modules.identity.repository import IdentityRepository
 from app.modules.identity.router import router as identity_router
 from app.modules.identity.service import IdentityService
+from app.modules.lessons.me_router import router as me_lessons_router
 from app.modules.lessons.router import router as lessons_router
 from app.modules.lessons.teacher_router import router as teacher_lessons_router
 from app.modules.notifications.router import router as notifications_router
@@ -186,6 +187,7 @@ app.include_router(booking_router, prefix=settings.api_prefix)
 app.include_router(billing_router, prefix=settings.api_prefix)
 app.include_router(lessons_router, prefix=settings.api_prefix)
 app.include_router(teacher_lessons_router, prefix=settings.api_prefix)
+app.include_router(me_lessons_router, prefix=settings.api_prefix)
 app.include_router(notifications_router, prefix=settings.api_prefix)
 app.include_router(admin_router, prefix=settings.api_prefix)
 app.include_router(audit_router, prefix=settings.api_prefix)

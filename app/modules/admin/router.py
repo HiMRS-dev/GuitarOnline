@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -12,6 +13,7 @@ from app.modules.admin.schemas import (
     AdminActionRead,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminSlotListItemRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
 )
@@ -96,6 +98,27 @@ async def disable_admin_teacher(
 ) -> AdminTeacherDetailRead:
     """Disable teacher profile from admin panel."""
     return await service.disable_teacher(current_user, teacher_id=teacher_id)
+
+
+@router.get("/slots", response_model=Page[AdminSlotListItemRead])
+async def list_admin_slots(
+    teacher_id: UUID | None = Query(default=None),
+    from_utc: datetime | None = Query(default=None),
+    to_utc: datetime | None = Query(default=None),
+    pagination=Depends(get_pagination_params),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> Page[AdminSlotListItemRead]:
+    """List slots for admin calendar views with aggregated booking status."""
+    items, total = await service.list_slots(
+        current_user,
+        teacher_id=teacher_id,
+        from_utc=from_utc,
+        to_utc=to_utc,
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+    return build_page(items, total, pagination)
 
 
 @router.get("/kpi/overview", response_model=AdminKpiOverviewRead)

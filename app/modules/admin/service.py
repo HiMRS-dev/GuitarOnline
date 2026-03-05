@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
-from app.core.enums import RoleEnum, TeacherStatusEnum
+from app.core.enums import (
+    BookingStatusEnum,
+    RoleEnum,
+    SlotBookingAggregateStatusEnum,
+    SlotStatusEnum,
+    TeacherStatusEnum,
+)
 from app.modules.admin.models import AdminAction
 from app.modules.admin.repository import AdminRepository
 from app.modules.admin.schemas import (
     AdminActionCreate,
     AdminKpiOverviewRead,
     AdminOperationsOverviewRead,
+    AdminSlotListItemRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
 )
 from app.modules.identity.models import User
-from app.shared.exceptions import NotFoundException, UnauthorizedException
+from app.shared.exceptions import BusinessRuleException, NotFoundException, UnauthorizedException
+from app.shared.utils import ensure_utc
 
 
 class AdminService:
@@ -160,6 +169,60 @@ class AdminService:
         if item is None:
             raise NotFoundException("Teacher profile not found")
         return AdminTeacherDetailRead.model_validate(item)
+
+    async def list_slots(
+        self,
+        actor: User,
+        *,
+        teacher_id: UUID | None,
+        from_utc: datetime | None,
+        to_utc: datetime | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[AdminSlotListItemRead], int]:
+        """List admin slots with aggregated booking status."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can list slots")
+
+        normalized_from_utc = ensure_utc(from_utc) if from_utc is not None else None
+        normalized_to_utc = ensure_utc(to_utc) if to_utc is not None else None
+        if (
+            normalized_from_utc is not None
+            and normalized_to_utc is not None
+            and normalized_from_utc > normalized_to_utc
+        ):
+            raise BusinessRuleException("from_utc must be less than or equal to to_utc")
+
+        items, total = await self.repository.list_slots(
+            teacher_id=teacher_id,
+            from_utc=normalized_from_utc,
+            to_utc=normalized_to_utc,
+            limit=limit,
+            offset=offset,
+        )
+        serialized: list[AdminSlotListItemRead] = []
+        for item in items:
+            slot_status = item["slot_status"]
+            booking_status = item["booking_status"]
+            item["aggregated_booking_status"] = self._aggregate_slot_booking_status(
+                slot_status=slot_status,
+                booking_status=booking_status,
+            )
+            serialized.append(AdminSlotListItemRead.model_validate(item))
+        return serialized, total
+
+    @staticmethod
+    def _aggregate_slot_booking_status(
+        *,
+        slot_status: SlotStatusEnum,
+        booking_status: BookingStatusEnum | None,
+    ) -> SlotBookingAggregateStatusEnum:
+        """Map slot + booking states to admin aggregated booking status."""
+        if slot_status == SlotStatusEnum.BOOKED or booking_status == BookingStatusEnum.CONFIRMED:
+            return SlotBookingAggregateStatusEnum.CONFIRMED
+        if slot_status == SlotStatusEnum.HOLD or booking_status == BookingStatusEnum.HOLD:
+            return SlotBookingAggregateStatusEnum.HELD
+        return SlotBookingAggregateStatusEnum.OPEN
 
 
 async def get_admin_service(session: AsyncSession = Depends(get_db_session)) -> AdminService:

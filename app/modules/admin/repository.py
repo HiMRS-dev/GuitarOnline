@@ -27,6 +27,7 @@ from app.modules.booking.models import Booking
 from app.modules.identity.models import Role, User
 from app.modules.lessons.models import Lesson
 from app.modules.notifications.models import Notification
+from app.modules.scheduling.models import AvailabilitySlot
 from app.modules.teachers.models import TeacherProfile, TeacherProfileTag
 from app.shared.utils import utc_now
 
@@ -286,6 +287,55 @@ class AdminRepository:
             data["bio"] = profile.bio
             data["experience_years"] = profile.experience_years
         return data
+
+    async def list_slots(
+        self,
+        *,
+        teacher_id: UUID | None,
+        from_utc: datetime | None,
+        to_utc: datetime | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, object]], int]:
+        """List slots with booking relation snapshot for admin views."""
+        base_stmt: Select[tuple[AvailabilitySlot, UUID | None, BookingStatusEnum | None]] = (
+            select(
+                AvailabilitySlot,
+                Booking.id.label("booking_id"),
+                Booking.status.label("booking_status"),
+            ).outerjoin(Booking, Booking.slot_id == AvailabilitySlot.id)
+        )
+
+        if teacher_id is not None:
+            base_stmt = base_stmt.where(AvailabilitySlot.teacher_id == teacher_id)
+        if from_utc is not None:
+            base_stmt = base_stmt.where(AvailabilitySlot.start_at >= from_utc)
+        if to_utc is not None:
+            base_stmt = base_stmt.where(AvailabilitySlot.start_at <= to_utc)
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int((await self.session.scalar(count_stmt)) or 0)
+
+        stmt = base_stmt.order_by(AvailabilitySlot.start_at.asc()).limit(limit).offset(offset)
+        rows = (await self.session.execute(stmt)).all()
+
+        items: list[dict[str, object]] = []
+        for slot, booking_id, booking_status in rows:
+            items.append(
+                {
+                    "slot_id": slot.id,
+                    "teacher_id": slot.teacher_id,
+                    "created_by_admin_id": slot.created_by_admin_id,
+                    "start_at_utc": slot.start_at,
+                    "end_at_utc": slot.end_at,
+                    "slot_status": slot.status,
+                    "booking_id": booking_id,
+                    "booking_status": booking_status,
+                    "created_at_utc": slot.created_at,
+                    "updated_at_utc": slot.updated_at,
+                },
+            )
+        return items, total
 
     async def get_kpi_overview(self) -> dict[str, datetime | int | Decimal]:
         role_counts = await self._count_users_by_role()

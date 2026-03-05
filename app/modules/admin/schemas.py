@@ -8,7 +8,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import TeacherStatusEnum
+from app.core.enums import (
+    BookingStatusEnum,
+    SlotBookingAggregateStatusEnum,
+    SlotStatusEnum,
+    TeacherStatusEnum,
+)
 
 
 class AdminActionCreate(BaseModel):
@@ -160,6 +165,40 @@ class AdminTeacherDetailRead(BaseModel):
     verified: bool
     is_active: bool
     tags: list[str]
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
+class AdminSlotListItemRead(BaseModel):
+    """Admin slot list item with aggregated booking status."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "slot_id": "41fc173a-0a17-4ebf-8687-951714f1f55f",
+                "teacher_id": "8a937f92-0132-4691-b735-c224078afaef",
+                "created_by_admin_id": "c4ea1016-8586-4602-9fbe-c1100d2057a1",
+                "start_at_utc": "2026-03-07T12:00:00+00:00",
+                "end_at_utc": "2026-03-07T13:00:00+00:00",
+                "slot_status": "booked",
+                "booking_id": "6b6a1681-f4d1-47fc-b6de-d4f4f657f57d",
+                "booking_status": "confirmed",
+                "aggregated_booking_status": "confirmed",
+                "created_at_utc": "2026-03-05T10:20:00+00:00",
+                "updated_at_utc": "2026-03-05T10:25:00+00:00",
+            },
+        },
+    )
+
+    slot_id: UUID
+    teacher_id: UUID
+    created_by_admin_id: UUID
+    start_at_utc: datetime
+    end_at_utc: datetime
+    slot_status: SlotStatusEnum
+    booking_id: UUID | None
+    booking_status: BookingStatusEnum | None
+    aggregated_booking_status: SlotBookingAggregateStatusEnum
     created_at_utc: datetime
     updated_at_utc: datetime
 

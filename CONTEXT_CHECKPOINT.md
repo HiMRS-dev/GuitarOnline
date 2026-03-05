@@ -1965,20 +1965,43 @@ Implemented in codebase:
   - `admin.teacher.disable`,
   including before/after moderation payload snapshot.
 
+5. `B4` admin slots listing endpoint with UTC filters + aggregated booking status:
+- added `GET /api/v1/admin/slots` (admin-only) with filters:
+  - `teacher_id`,
+  - `from_utc`,
+  - `to_utc`,
+  - plus pagination (`limit`, `offset`).
+- endpoint returns slot rows with:
+  - raw slot state (`slot_status`),
+  - linked booking snapshot (`booking_id`, `booking_status`),
+  - computed `aggregated_booking_status` in canonical admin buckets:
+    - `open`,
+    - `held`,
+    - `confirmed`.
+- aggregation rule implemented in admin service:
+  - `booked` slot or `confirmed` booking -> `confirmed`,
+  - `hold` slot or `hold` booking -> `held`,
+  - otherwise -> `open`.
+- datetime filters are normalized to UTC and validated:
+  - `from_utc <= to_utc` is required.
+
 Verification tasks added/updated:
 - tests:
   - `tests/test_admin_teachers_list.py` (service-level behavior + admin role enforcement),
   - `tests/test_admin_teacher_detail.py` (service-level detail behavior + `404`/RBAC),
   - `tests/test_admin_teacher_moderation.py` (service-level verify/disable behavior + `404`/RBAC),
+  - `tests/test_admin_slots_list.py` (service-level slot aggregation + UTC/range validation + RBAC),
   - `tests/test_rbac_access_integration.py` extended with `/admin/teachers` and
     `/admin/teachers/{teacher_id}` RBAC checks,
   - `tests/test_rbac_access_integration.py` extended with
-    `/admin/teachers/{teacher_id}/verify` and `/disable` RBAC checks and audit-log trace check.
+    `/admin/teachers/{teacher_id}/verify` and `/disable` RBAC checks and audit-log trace check,
+  - `tests/test_rbac_access_integration.py` extended with `/admin/slots` RBAC check.
 
 Latest local checks:
-- `py -m poetry run ruff check app/modules/admin app/modules/teachers tests/test_admin_teacher_moderation.py tests/test_rbac_access_integration.py` -> `All checks passed`.
-- `py -m poetry run pytest -q tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `15 passed`.
+- `py -m poetry run ruff check app/core/enums.py app/modules/admin tests/test_admin_slots_list.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `19 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_detail_endpoint or admin_teachers_endpoint"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_verify_endpoint or admin_teacher_disable_endpoint or admin_teacher_moderation_endpoints_write_audit_logs"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `81 passed, 15 skipped`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_slots_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `85 passed, 16 skipped`.
 

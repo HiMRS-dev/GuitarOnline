@@ -313,6 +313,32 @@ async def test_admin_teacher_moderation_endpoints_write_audit_logs(
 
 
 @pytest.mark.asyncio
+async def test_admin_slots_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+
+    no_token_response = await api_client.get("/admin/slots")
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.get(
+        "/admin/slots",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.get(
+        "/admin/slots",
+        headers=_auth_headers(admin.access_token),
+    )
+    _assert_status(admin_response, 200)
+    payload = admin_response.json()
+    assert "items" in payload
+    assert isinstance(payload["items"], list)
+
+
+@pytest.mark.asyncio
 async def test_teacher_profile_create_forbidden_for_student_and_allowed_for_teacher(
     api_client: httpx.AsyncClient,
 ) -> None:

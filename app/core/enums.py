@@ -20,6 +20,14 @@ class SlotStatusEnum(StrEnum):
     CANCELED = "canceled"
 
 
+class SlotBookingAggregateStatusEnum(StrEnum):
+    """Aggregated booking state for admin slot views."""
+
+    OPEN = "open"
+    HELD = "held"
+    CONFIRMED = "confirmed"
+
+
 class BookingStatusEnum(StrEnum):
     """Booking lifecycle status."""
 

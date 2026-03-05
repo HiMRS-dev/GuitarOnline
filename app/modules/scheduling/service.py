@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
 from fastapi import Depends
@@ -78,6 +79,92 @@ class SchedulingService:
             },
         )
         return slot
+
+    async def bulk_create_slots(
+        self,
+        *,
+        teacher_id: UUID,
+        date_from_utc: date,
+        date_to_utc: date,
+        weekdays: list[int],
+        start_time_utc: time,
+        end_time_utc: time,
+        slot_duration_minutes: int,
+        actor: User,
+    ) -> tuple[list[AvailabilitySlot], list[dict[str, object]]]:
+        """Create multiple slots by weekly template with deterministic skip reasons."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can create slots")
+        if date_to_utc < date_from_utc:
+            raise BusinessRuleException("date_from_utc must be less than or equal to date_to_utc")
+        if end_time_utc <= start_time_utc:
+            raise BusinessRuleException("end_time_utc must be after start_time_utc")
+        if slot_duration_minutes < settings.slot_min_duration_minutes:
+            raise BusinessRuleException(
+                f"slot_duration_minutes must be at least {settings.slot_min_duration_minutes}",
+            )
+
+        weekdays_set = set(weekdays)
+        duration = timedelta(minutes=slot_duration_minutes)
+        day_count = (date_to_utc - date_from_utc).days + 1
+        candidates: list[tuple[datetime, datetime]] = []
+        for day_offset in range(day_count):
+            current_date = date_from_utc + timedelta(days=day_offset)
+            if current_date.weekday() not in weekdays_set:
+                continue
+
+            cursor = datetime.combine(current_date, start_time_utc, tzinfo=UTC)
+            day_end = datetime.combine(current_date, end_time_utc, tzinfo=UTC)
+            while cursor + duration <= day_end:
+                candidates.append((cursor, cursor + duration))
+                cursor += duration
+
+        if len(candidates) > settings.slot_bulk_create_max_slots:
+            raise BusinessRuleException(
+                f"Bulk create candidates exceed limit ({settings.slot_bulk_create_max_slots})",
+            )
+
+        created_slots: list[AvailabilitySlot] = []
+        skipped: list[dict[str, object]] = []
+        for start_at_utc, end_at_utc in candidates:
+            try:
+                slot = await self.create_slot(
+                    SlotCreate(
+                        teacher_id=teacher_id,
+                        start_at=start_at_utc,
+                        end_at=end_at_utc,
+                    ),
+                    actor,
+                )
+                created_slots.append(slot)
+            except BusinessRuleException as exc:
+                skipped.append(
+                    {
+                        "start_at_utc": start_at_utc,
+                        "end_at_utc": end_at_utc,
+                        "reason": exc.message,
+                    },
+                )
+
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="admin.slot.bulk_create",
+            entity_type="availability_slot_batch",
+            entity_id=str(teacher_id),
+            payload={
+                "teacher_id": str(teacher_id),
+                "date_from_utc": date_from_utc.isoformat(),
+                "date_to_utc": date_to_utc.isoformat(),
+                "weekdays": sorted(weekdays_set),
+                "start_time_utc": start_time_utc.isoformat(),
+                "end_time_utc": end_time_utc.isoformat(),
+                "slot_duration_minutes": slot_duration_minutes,
+                "created_count": len(created_slots),
+                "skipped_count": len(skipped),
+            },
+        )
+
+        return created_slots, skipped
 
     async def list_open_slots(
         self,

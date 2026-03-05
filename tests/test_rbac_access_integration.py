@@ -375,6 +375,45 @@ async def test_admin_create_slot_endpoint_returns_401_403_and_201_by_role(
 
 
 @pytest.mark.asyncio
+async def test_admin_bulk_create_slots_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    teacher = await _register_and_login(api_client, "teacher")
+    target_day = (datetime.now(UTC) + timedelta(days=7)).date()
+    payload = {
+        "teacher_id": str(teacher.id),
+        "date_from_utc": target_day.isoformat(),
+        "date_to_utc": target_day.isoformat(),
+        "weekdays": [target_day.weekday()],
+        "start_time_utc": "10:00:00",
+        "end_time_utc": "12:00:00",
+        "slot_duration_minutes": 60,
+    }
+
+    no_token_response = await api_client.post("/admin/slots/bulk-create", json=payload)
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.post(
+        "/admin/slots/bulk-create",
+        headers=_auth_headers(student.access_token),
+        json=payload,
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.post(
+        "/admin/slots/bulk-create",
+        headers=_auth_headers(admin.access_token),
+        json=payload,
+    )
+    _assert_status(admin_response, 200)
+    body = admin_response.json()
+    assert body["created_count"] >= 1
+    assert isinstance(body["created_slot_ids"], list)
+
+
+@pytest.mark.asyncio
 async def test_admin_delete_slot_endpoint_returns_401_403_and_204_without_bookings(
     api_client: httpx.AsyncClient,
 ) -> None:

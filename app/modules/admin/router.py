@@ -15,6 +15,8 @@ from app.modules.admin.schemas import (
     AdminOperationsOverviewRead,
     AdminSlotBlockRead,
     AdminSlotBlockRequest,
+    AdminSlotBulkCreateRead,
+    AdminSlotBulkCreateRequest,
     AdminSlotCreateRead,
     AdminSlotCreateRequest,
     AdminSlotListItemRead,
@@ -174,6 +176,31 @@ async def block_admin_slot(
 ) -> AdminSlotBlockRead:
     """Block slot and persist reason with audit trace."""
     return await service.block_slot(current_user, slot_id=slot_id, reason=payload.reason)
+
+
+@router.post("/slots/bulk-create", response_model=AdminSlotBulkCreateRead)
+async def bulk_create_admin_slots(
+    payload: AdminSlotBulkCreateRequest,
+    service: SchedulingService = Depends(get_scheduling_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminSlotBulkCreateRead:
+    """Bulk create slots from admin schedule template."""
+    created_slots, skipped = await service.bulk_create_slots(
+        teacher_id=payload.teacher_id,
+        date_from_utc=payload.date_from_utc,
+        date_to_utc=payload.date_to_utc,
+        weekdays=payload.weekdays,
+        start_time_utc=payload.start_time_utc,
+        end_time_utc=payload.end_time_utc,
+        slot_duration_minutes=payload.slot_duration_minutes,
+        actor=current_user,
+    )
+    return AdminSlotBulkCreateRead(
+        created_count=len(created_slots),
+        skipped_count=len(skipped),
+        created_slot_ids=[slot.id for slot in created_slots],
+        skipped=skipped,
+    )
 
 
 @router.get("/kpi/overview", response_model=AdminKpiOverviewRead)

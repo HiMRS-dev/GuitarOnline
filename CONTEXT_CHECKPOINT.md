@@ -2037,8 +2037,30 @@ Implemented in codebase:
 - slot status transitions through scheduling repository now clear block metadata
   when moving out of `blocked` to avoid stale state.
 
+9. `B8` admin bulk slot creation endpoint (base):
+- added admin-only endpoint:
+  - `POST /api/v1/admin/slots/bulk-create`.
+- base bulk-create contract supports:
+  - `teacher_id`,
+  - `date_from_utc`,
+  - `date_to_utc`,
+  - `weekdays` (`0..6`),
+  - `start_time_utc`,
+  - `end_time_utc`,
+  - `slot_duration_minutes`.
+- service behavior:
+  - generates deterministic candidate slots from weekly template,
+  - enforces bounded generation via config:
+    - `SLOT_BULK_CREATE_MAX_SLOTS` (default `1000`),
+  - applies existing strict slot validations per candidate
+    (future-time, min duration, overlap),
+  - returns deterministic skip list with explicit reason for each skipped candidate.
+- bulk operation writes summary audit entry:
+  - `admin.slot.bulk_create`.
+
 Verification tasks added/updated:
 - tests:
+  - `tests/test_admin_slot_bulk_create.py` (service-level bulk create base flow + limit validation),
   - `tests/test_admin_slot_block.py` (service-level slot block flow + 403/404),
   - `tests/test_admin_slot_delete.py` (service-level delete policy: success/403/404/409),
   - `tests/test_admin_slot_create_rules.py` (service-level strict create validation + overlap),
@@ -2053,16 +2075,18 @@ Verification tasks added/updated:
   - `tests/test_rbac_access_integration.py` extended with:
     - `/admin/slots` RBAC check,
     - `POST /admin/slots` RBAC check,
+    - `POST /admin/slots/bulk-create` RBAC check,
     - `DELETE /admin/slots/{slot_id}` RBAC + conflict policy checks,
     - `POST /admin/slots/{slot_id}/block` RBAC + audit trace check.
 
 Latest local checks:
-- `py -m poetry run ruff check app/core/enums.py app/modules/scheduling app/modules/admin tests/test_admin_slot_block.py tests/test_rbac_access_integration.py alembic/versions/20260305_0004_slot_blocking_fields.py` -> `All checks passed`.
-- `py -m poetry run pytest -q tests/test_admin_slot_block.py tests/test_admin_slot_delete.py tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `31 passed`.
+- `py -m poetry run ruff check app/core/config.py app/modules/scheduling app/modules/admin tests/test_admin_slot_bulk_create.py tests/test_rbac_access_integration.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_slot_bulk_create.py tests/test_admin_slot_block.py tests/test_admin_slot_delete.py tests/test_admin_slot_create_rules.py tests/test_admin_slots_list.py tests/test_admin_teacher_moderation.py tests/test_admin_teacher_detail.py tests/test_admin_teachers_list.py tests/test_admin_kpi_overview.py tests/test_admin_operations_overview.py` -> `35 passed`.
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_detail_endpoint or admin_teachers_endpoint"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_teacher_verify_endpoint or admin_teacher_disable_endpoint or admin_teacher_moderation_endpoints_write_audit_logs"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k admin_slots_endpoint_returns_401_403_and_200_by_role` -> `1 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_slots_endpoint_returns_401_403_and_200_by_role or admin_create_slot_endpoint_returns_401_403_and_201_by_role"` -> `2 skipped` (integration stack unavailable at `http://localhost:8000/health`).
 - `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_delete_slot_endpoint_returns_401_403_and_204_without_bookings or admin_delete_slot_endpoint_returns_409_when_slot_has_related_booking or admin_block_slot_endpoint_returns_401_403_and_200_and_writes_audit"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
-- full local suite: `py -m poetry run pytest -q` -> `97 passed, 20 skipped`.
+- `py -m poetry run pytest -q -rs tests/test_rbac_access_integration.py -k "admin_bulk_create_slots_endpoint_returns_401_403_and_200_by_role or admin_create_slot_endpoint_returns_401_403_and_201_by_role or admin_block_slot_endpoint_returns_401_403_and_200_and_writes_audit"` -> `3 skipped` (integration stack unavailable at `http://localhost:8000/health`).
+- full local suite: `py -m poetry run pytest -q` -> `101 passed, 21 skipped`.
 

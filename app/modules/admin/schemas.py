@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
@@ -274,6 +274,48 @@ class AdminSlotBlockRead(BaseModel):
     blocked_at_utc: datetime | None
     blocked_by_admin_id: UUID | None
     updated_at_utc: datetime
+
+
+class AdminSlotBulkCreateRequest(BaseModel):
+    """Admin request schema for bulk slot generation."""
+
+    teacher_id: UUID
+    date_from_utc: date
+    date_to_utc: date
+    weekdays: list[int] = Field(min_length=1, max_length=7)
+    start_time_utc: time
+    end_time_utc: time
+    slot_duration_minutes: int = Field(ge=1, le=720)
+
+    @field_validator("weekdays", mode="after")
+    @classmethod
+    def validate_weekdays(cls, value: list[int]) -> list[int]:
+        normalized = sorted(set(value))
+        if any(day < 0 or day > 6 for day in normalized):
+            raise ValueError("weekdays must contain values in range 0..6")
+        return normalized
+
+    @field_validator("start_time_utc", "end_time_utc", mode="after")
+    @classmethod
+    def normalize_time_precision(cls, value: time) -> time:
+        return value.replace(second=0, microsecond=0)
+
+
+class AdminSlotBulkCreateSkippedItemRead(BaseModel):
+    """Skipped candidate slot in bulk create response."""
+
+    start_at_utc: datetime
+    end_at_utc: datetime
+    reason: str
+
+
+class AdminSlotBulkCreateRead(BaseModel):
+    """Bulk slot creation response summary."""
+
+    created_count: int
+    skipped_count: int
+    created_slot_ids: list[UUID]
+    skipped: list[AdminSlotBulkCreateSkippedItemRead]
 
 
 class AdminOperationsOverviewRead(BaseModel):

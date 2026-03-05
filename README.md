@@ -208,11 +208,12 @@ Production-ready modular monolith backend for an online guitar school.
 - CORS env:
   - `FRONTEND_ADMIN_ORIGIN` (comma-separated allowed origins for admin frontend)
 - Security gate regression checks:
-  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py`
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py`
   - scope covered by this gate:
     - CORS policy wiring,
     - auth rate-limit dependencies,
-    - response-model minimization for identity endpoints (no password hash/internal secret fields).
+    - response-model minimization for identity endpoints (no password hash/internal secret fields),
+    - role-based PII field visibility (email fields exposed only on identity/admin contracts).
 
 ## Workers
 

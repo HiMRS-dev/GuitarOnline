@@ -3363,6 +3363,18 @@ Implemented in codebase:
   - `README.md` security controls section now includes explicit regression-gate command,
   - `ops/release_checklist.md` pre-deploy section now requires running that gate.
 
+5. `H5` PII exposure constraints (role-based field visibility tests):
+- added dedicated contract-level regression tests:
+  - `tests/test_pii_field_visibility.py`.
+- automated checks added:
+  - non-admin domain DTOs (`teacher/booking/lesson/billing`) do not expose `email`,
+  - admin teacher DTOs explicitly retain `email` for admin-only workflows,
+  - route-level contract gate:
+    - response models containing `email` are allowed only on identity/admin routes.
+- security gate docs extended:
+  - README security-gate command now includes `tests/test_pii_field_visibility.py`,
+  - release checklist pre-deploy security gate command updated to include PII test.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
@@ -3372,6 +3384,9 @@ Verification tasks added/updated:
   - `python -m compileall tests/test_security_surface.py` -> success.
   - `rg -n ".{101}" tests/test_security_surface.py` -> no overlong lines found.
   - `rg -n "test_security_surface.py|security gate|FRONTEND_ADMIN_ORIGIN|response-model minimization" README.md ops/release_checklist.md` -> expected entries found.
+  - `python -m compileall tests/test_pii_field_visibility.py` -> success.
+  - `rg -n ".{101}" tests/test_pii_field_visibility.py` -> no overlong lines found.
+  - `rg -n "test_pii_field_visibility.py|PII|role-based PII|security regression gate" README.md ops/release_checklist.md` -> expected entries found.
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).

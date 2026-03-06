@@ -36,6 +36,11 @@ Use this checklist to move from "working deploy" to repeatable reliability.
     - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1 -RequireAllIntegrations`
   - fallback submit-only helper:
     - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
+- Run synthetic operational critical-path probe:
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_check.py`
+  - confirm output includes `Synthetic ops check passed.`
+- Keep scheduled remote probe enabled:
+  - `.github/workflows/synthetic-ops-check.yml` (hourly cron + manual dispatch).
 - Use maintenance silences during planned releases and expire after rollout:
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release"`
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_expire_silence.ps1 -SilenceId <id>`

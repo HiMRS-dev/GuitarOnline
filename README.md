@@ -402,6 +402,15 @@ Production-ready modular monolith backend for an online guitar school.
     - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1 -DryRun`
   - low-level submit-only helper remains available:
     - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
+- Synthetic operational critical-path probe (health/ready/metrics/auth/booking):
+  - local/prod-host run:
+    - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_check.py`
+  - on failure, script emits `GuitarOnlineSyntheticOpsCheckFailed` to Alertmanager with runbook context.
+  - debug mode without alert emission:
+    - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_check.py --no-alert-on-failure`
+- Scheduled remote execution:
+  - GitHub Actions workflow: `.github/workflows/synthetic-ops-check.yml`
+  - cadence: hourly (`15 * * * *`) and manual `workflow_dispatch`.
 - Maintenance silence baseline:
   - create temporary silence (warning by default):
     - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release window"`

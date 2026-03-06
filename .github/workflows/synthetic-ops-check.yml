@@ -1,0 +1,96 @@
+name: synthetic-ops-check
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to use for remote check runner script"
+        required: true
+        default: "main"
+      alert_on_failure:
+        description: "Emit Alertmanager critical alert on synthetic-check failure"
+        required: true
+        type: boolean
+        default: true
+      confirm:
+        description: "Type SYNTHETIC to confirm"
+        required: true
+  schedule:
+    - cron: "15 * * * *"
+
+jobs:
+  synthetic:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'SYNTHETIC' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
+      SYNTHETIC_OPS_ALERT_ON_FAILURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.alert_on_failure || 'true' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF_NAME }}
+
+      - name: Print synthetic-check context
+        run: |
+          set -euo pipefail
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Ref for runner script: ${REF_NAME}"
+          echo "Alert on failure: ${SYNTHETIC_OPS_ALERT_ON_FAILURE}"
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Run synthetic ops check on target host
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          ssh -p "${port}" "${remote}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' SYNTHETIC_OPS_ALERT_ON_FAILURE='${SYNTHETIC_OPS_ALERT_ON_FAILURE}' bash -s" \
+            < scripts/run_synthetic_ops_remote.sh

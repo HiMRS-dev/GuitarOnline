@@ -72,7 +72,7 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. Synthetic operational checks for critical path (`V2-03`) are not yet automated on schedule.
+3. Backup schedule + retention automation (`V2-04`) is not yet implemented.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -92,9 +92,9 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-03`: synthetic operational checks wired to alerting.
-2. `V2-04`: backup schedule + retention policy automation.
-3. `V2-05`: restore rehearsal workflow with RPO/RTO reporting.
+1. `V2-04`: backup schedule + retention policy automation.
+2. `V2-05`: restore rehearsal workflow with RPO/RTO reporting.
+3. `V2-06`: performance baseline for admin-heavy endpoints.
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -153,6 +153,30 @@
   - `docker run ... amtool check-config /etc/alertmanager/alertmanager.yml` -> success.
   - `docker compose -f docker-compose.prod.yml config -q` -> success.
   - `powershell -ExecutionPolicy Bypass -File scripts/validate_ops_configs.ps1` -> success.
+- `V2-03` completed (2026-03-06): periodic synthetic operational checks wired to alerting.
+- implemented:
+  - synthetic critical-path check script:
+    - `scripts/synthetic_ops_check.py`,
+    - coverage includes `/health`, `/ready`, `/metrics`, auth flows, and booking hold->confirm->cancel cleanup path.
+  - failure-to-alert wiring:
+    - script emits `GuitarOnlineSyntheticOpsCheckFailed` to Alertmanager with step-specific failure context and runbook annotation.
+  - remote runner script for target host:
+    - `scripts/run_synthetic_ops_remote.sh`.
+  - scheduled workflow:
+    - `.github/workflows/synthetic-ops-check.yml`,
+    - hourly cron (`15 * * * *`) + manual `workflow_dispatch` (`confirm=SYNTHETIC`).
+  - runbook updates:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict resolved during implementation:
+  - running stack used older app image and did not include new script path; fixed by rebuilding app container before validation.
+- verification evidence:
+  - `py -m poetry run ruff check scripts/synthetic_ops_check.py` -> `All checks passed`.
+  - `python -m compileall scripts/synthetic_ops_check.py` -> success.
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/run_synthetic_ops_remote.sh` -> success.
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_check.py --no-alert-on-failure` ->
+    `Synthetic ops check passed.`.
 
 ## 12) References
 - Full historical checkpoint archive:

@@ -4,7 +4,8 @@ services:
     pull_policy: if_not_present
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -32,7 +33,8 @@ services:
     build: .
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       AUTH_RATE_LIMIT_BACKEND: ${AUTH_RATE_LIMIT_BACKEND:-redis}
@@ -82,7 +84,8 @@ services:
     build: .
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       OUTBOX_WORKER_MODE: loop
       OUTBOX_WORKER_POLL_SECONDS: 10
@@ -100,7 +103,8 @@ services:
     build: .
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       BOOKING_HOLDS_EXPIRER_MODE: loop
       BOOKING_HOLDS_EXPIRER_POLL_SECONDS: 30
@@ -118,7 +122,8 @@ services:
     build: .
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       PACKAGES_EXPIRER_MODE: loop
       PACKAGES_EXPIRER_POLL_SECONDS: 3600

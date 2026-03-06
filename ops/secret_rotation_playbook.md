@@ -56,3 +56,8 @@ Run dry-run before each planned rotation window.
 1. Restore backup env on target host.
 2. Re-sync `PROD_ENV_FILE_B64` from restored env file.
 3. Redeploy previous known-good ref and rerun smoke checks.
+
+## 6) Scheduled Windows
+
+- Approved production apply windows are tracked in:
+  - `ops/secret_rotation_schedule.md`.

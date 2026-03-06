@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import UTC, datetime, timedelta
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -65,7 +65,20 @@ def auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
+def ensure(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError(message)
+
+
+def extract_page_items(payload: dict[str, object], endpoint: str) -> list[dict[str, object]]:
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise RuntimeError(f"{endpoint} did not return paginated items list")
+    return [item for item in items if isinstance(item, dict)]
+
+
 def main() -> None:
+    print("Smoke: health/readiness/static checks")
     for endpoint in [
         "/health",
         "/ready",
@@ -78,18 +91,21 @@ def main() -> None:
         request(endpoint, expected=200)
 
     suffix = uuid4().hex[:10]
-    password = "StrongPass123!"
+    shared_credential = "StrongPass123!"
+    now_utc = datetime.now(UTC)
 
     admin_email = f"deploy-smoke-admin-{suffix}@guitaronline.dev"
     teacher_email = f"deploy-smoke-teacher-{suffix}@guitaronline.dev"
     student_email = f"deploy-smoke-student-{suffix}@guitaronline.dev"
+    teacher_display_name = f"Deploy Smoke Teacher {suffix}"
 
+    print("Smoke: role registration")
     request_json(
         "/api/v1/identity/auth/register",
         method="POST",
         body={
             "email": admin_email,
-            "password": password,
+            "password": shared_credential,
             "timezone": "UTC",
             "role": "admin",
         },
@@ -100,7 +116,7 @@ def main() -> None:
         method="POST",
         body={
             "email": teacher_email,
-            "password": password,
+            "password": shared_credential,
             "timezone": "UTC",
             "role": "teacher",
         },
@@ -111,69 +127,94 @@ def main() -> None:
         method="POST",
         body={
             "email": student_email,
-            "password": password,
+            "password": shared_credential,
             "timezone": "UTC",
             "role": "student",
         },
         expected=201,
     )
 
+    print("Smoke: role login")
     admin_login = request_json(
         "/api/v1/identity/auth/login",
         method="POST",
-        body={"email": admin_email, "password": password},
+        body={"email": admin_email, "password": shared_credential},
         expected=200,
     )
     teacher_login = request_json(
         "/api/v1/identity/auth/login",
         method="POST",
-        body={"email": teacher_email, "password": password},
+        body={"email": teacher_email, "password": shared_credential},
         expected=200,
     )
     student_login = request_json(
         "/api/v1/identity/auth/login",
         method="POST",
-        body={"email": student_email, "password": password},
+        body={"email": student_email, "password": shared_credential},
         expected=200,
     )
 
-    request(
+    admin_token = str(admin_login["access_token"])
+    teacher_token = str(teacher_login["access_token"])
+    student_token = str(student_login["access_token"])
+
+    print("Smoke: student profile check")
+    student_me = request_json(
         "/api/v1/identity/users/me",
-        headers=auth_headers(str(student_login["access_token"])),
+        headers=auth_headers(student_token),
         expected=200,
     )
+    ensure(
+        str(student_me.get("id")) == str(student_user["id"]),
+        "Student /users/me did not return expected user id",
+    )
 
-    request_json(
+    print("Smoke: teacher profile flow")
+    teacher_profile = request_json(
         "/api/v1/teachers/profiles",
         method="POST",
-        headers=auth_headers(str(teacher_login["access_token"])),
+        headers=auth_headers(teacher_token),
         body={
             "user_id": str(teacher_user["id"]),
-            "display_name": "Deploy Smoke Teacher",
+            "display_name": teacher_display_name,
             "bio": "Smoke test profile",
             "experience_years": 3,
         },
         expected=201,
     )
-
-    teacher_query = urlencode(
-        {"q": "Deploy Smoke Teacher", "limit": 5, "offset": 0},
-    )
-    teachers_page = request_json(
-        f"/api/v1/admin/teachers?{teacher_query}",
-        headers=auth_headers(str(admin_login["access_token"])),
+    teacher_profiles_page = request_json(
+        "/api/v1/teachers/profiles?limit=20&offset=0",
+        headers=auth_headers(teacher_token),
         expected=200,
     )
-    if int(teachers_page.get("total", 0)) < 1:
-        raise RuntimeError("Admin teachers list returned no teachers")
+    teacher_profiles = extract_page_items(teacher_profiles_page, "/api/v1/teachers/profiles")
+    ensure(
+        any(str(item.get("id")) == str(teacher_profile["id"]) for item in teacher_profiles),
+        "Teacher profile did not appear in teacher list endpoint",
+    )
 
-    now = datetime.now(UTC)
-    slot_start = (now + timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
+    print("Smoke: admin teacher moderation list")
+    teacher_query = urlencode(
+        {"q": teacher_display_name, "limit": 10, "offset": 0},
+    )
+    admin_teachers = request_json(
+        f"/api/v1/admin/teachers?{teacher_query}",
+        headers=auth_headers(admin_token),
+        expected=200,
+    )
+    admin_teacher_items = extract_page_items(admin_teachers, "/api/v1/admin/teachers")
+    ensure(
+        any(str(item.get("teacher_id")) == str(teacher_user["id"]) for item in admin_teacher_items),
+        "Admin teacher list did not include newly created teacher",
+    )
+
+    print("Smoke: admin slot/package setup")
+    slot_start = (now_utc + timedelta(days=2)).replace(minute=0, second=0, microsecond=0)
     slot_end = slot_start + timedelta(minutes=30)
     created_slot = request_json(
         "/api/v1/admin/slots",
         method="POST",
-        headers=auth_headers(str(admin_login["access_token"])),
+        headers=auth_headers(admin_token),
         body={
             "teacher_id": str(teacher_user["id"]),
             "start_at_utc": slot_start.isoformat(),
@@ -185,21 +226,35 @@ def main() -> None:
     created_package = request_json(
         "/api/v1/admin/packages",
         method="POST",
-        headers=auth_headers(str(admin_login["access_token"])),
+        headers=auth_headers(admin_token),
         body={
             "student_id": str(student_user["id"]),
             "lessons_total": 2,
-            "expires_at_utc": (now + timedelta(days=30)).isoformat(),
+            "expires_at_utc": (now_utc + timedelta(days=30)).isoformat(),
             "price_amount": "120.00",
             "price_currency": "USD",
         },
         expected=201,
     )
 
+    print("Smoke: student open-slots and booking flow")
+    open_slots_query = urlencode(
+        {"teacher_id": str(teacher_user["id"]), "limit": 20, "offset": 0},
+    )
+    open_slots_page = request_json(
+        f"/api/v1/scheduling/slots/open?{open_slots_query}",
+        expected=200,
+    )
+    open_slots = extract_page_items(open_slots_page, "/api/v1/scheduling/slots/open")
+    ensure(
+        any(str(item.get("id")) == str(created_slot["slot_id"]) for item in open_slots),
+        "Created slot did not appear in open slots list",
+    )
+
     hold_booking = request_json(
         "/api/v1/booking/hold",
         method="POST",
-        headers=auth_headers(str(student_login["access_token"])),
+        headers=auth_headers(student_token),
         body={
             "slot_id": str(created_slot["slot_id"]),
             "package_id": str(created_package["package_id"]),
@@ -209,12 +264,117 @@ def main() -> None:
     confirmed_booking = request_json(
         f"/api/v1/booking/{hold_booking['id']}/confirm",
         method="POST",
-        headers=auth_headers(str(student_login["access_token"])),
+        headers=auth_headers(student_token),
         expected=200,
     )
-    if confirmed_booking.get("status") != "confirmed":
-        raise RuntimeError("Booking confirm smoke check failed")
+    ensure(
+        str(confirmed_booking.get("status")) == "confirmed",
+        "Booking confirm smoke check failed",
+    )
 
+    print("Smoke: role-specific booking/package visibility")
+    student_bookings_page = request_json(
+        "/api/v1/booking/my?limit=20&offset=0",
+        headers=auth_headers(student_token),
+        expected=200,
+    )
+    student_bookings = extract_page_items(student_bookings_page, "/api/v1/booking/my (student)")
+    ensure(
+        any(str(item.get("id")) == str(confirmed_booking["id"]) for item in student_bookings),
+        "Student bookings list does not include confirmed booking",
+    )
+
+    teacher_bookings_page = request_json(
+        "/api/v1/booking/my?limit=20&offset=0",
+        headers=auth_headers(teacher_token),
+        expected=200,
+    )
+    teacher_bookings = extract_page_items(teacher_bookings_page, "/api/v1/booking/my (teacher)")
+    ensure(
+        any(str(item.get("id")) == str(confirmed_booking["id"]) for item in teacher_bookings),
+        "Teacher bookings list does not include confirmed booking",
+    )
+
+    student_packages_page = request_json(
+        f"/api/v1/billing/packages/students/{student_user['id']}?limit=20&offset=0",
+        headers=auth_headers(student_token),
+        expected=200,
+    )
+    student_packages = extract_page_items(
+        student_packages_page,
+        "/api/v1/billing/packages/students/{student_id}",
+    )
+    ensure(
+        any(str(item.get("id")) == str(created_package["package_id"]) for item in student_packages),
+        "Student packages list does not include admin-created package",
+    )
+
+    print("Smoke: admin operational read models")
+    admin_bookings_query = urlencode(
+        {
+            "teacher_id": str(teacher_user["id"]),
+            "student_id": str(student_user["id"]),
+            "limit": 20,
+            "offset": 0,
+        },
+    )
+    admin_bookings_page = request_json(
+        f"/api/v1/admin/bookings?{admin_bookings_query}",
+        headers=auth_headers(admin_token),
+        expected=200,
+    )
+    admin_bookings = extract_page_items(admin_bookings_page, "/api/v1/admin/bookings")
+    ensure(
+        any(str(item.get("booking_id")) == str(confirmed_booking["id"]) for item in admin_bookings),
+        "Admin bookings list does not include confirmed booking",
+    )
+
+    admin_packages_query = urlencode(
+        {
+            "student_id": str(student_user["id"]),
+            "limit": 20,
+            "offset": 0,
+        },
+    )
+    admin_packages_page = request_json(
+        f"/api/v1/admin/packages?{admin_packages_query}",
+        headers=auth_headers(admin_token),
+        expected=200,
+    )
+    admin_packages = extract_page_items(admin_packages_page, "/api/v1/admin/packages")
+    ensure(
+        any(
+            str(item.get("package_id")) == str(created_package["package_id"])
+            for item in admin_packages
+        ),
+        "Admin packages list does not include created package",
+    )
+
+    request_json(
+        "/api/v1/admin/kpi/overview",
+        headers=auth_headers(admin_token),
+        expected=200,
+    )
+    sales_query = urlencode(
+        {
+            "from_utc": (now_utc - timedelta(days=30)).isoformat(),
+            "to_utc": now_utc.isoformat(),
+        },
+    )
+    request_json(
+        f"/api/v1/admin/kpi/sales?{sales_query}",
+        headers=auth_headers(admin_token),
+        expected=200,
+    )
+
+    print("Role-based release gate passed.")
+    request_json(
+        f"/api/v1/booking/{confirmed_booking['id']}/cancel",
+        method="POST",
+        headers=auth_headers(admin_token),
+        body={"reason": "release gate cleanup"},
+        expected=200,
+    )
     print("Smoke checks passed.")
 
 

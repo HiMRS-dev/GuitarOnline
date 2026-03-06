@@ -22,6 +22,7 @@
 - Release tag exists:
   - `v1.1.0`.
 - Admin UI (`web-admin`) is integrated, including optional production profile (`admin-ui`).
+- v1.2 hardening plan (`V2-01`..`V2-10`) is fully implemented.
 
 ## 4) Current Verified State (2026-03-06)
 - Branch:
@@ -40,7 +41,8 @@
 - Lint check for integration file:
   - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed`.
 - Smoke and probes on running stack:
-  - `python scripts/deploy_smoke_check.py` -> `Smoke checks passed.`
+  - `python scripts/deploy_smoke_check.py` ->
+    `Role-based release gate passed.` then `Smoke checks passed.`
   - `/health` -> `ok`, `/ready` -> `ready`, `/metrics` families present.
 
 ## 6) Recent Conflict Fixes (Important)
@@ -54,6 +56,8 @@
    - test flow and compose overrides adjusted.
 5. CI enum storage parity in integration tests:
    - `tests/test_booking_billing_integration.py` now uses case-safe raw SQL checks.
+6. Deploy smoke-gate conflict removed:
+   - `scripts/deploy_remote.sh` now fails closed when `scripts/deploy_smoke_check.py` is missing, preventing fallback to non-role-based smoke path.
 
 ## 7) Operations Quick Start
 1. Start stack:
@@ -90,15 +94,20 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-10`: role-based end-to-end regression scenario in release gate.
-2. Keep `V2-08` allowlist hygiene:
+1. Keep `V2-08` allowlist hygiene:
    - review `ops/security/pip_audit_ignore.txt` and drop temporary exceptions as upstream fixes appear.
-3. Schedule first production secret-rotation apply window using:
-   - `ops/secret_rotation_playbook.md`.
-4. Gate for closing iteration:
-   - remaining task (`V2-10`) merged,
-   - `ci` and `deploy` green on `main`,
-   - updated runbook with commands and expected output markers.
+   - last review (2026-03-06):
+     - `py -m poetry run pip-audit --skip-editable` still reports `CVE-2024-23342` for `ecdsa 0.19.1` with no listed fix version,
+     - keep temporary ignore entry until upstream publishes remediation.
+2. Execute first production secret-rotation apply window:
+   - scheduled in `ops/secret_rotation_schedule.md`,
+   - window `SR-2026-03-11-01` (`2026-03-11 04:00 UTC` / `2026-03-11 15:00` Asia/Sakhalin, UTC+11),
+   - run `ops/secret_rotation_playbook.md` section `4) Rotation Procedure (Apply Window)` and capture outcome.
+3. Keep role-based release gate healthy:
+   - run deploy with `run_smoke=true`,
+   - verify markers `Role-based release gate passed.` and `Smoke checks passed.`.
+4. Review and approve prepared `v1.3` backlog:
+   - see section `12) v1.3 Backlog Draft (Prepared 2026-03-06)`.
 
 ## 11) v1.2 Progress Log
 - `V2-01` completed (2026-03-06): real-channel alert routing verification tooling + runbook sync.
@@ -343,11 +352,63 @@
   - GitHub Actions validation:
     - `ci` run `22759301521` -> `success`.
     - `deploy` run `22759301514` -> `success`.
+- `V2-10` completed (2026-03-06): role-based E2E regression scenario wired into release gate.
+- implemented:
+  - expanded smoke gate script:
+    - `scripts/deploy_smoke_check.py`,
+    - coverage now includes `admin`/`teacher`/`student` registration+login, teacher profile flow, admin teacher/booking/package list checks, admin slot+package setup, student hold->confirm booking, role visibility checks, admin KPI checks, and cleanup cancel.
+  - added strict smoke assertions/helpers:
+    - `ensure(...)`,
+    - `extract_page_items(...)`,
+    - step markers including `Role-based release gate passed.`.
+  - runbook/checklist updates:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict handling during implementation:
+  - paginated payload and DTO field-name differences across endpoints (`teacher_id`, `booking_id`, `package_id`) resolved by endpoint-aware assertions and shared page extraction helper.
+- verification evidence:
+  - `py -m poetry run ruff check scripts/deploy_smoke_check.py` -> `All checks passed`.
+  - `python -m compileall scripts/deploy_smoke_check.py` -> success.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
+  - `python scripts/deploy_smoke_check.py` -> success with markers:
+    - `Role-based release gate passed.`
+    - `Smoke checks passed.`
+- ops follow-up (2026-03-06): first production secret-rotation apply window scheduled.
+- implemented:
+  - schedule artifact:
+    - `ops/secret_rotation_schedule.md`,
+    - approved window:
+      - `SR-2026-03-11-01`,
+      - `2026-03-11 04:00 UTC` (`2026-03-11 15:00` Asia/Sakhalin, UTC+11),
+      - planned duration `30 minutes`.
+  - runbook wiring updates:
+    - `ops/secret_rotation_playbook.md`,
+    - `README.md`,
+    - `ops/release_checklist.md`.
+- conflict handling during implementation:
+  - window intentionally placed outside current automated maintenance points (daily backup at `02:30 UTC`, restore rehearsal at `03:20 UTC`) to reduce operational overlap risk.
+  - release-gate drift risk removed by enforcing role-based smoke script presence in deploy path (`scripts/deploy_remote.sh` fail-closed behavior).
+- verification evidence:
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/deploy_remote.sh` -> success.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
 
-## 12) References
+## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
+| ID | Priority | Task | Done When |
+| --- | --- | --- | --- |
+| `V3-01` | P0 | Execute first production secret rotation window and publish outcome report. | Window `SR-2026-03-11-01` executed; report includes start/end times, rotated target key, deploy run link, smoke markers, rollback status. |
+| `V3-02` | P0 | Remove temporary `pip-audit` ignore for `CVE-2024-23342` once upstream fix exists. | Dependency upgraded to fixed version, ignore entry removed from `ops/security/pip_audit_ignore.txt`, `scripts/supply_chain_gate.py` passes without that ignore. |
+| `V3-03` | P1 | Enforce production auth rate-limiter on Redis and prevent memory fallback drift. | Production `.env` uses `AUTH_RATE_LIMIT_BACKEND=redis`; startup check blocks invalid prod memory config; deployment/runbook validation covers this. |
+| `V3-04` | P1 | Add deploy evidence artifact bundle (smoke logs + key markers) to release workflow. | Deploy workflow stores artifact with smoke output and explicit marker checks for `Role-based release gate passed.` and `Smoke checks passed.`. |
+| `V3-05` | P1 | Add monthly rollback drill workflow with machine-readable report. | Scheduled drill runs restore/rollback path on non-prod target, publishes JSON report with pass/fail, timings, and detected issues. |
+| `V3-06` | P2 | Refresh performance baseline after index/query hardening in production-like load. | New baseline report committed under `docs/perf/`; p95 deltas vs `2026-03-06` baseline documented with conclusions and follow-up actions. |
+
+## 13) References
 - Full historical checkpoint archive:
   - `docs/context/CONTEXT_CHECKPOINT_ARCHIVE_2026-03-06.md`
 - Release notes:
   - `docs/releases/v1.1.0.md`
 - Secret rotation runbook:
   - `ops/secret_rotation_playbook.md`
+- Secret rotation schedule:
+  - `ops/secret_rotation_schedule.md`

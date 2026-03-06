@@ -16,6 +16,8 @@ Use this checklist before promoting a build to a target environment.
     - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
     - update repository secret `PROD_ENV_FILE_B64`.
 - If key rotation is planned in this release window:
+  - follow scheduled window plan:
+    - `ops/secret_rotation_schedule.md` (`SR-2026-03-11-01`, `2026-03-11 04:00 UTC`).
   - run non-destructive rehearsal:
     - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
   - follow canonical rotation playbook:
@@ -80,6 +82,7 @@ Use this checklist before promoting a build to a target environment.
 
 - Required scripted smoke run:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
+  - release must be blocked when `scripts/deploy_smoke_check.py` is absent in selected deploy ref.
 - Load sanity scenario (~1000 slots + admin slots envelope checks):
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - expected output includes `Load sanity passed`.
@@ -104,8 +107,12 @@ Use this checklist before promoting a build to a target environment.
   - `GET /portal` returns `200`.
   - `GET /portal/static/app.js` returns `200`.
   - `GET /portal/static/styles.css` returns `200`.
-- Auth and portal basic flow:
-  - register -> login -> profile (`/api/v1/identity/users/me`) succeeds.
+- Role-based critical-path flow (covered by `scripts/deploy_smoke_check.py`):
+  - `admin` creates teacher slot + student package,
+  - `student` completes hold -> confirm booking and sees booking/package in own views,
+  - `teacher` sees booking in `/api/v1/booking/my`,
+  - `admin` validates `/api/v1/admin/teachers`, `/api/v1/admin/bookings`, `/api/v1/admin/packages`, `/api/v1/admin/kpi/*`.
+  - expected smoke markers: `Role-based release gate passed.` then `Smoke checks passed.`.
 - Alert routing synthetic test:
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1`
   - strict mode for full integration matrix:

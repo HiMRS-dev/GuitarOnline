@@ -195,7 +195,8 @@ Production-ready modular monolith backend for an online guitar school.
   - bootstraps repository metadata on target host when `${DEPLOY_PATH}` has no `.git` (no manual pre-clone required),
   - uploads `.env` from `PROD_ENV_FILE_B64` to `${DEPLOY_PATH}/.env`,
   - performs compose deploy and DB migrations,
-  - runs post-deploy smoke checks (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, auth flow),
+  - runs post-deploy role-based smoke gate (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, `admin/teacher/student` critical flow),
+  - fails closed when `scripts/deploy_smoke_check.py` is missing in deployed ref,
   - performs automatic rollback to previous git SHA when deploy/migrate/smoke fails.
 - Secret safety controls:
   - `.env` is ignored by git (`.gitignore`),
@@ -286,6 +287,8 @@ Production-ready modular monolith backend for an online guitar school.
 
 - Canonical playbook:
   - `ops/secret_rotation_playbook.md`
+- Scheduled production windows:
+  - `ops/secret_rotation_schedule.md`
 - Local dry-run rehearsal (non-destructive):
   - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
 - GitHub Actions dry-run rehearsal against production env bundle:

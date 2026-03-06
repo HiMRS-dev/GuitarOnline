@@ -14,6 +14,8 @@ Use this checklist to move from "working deploy" to repeatable reliability.
   - `curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/portal`
   - `curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/portal/static/app.js`
 - Keep `run_smoke=true` in deploy workflow for production releases.
+- Confirm deploy smoke logs include role gate marker:
+  - `Role-based release gate passed.`
 
 ## 2) Log Rotation Baseline
 

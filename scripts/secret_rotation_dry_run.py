@@ -15,7 +15,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 from app.core.config import Settings
 
@@ -105,7 +106,7 @@ def _run_jwt_probe(*, previous_secret: str, rotated_secret: str, algorithm: str)
 
     try:
         jwt.decode(previous_token, rotated_secret, algorithms=[algorithm])
-    except JWTError:
+    except InvalidTokenError:
         pass
     else:
         raise RuntimeError(

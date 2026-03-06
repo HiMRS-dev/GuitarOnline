@@ -1,0 +1,176 @@
+name: rollback-drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to use for remote rollback drill runner script"
+        required: true
+        default: "main"
+      target_ref:
+        description: "Ref used for rollback checkout simulation on target host"
+        required: true
+        default: "main"
+      backup_file:
+        description: "Optional backup file path on target host for restore rehearsal"
+        required: false
+        default: ""
+      allow_production:
+        description: "Allow running rollback drill when APP_ENV is production/prod"
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: "Type ROLLBACK to confirm"
+        required: true
+  schedule:
+    - cron: "10 4 1-7 * 1"
+
+jobs:
+  drill:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'ROLLBACK' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
+      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target_ref || 'main' }}
+      BACKUP_FILE_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.backup_file || '' }}
+      ALLOW_PRODUCTION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_production || 'false' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF_NAME }}
+
+      - name: Print rollback drill context
+        run: |
+          set -euo pipefail
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Runner script ref: ${REF_NAME}"
+          echo "Rollback target ref: ${TARGET_REF}"
+          echo "Allow production: ${ALLOW_PRODUCTION}"
+          if [ -n "${BACKUP_FILE_INPUT}" ]; then
+            echo "Backup override: ${BACKUP_FILE_INPUT}"
+          else
+            echo "Backup override: <latest scheduled daily backup>"
+          fi
+
+      - name: Validate required secrets and inputs
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+          if [[ "${TARGET_REF}" == *$'\n'* ]] || [ -z "${TARGET_REF}" ]; then
+            echo "::error::target_ref must be a non-empty single-line value."
+            exit 1
+          fi
+          if [[ "${ALLOW_PRODUCTION}" != "true" && "${ALLOW_PRODUCTION}" != "false" ]]; then
+            echo "::error::allow_production must resolve to true/false."
+            exit 1
+          fi
+          if [[ "${BACKUP_FILE_INPUT}" == *$'\n'* ]]; then
+            echo "::error::backup_file must be a single-line path."
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Run rollback drill on target host
+        id: run_drill
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp
+          log_file=".tmp/rollback-drill.log"
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+
+          remote_cmd="$(printf 'DEPLOY_PATH=%q ROLLBACK_DRILL_TARGET_REF=%q ROLLBACK_DRILL_ALLOW_PRODUCTION=%q ' "${DEPLOY_PATH}" "${TARGET_REF}" "${ALLOW_PRODUCTION}")"
+          if [ -n "${BACKUP_FILE_INPUT}" ]; then
+            remote_cmd+=$(printf 'ROLLBACK_DRILL_BACKUP_FILE=%q ' "${BACKUP_FILE_INPUT}")
+          fi
+          remote_cmd+="bash -s"
+
+          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_rollback_drill_remote.sh | tee "${log_file}"
+
+          report_path="$(grep '^rollback_drill_report=' "${log_file}" | tail -n 1 | cut -d '=' -f2-)"
+          if [ -z "${report_path}" ]; then
+            echo "::error::Failed to parse rollback drill report path from remote output."
+            exit 1
+          fi
+          echo "report_path=${report_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Download rollback drill report
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          report_path="${{ steps.run_drill.outputs.report_path }}"
+          scp -P "${port}" "${remote}:${report_path}" ".tmp/rollback-drill-report.json"
+
+      - name: Print rollback drill summary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path(".tmp/rollback-drill-report.json").read_text(encoding="utf-8"))
+          print(f"Drill status: {report['status']}")
+          print(f"Drill duration seconds: {report['drill_duration_seconds']}")
+          print(f"Original SHA: {report['git']['original_sha']}")
+          print(f"Target ref/SHA: {report['git']['target_ref']} / {report['git']['target_sha']}")
+          print(f"Rollback SHA: {report['git']['rollback_sha']}")
+          restore = report["restore_rehearsal"]
+          print(f"Restore RPO seconds: {restore['rpo_seconds']}")
+          print(f"Restore RTO seconds: {restore['rto_seconds']}")
+          print(f"Restore backup source: {restore['backup_file']}")
+          PY
+
+      - name: Upload rollback drill report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-drill-report-${{ github.run_id }}
+          path: |
+            .tmp/rollback-drill-report.json
+            .tmp/rollback-drill.log
+          if-no-files-found: error

@@ -29,6 +29,8 @@ This document tracks approved production key-rotation windows.
 
 - Canonical procedure:
   - `ops/secret_rotation_playbook.md` (section `4) Rotation Procedure (Apply Window)`).
+- Execution report template for this window:
+  - `ops/secret_rotation_execution_report_2026-03-11.md`.
 
 ## Success Criteria
 

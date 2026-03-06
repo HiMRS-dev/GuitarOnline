@@ -7,6 +7,8 @@ Use this checklist before promoting a build to a target environment.
 - Confirm target commit/tag and change log.
 - Confirm environment variables are prepared (preferred: `PROD_ENV_FILE_B64` GitHub secret for deploy workflow; fallback: manual `.env`).
 - Verify runtime env + CI/CD secrets against `README.md` section `Production Config Matrix`.
+- Confirm auth rate-limiter prod policy in `.env`:
+  - `AUTH_RATE_LIMIT_BACKEND=redis` (deploy preflight rejects non-redis values).
 - If `.env` changed, refresh GitHub secret:
   - preferred one-command sync:
     - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1`
@@ -53,6 +55,10 @@ Use this checklist before promoting a build to a target environment.
 - Verify restore rehearsal workflow produces RPO/RTO report artifact:
   - workflow `.github/workflows/restore-rehearsal.yml` is enabled,
   - latest run artifact includes `rpo_seconds` and `rto_seconds`.
+- Verify rollback drill workflow produces machine-readable report artifact:
+  - workflow `.github/workflows/rollback-drill.yml` is enabled,
+  - run target should be non-production by default (`allow_production=false`),
+  - latest run artifact includes git rollback fields and nested restore metrics.
 
 ## 3) Deploy
 
@@ -83,6 +89,12 @@ Use this checklist before promoting a build to a target environment.
 - Required scripted smoke run:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
   - release must be blocked when `scripts/deploy_smoke_check.py` is absent in selected deploy ref.
+  - deploy path must verify smoke markers in output:
+    - `Role-based release gate passed.`
+    - `Smoke checks passed.`
+  - deploy workflow artifact `deploy-evidence-<run_id>-<attempt>` must contain:
+    - `deploy_remote.log`,
+    - `summary.txt` with marker statuses.
 - Load sanity scenario (~1000 slots + admin slots envelope checks):
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - expected output includes `Load sanity passed`.

@@ -151,10 +151,56 @@ jobs:
           ssh -p "${port}" "${remote}" "chmod 600 '${DEPLOY_PATH}/.env'"
 
       - name: Deploy, migrate, smoke, rollback on failure
+        id: remote_deploy
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |
           set -euo pipefail
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           port="${DEPLOY_PORT:-22}"
+          mkdir -p .tmp/deploy-evidence
 
-          ssh -p "${port}" "${remote}" "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' PROFILE='${PROFILE}' RUN_BACKUP='${RUN_BACKUP}' RUN_SMOKE='${RUN_SMOKE}' REPO_URL='${REPO_URL}' bash -s" < scripts/deploy_remote.sh
+          ssh -p "${port}" "${remote}" "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' PROFILE='${PROFILE}' RUN_BACKUP='${RUN_BACKUP}' RUN_SMOKE='${RUN_SMOKE}' REPO_URL='${REPO_URL}' bash -s" < scripts/deploy_remote.sh | tee .tmp/deploy-evidence/deploy_remote.log
+
+      - name: Verify smoke markers in deploy log
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' && env.RUN_SMOKE == 'true' }}
+        run: |
+          set -euo pipefail
+          log_file=".tmp/deploy-evidence/deploy_remote.log"
+          [ -f "${log_file}" ]
+          grep -Fq "Role-based release gate passed." "${log_file}"
+          grep -Fq "Smoke checks passed." "${log_file}"
+          grep -Fq "Smoke markers verified." "${log_file}"
+
+      - name: Build deploy evidence summary
+        if: ${{ always() && steps.auto_deploy_guard.outputs.enabled == 'true' }}
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/deploy-evidence
+          log_file=".tmp/deploy-evidence/deploy_remote.log"
+          role_marker="missing"
+          smoke_marker="missing"
+          verified_marker="missing"
+          if [ -f "${log_file}" ]; then
+            if grep -Fq "Role-based release gate passed." "${log_file}"; then role_marker="present"; fi
+            if grep -Fq "Smoke checks passed." "${log_file}"; then smoke_marker="present"; fi
+            if grep -Fq "Smoke markers verified." "${log_file}"; then verified_marker="present"; fi
+          fi
+          {
+            echo "generated_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "trigger_source=${TRIGGER_SOURCE}"
+            echo "requested_ref=${REF_NAME}"
+            echo "profile=${PROFILE}"
+            echo "run_backup=${RUN_BACKUP}"
+            echo "run_smoke=${RUN_SMOKE}"
+            echo "role_gate_marker=${role_marker}"
+            echo "smoke_passed_marker=${smoke_marker}"
+            echo "smoke_verified_marker=${verified_marker}"
+          } > .tmp/deploy-evidence/summary.txt
+
+      - name: Upload deploy evidence artifact
+        if: ${{ always() && steps.auto_deploy_guard.outputs.enabled == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .tmp/deploy-evidence
+          if-no-files-found: warn

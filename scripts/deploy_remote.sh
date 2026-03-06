@@ -29,6 +29,57 @@ require_command() {
   fi
 }
 
+sanitize_env_value() {
+  local value="${1:-}"
+  value="${value%$'\r'}"
+  if [[ "${value}" == \"*\" && "${value}" == *\" ]]; then
+    value="${value:1:${#value}-2}"
+  elif [[ "${value}" == \'*\' && "${value}" == *\' ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+  printf '%s' "${value}"
+}
+
+read_env_value() {
+  local key="$1"
+  local env_file="${DEPLOY_PATH}/.env"
+  local raw_value
+  raw_value="$(
+    awk -v target_key="${key}" '
+      $0 ~ "^[[:space:]]*" target_key "[[:space:]]*=" {
+        value = $0
+        sub(/^[[:space:]]*[^=]+=[[:space:]]*/, "", value)
+        sub(/[[:space:]]*$/, "", value)
+        print value
+        exit
+      }
+    ' "${env_file}"
+  )"
+  sanitize_env_value "${raw_value}"
+}
+
+validate_auth_rate_limiter_env() {
+  local backend
+  local redis_url
+
+  backend="$(read_env_value "AUTH_RATE_LIMIT_BACKEND")"
+  if [ -z "${backend}" ]; then
+    backend="redis"
+  fi
+  backend="$(printf '%s' "${backend}" | tr '[:upper:]' '[:lower:]')"
+  if [ "${backend}" != "redis" ]; then
+    die "AUTH_RATE_LIMIT_BACKEND must resolve to redis for deploy pipeline. Got: ${backend}"
+  fi
+
+  redis_url="$(read_env_value "REDIS_URL")"
+  if [ -z "${redis_url}" ]; then
+    redis_url="redis://redis:6379/0"
+    log "Auth rate-limiter preflight: AUTH_RATE_LIMIT_BACKEND=redis, REDIS_URL fallback will be used (${redis_url})."
+    return
+  fi
+  log "Auth rate-limiter preflight: AUTH_RATE_LIMIT_BACKEND=redis, REDIS_URL is set."
+}
+
 ensure_repo_checkout() {
   local current_origin
   local path_meta
@@ -117,6 +168,7 @@ if [ ! -f "${DEPLOY_PATH}/.env" ]; then
   die "Missing ${DEPLOY_PATH}/.env. Ensure PROD_ENV_FILE_B64 is configured and upload step succeeded."
 fi
 log ".env file detected."
+validate_auth_rate_limiter_env
 
 compose_files=(-f docker-compose.prod.yml)
 case "${PROFILE:-standard}" in
@@ -194,7 +246,21 @@ if [ "${RUN_SMOKE:-true}" = "true" ]; then
   log "=== Stage 6/6: Smoke checks ==="
   log "Running smoke checks"
   if [ -f scripts/deploy_smoke_check.py ]; then
-    docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py
+    smoke_log="$(mktemp)"
+    if ! docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py | tee "${smoke_log}"; then
+      rm -f "${smoke_log}"
+      die "Smoke script failed before completion."
+    fi
+    if ! grep -Fq "Role-based release gate passed." "${smoke_log}"; then
+      rm -f "${smoke_log}"
+      die "Smoke script output missing marker: Role-based release gate passed."
+    fi
+    if ! grep -Fq "Smoke checks passed." "${smoke_log}"; then
+      rm -f "${smoke_log}"
+      die "Smoke script output missing marker: Smoke checks passed."
+    fi
+    rm -f "${smoke_log}"
+    log "Smoke markers verified."
   else
     die "Missing scripts/deploy_smoke_check.py in deployed ref; role-based release gate is required."
   fi

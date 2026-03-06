@@ -54,6 +54,9 @@ Use this checklist to move from "working deploy" to repeatable reliability.
   - `.github/workflows/backup-schedule-retention.yml` (daily at `02:30 UTC`).
 - Keep restore rehearsal workflow enabled and review latest RPO/RTO artifact:
   - `.github/workflows/restore-rehearsal.yml` (weekly at `03:20 UTC`).
+- Keep monthly rollback drill workflow enabled and review latest report artifact:
+  - `.github/workflows/rollback-drill.yml` (first Monday at `04:10 UTC`).
+  - keep default guard (`allow_production=false`) and run on non-production target.
 - Ensure each release has a known previous-good ref (branch/tag/SHA).
 - Verify deploy rollback trap can return to previous SHA on failure (`scripts/deploy_remote.sh`).
 - Rehearse restore procedure on a non-production host:
@@ -69,10 +72,12 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 - Per deploy: sections 1 and 4.
 - Weekly: sections 2 and 3.
 - Monthly: full checklist + one rollback drill simulation.
+  - preferred path: run/review `.github/workflows/rollback-drill.yml`.
 - Monthly: rerun `python scripts/admin_perf_baseline.py` and compare p95 values with:
   - `docs/perf/admin_perf_baseline_2026-03-06.md`,
-  - `docs/perf/admin_perf_optimization_2026-03-06.md`.
-- Monthly: review latest `supply-chain-security-artifacts` from CI (`pip_audit.json`, `npm_audit.json`, `backend_sbom_cyclonedx.json`) and trim `ops/security/pip_audit_ignore.txt` when upstream fixes become available.
+  - `docs/perf/admin_perf_optimization_2026-03-06.md`,
+  - latest comparison report (example): `docs/perf/admin_perf_baseline_compare_2026-03-06_r2.md`.
+- Monthly: review latest `supply-chain-security-artifacts` from CI (`pip_audit.json`, `npm_audit.json`, `backend_sbom_cyclonedx.json`) and keep `ops/security/pip_audit_ignore.txt` empty unless a short-lived, reviewed exception is strictly required.
 - Monthly: run secret-rotation dry-run and archive report:
   - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
   - runbook: `ops/secret_rotation_playbook.md`.

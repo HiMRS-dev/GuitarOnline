@@ -101,6 +101,10 @@ Production-ready modular monolith backend for an online guitar school.
   - report outputs:
     - `docs/perf/admin_perf_baseline_2026-03-06.json`,
     - `docs/perf/admin_perf_baseline_2026-03-06.md`.
+  - latest rerun snapshot:
+    - `docs/perf/admin_perf_baseline_2026-03-06_r2.json`,
+    - `docs/perf/admin_perf_baseline_2026-03-06_r2.md`,
+    - `docs/perf/admin_perf_baseline_compare_2026-03-06_r2.md`.
   - optimization follow-up comparison:
     - `docs/perf/admin_perf_optimization_2026-03-06.md`.
 - Explicit ops probe verification after smoke:
@@ -119,7 +123,7 @@ Production-ready modular monolith backend for an online guitar school.
 | `JWT_SECRET` | No | app/workers | Backward-compatible alias; when set, overrides `SECRET_KEY`. |
 | `DATABASE_URL` | Yes | app/workers | Async SQLAlchemy DSN for API and workers. |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Yes | compose `db` | Required by PostgreSQL container in production compose. |
-| `AUTH_RATE_LIMIT_BACKEND` | Yes | app/workers | `redis` recommended for production (`memory` only with explicit ack). |
+| `AUTH_RATE_LIMIT_BACKEND` | Yes | app/workers | `redis` required by deploy pipeline in production; `memory` is rejected by deploy preflight. |
 | `REDIS_URL` | Conditionally yes | app/workers | Mandatory when `AUTH_RATE_LIMIT_BACKEND=redis`. |
 | `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` | Conditionally yes | app/workers | Must be `true` only for `memory` backend in production. |
 | `FRONTEND_ADMIN_ORIGIN` | Yes | app CORS | Allowed origins for admin frontend CORS policy. |
@@ -131,13 +135,13 @@ Production-ready modular monolith backend for an online guitar school.
 
 | Secret | Required | Workflow | Notes |
 | --- | --- | --- | --- |
-| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Target server host/IP. |
-| `DEPLOY_USER` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | SSH user. |
-| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Absolute path on target host. |
-| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | SSH authentication key. |
+| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Target server host/IP. |
+| `DEPLOY_USER` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | SSH user. |
+| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Absolute path on target host. |
+| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | SSH authentication key. |
 | `PROD_ENV_FILE_B64` | Yes | deploy | Base64 payload used to write `${DEPLOY_PATH}/.env`. |
-| `DEPLOY_PORT` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Defaults to `22`. |
-| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Optional host-key pinning override. |
+| `DEPLOY_PORT` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Defaults to `22`. |
+| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Optional host-key pinning override. |
 | `AUTO_DEPLOY_ENABLED` | No | deploy | `true` enables push-triggered deploy on `main`. |
 
 ### Precedence Rules
@@ -147,6 +151,7 @@ Production-ready modular monolith backend for an online guitar school.
    - `AUTH_RATE_LIMIT_BACKEND=redis` requires `REDIS_URL`;
    - `AUTH_RATE_LIMIT_BACKEND=memory` in production requires
      `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION=true`.
+   - deploy pipeline guardrail: deployment fails when `AUTH_RATE_LIMIT_BACKEND` resolves to non-`redis`.
 3. Deploy source of truth: `PROD_ENV_FILE_B64` is decoded by deploy workflow and overwrites
    `${DEPLOY_PATH}/.env` on target host.
 4. Admin UI profile wiring:
@@ -194,8 +199,11 @@ Production-ready modular monolith backend for an online guitar school.
 - Workflow behavior:
   - bootstraps repository metadata on target host when `${DEPLOY_PATH}` has no `.git` (no manual pre-clone required),
   - uploads `.env` from `PROD_ENV_FILE_B64` to `${DEPLOY_PATH}/.env`,
+  - runs preflight validation for auth rate-limiter config (`AUTH_RATE_LIMIT_BACKEND` must resolve to `redis`),
   - performs compose deploy and DB migrations,
   - runs post-deploy role-based smoke gate (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, `admin/teacher/student` critical flow),
+  - verifies smoke output markers `Role-based release gate passed.` and `Smoke checks passed.`,
+  - uploads workflow artifact `deploy-evidence-<run_id>-<attempt>` with deploy log and marker summary,
   - fails closed when `scripts/deploy_smoke_check.py` is missing in deployed ref,
   - performs automatic rollback to previous git SHA when deploy/migrate/smoke fails.
 - Secret safety controls:
@@ -281,7 +289,7 @@ Production-ready modular monolith backend for an online guitar school.
     - `.tmp/security/backend_sbom_cyclonedx.json`,
     - `.tmp/security/summary.json`.
 - Vulnerability allowlist for temporary upstream exceptions:
-  - `ops/security/pip_audit_ignore.txt`
+  - `ops/security/pip_audit_ignore.txt` (keep empty by default; add only short-lived, reviewed exceptions)
 
 ## Secret Rotation
 
@@ -289,6 +297,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `ops/secret_rotation_playbook.md`
 - Scheduled production windows:
   - `ops/secret_rotation_schedule.md`
+- Execution report template for the first scheduled window:
+  - `ops/secret_rotation_execution_report_2026-03-11.md`
 - Local dry-run rehearsal (non-destructive):
   - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
 - GitHub Actions dry-run rehearsal against production env bundle:
@@ -515,6 +525,13 @@ Production-ready modular monolith backend for an online guitar school.
   - default source: latest file from `${DEPLOY_PATH}/backups/scheduled/daily`,
   - optional manual override: `backup_file` input,
   - uploads JSON artifact with measured `rpo_seconds` and `rto_seconds`.
+- Monthly rollback drill workflow with machine-readable report:
+  - `.github/workflows/rollback-drill.yml`
+  - schedule: first Monday of month at `04:10 UTC`,
+  - can also run manually via `workflow_dispatch` (`confirm=ROLLBACK`),
+  - production guard: blocked when target `.env` has `APP_ENV=production/prod` unless manual input `allow_production=true`,
+  - simulates git checkout/rollback path and runs restore rehearsal on target host,
+  - uploads JSON artifact with drill status, git rollback fields, and nested restore metrics.
 
 ## Release Checklist
 

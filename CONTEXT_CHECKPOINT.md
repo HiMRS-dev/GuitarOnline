@@ -58,6 +58,16 @@
    - `tests/test_booking_billing_integration.py` now uses case-safe raw SQL checks.
 6. Deploy smoke-gate conflict removed:
    - `scripts/deploy_remote.sh` now fails closed when `scripts/deploy_smoke_check.py` is missing, preventing fallback to non-role-based smoke path.
+7. Deploy evidence traceability gap closed:
+   - deploy workflow now uploads `deploy-evidence-*` artifact with remote deploy log and smoke-marker summary.
+8. Auth limiter deploy drift blocked:
+   - `scripts/deploy_remote.sh` preflight now rejects deploy when `AUTH_RATE_LIMIT_BACKEND` resolves to non-`redis`.
+9. Rollback drill automation gap closed:
+   - added monthly `rollback-drill` workflow and remote runner script with machine-readable JSON report artifact.
+10. Rollback drill production-safety guard added:
+    - rollback drill blocks `APP_ENV=production/prod` by default unless explicitly overridden (`allow_production=true` for manual dispatch).
+11. Supply-chain dead-end resolved for `CVE-2024-23342`:
+    - replaced `python-jose` with `PyJWT`, removed transitive `ecdsa`, and cleared temporary `pip-audit` ignore entry.
 
 ## 7) Operations Quick Start
 1. Start stack:
@@ -74,7 +84,8 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. `pip-audit` allowlist has one temporary exception (`CVE-2024-23342` for transitive `ecdsa`) and must be revisited when upstream fix is published.
+3. Supply-chain policy hygiene:
+   - keep `ops/security/pip_audit_ignore.txt` empty by default and allow only short-lived reviewed exceptions.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -94,20 +105,23 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. Keep `V2-08` allowlist hygiene:
-   - review `ops/security/pip_audit_ignore.txt` and drop temporary exceptions as upstream fixes appear.
-   - last review (2026-03-06):
-     - `py -m poetry run pip-audit --skip-editable` still reports `CVE-2024-23342` for `ecdsa 0.19.1` with no listed fix version,
-     - keep temporary ignore entry until upstream publishes remediation.
-2. Execute first production secret-rotation apply window:
+1. Execute first production secret-rotation apply window:
    - scheduled in `ops/secret_rotation_schedule.md`,
    - window `SR-2026-03-11-01` (`2026-03-11 04:00 UTC` / `2026-03-11 15:00` Asia/Sakhalin, UTC+11),
-   - run `ops/secret_rotation_playbook.md` section `4) Rotation Procedure (Apply Window)` and capture outcome.
-3. Keep role-based release gate healthy:
+   - run `ops/secret_rotation_playbook.md` section `4) Rotation Procedure (Apply Window)` and capture outcome,
+   - fill execution report template `ops/secret_rotation_execution_report_2026-03-11.md`.
+2. Keep role-based release gate healthy:
    - run deploy with `run_smoke=true`,
-   - verify markers `Role-based release gate passed.` and `Smoke checks passed.`.
+   - ensure deploy logs include `Smoke markers verified.` (markers checked automatically in `scripts/deploy_remote.sh`),
+   - ensure deploy artifact `deploy-evidence-<run_id>-<attempt>` contains `deploy_remote.log` + `summary.txt`.
+   - latest local smoke verification (2026-03-06):
+     - `python scripts/deploy_smoke_check.py` -> `Role-based release gate passed.` and `Smoke checks passed.`.
+3. Keep `V2-08` hygiene at zero-ignore baseline:
+   - verify `py -m poetry run pip-audit --skip-editable` remains clean,
+   - keep `ops/security/pip_audit_ignore.txt` empty unless a reviewed temporary exception is unavoidable.
 4. Review and approve prepared `v1.3` backlog:
-   - see section `12) v1.3 Backlog Draft (Prepared 2026-03-06)`.
+   - see section `12) v1.3 Backlog Draft (Prepared 2026-03-06)`,
+   - `V3-02` is completed; `V3-03`, `V3-04`, `V3-05`, and `V3-06` are pre-implemented and ready for validation on next real deploy run.
 
 ## 11) v1.2 Progress Log
 - `V2-01` completed (2026-03-06): real-channel alert routing verification tooling + runbook sync.
@@ -301,9 +315,9 @@
     - transitive `starlette` resolved to `0.49.3`.
   - supply-chain gate script:
     - `scripts/supply_chain_gate.py`,
-    - runs `pip-audit` (with reviewed allowlist), `npm audit`, and emits backend CycloneDX SBOM.
+    - runs `pip-audit` (policy-file driven, empty ignore by default), `npm audit`, and emits backend CycloneDX SBOM.
   - allowlist policy file:
-    - `ops/security/pip_audit_ignore.txt` (temporary `CVE-2024-23342` for transitive `ecdsa`).
+    - `ops/security/pip_audit_ignore.txt` (currently no active ignore IDs).
   - CI integration:
     - `.github/workflows/ci.yml` includes job `supply-chain` (gating `lint`) and uploads artifact `supply-chain-security-artifacts`.
   - runbook/checklist updates:
@@ -312,7 +326,7 @@
     - `ops/production_hardening_checklist.md`.
 - conflict handling during implementation:
   - `pip-audit --strict` conflicts with editable local package (`guitaronline`) not published on PyPI;
-    resolved by audited mode with `--skip-editable` plus explicit reviewed vulnerability allowlist.
+    resolved by audited mode with `--skip-editable` plus explicit policy file control for reviewed exceptions.
   - `web-admin` had no committed lockfile for reproducible `npm audit`;
     gate now creates temporary `package-lock.json` for audit and removes it after execution.
 - verification evidence:
@@ -392,12 +406,121 @@
 - verification evidence:
   - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/deploy_remote.sh` -> success.
   - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
+- ops follow-up (2026-03-06): monthly rollback drill workflow added (`V3-05` pre-implementation).
+- implemented:
+  - new remote rollback drill runner:
+    - `scripts/run_rollback_drill_remote.sh`,
+    - simulates git checkout->rollback path and executes restore rehearsal,
+    - emits machine-readable report with git rollback section + nested restore metrics,
+    - blocks production env by default unless `ROLLBACK_DRILL_ALLOW_PRODUCTION=true`.
+  - scheduled workflow:
+    - `.github/workflows/rollback-drill.yml`,
+    - monthly first-Monday cadence (`10 4 1-7 * 1`) + manual `workflow_dispatch` (`confirm=ROLLBACK`).
+    - manual input `allow_production` (default `false`) mapped to remote guard.
+  - runbook/checklist updates:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict handling during implementation:
+  - drill script requires clean git worktree and restores original git state on exit to avoid persistent state drift on target host.
+  - production safety: guarded against accidental rollback-drill execution on production environment by default.
+- verification evidence:
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/run_rollback_drill_remote.sh` -> success.
+  - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/rollback-drill.yml` -> success.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
+  - `python scripts/deploy_smoke_check.py` -> success with required markers present.
+- ops follow-up (2026-03-06): secret-rotation execution report template prepared for first scheduled window.
+- implemented:
+  - report template:
+    - `ops/secret_rotation_execution_report_2026-03-11.md`,
+    - includes preconditions, execution timeline, deploy/smoke evidence, token invalidation check, and rollback status sections.
+  - schedule/readme wiring updates:
+    - `ops/secret_rotation_schedule.md`,
+    - `README.md`.
+- conflict handling during implementation:
+  - eliminates ad-hoc reporting risk during live rotation window by standardizing required evidence fields upfront.
+- ops follow-up (2026-03-06): deploy evidence artifact bundle added (`V3-04` pre-implementation).
+- implemented:
+  - deploy workflow now captures remote deploy output and uploads artifact:
+    - `.github/workflows/deploy.yml`,
+    - artifact name format: `deploy-evidence-<run_id>-<run_attempt>`,
+    - artifact content:
+      - `deploy_remote.log`,
+      - `summary.txt` with marker presence status.
+  - workflow marker gate:
+    - explicit marker-check step for `Role-based release gate passed.`, `Smoke checks passed.`, `Smoke markers verified.` when `RUN_SMOKE=true`.
+  - runbook/checklist updates:
+    - `README.md`,
+    - `ops/release_checklist.md`.
+- conflict handling during implementation:
+  - evidence artifact step uses `always()` to keep logs available for failed deploy troubleshooting.
+- verification evidence:
+  - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/deploy.yml` -> success.
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/deploy_remote.sh` -> success.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
+- ops follow-up (2026-03-06): auth rate-limiter deploy preflight hardened (`V3-03` pre-implementation).
+- implemented:
+  - deploy runner preflight now validates rate-limiter config from `.env`:
+    - `AUTH_RATE_LIMIT_BACKEND` must resolve to `redis` (empty value resolves via deploy default),
+    - non-redis values fail deploy before compose startup.
+  - runbook/checklist updates:
+    - `README.md`,
+    - `ops/release_checklist.md`.
+- conflict handling during implementation:
+  - avoids accidental release with in-memory auth limiter in production deploy path.
+- verification evidence:
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/deploy_remote.sh` -> success.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
+- ops follow-up (2026-03-06): admin performance baseline rerun + comparison prepared (`V3-06` pre-implementation).
+- implemented:
+  - refreshed baseline artifacts:
+    - `docs/perf/admin_perf_baseline_2026-03-06_r2.json`,
+    - `docs/perf/admin_perf_baseline_2026-03-06_r2.md`.
+  - delta/conclusion report:
+    - `docs/perf/admin_perf_baseline_compare_2026-03-06_r2.md`.
+  - runbook updates:
+    - `README.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict handling during implementation:
+  - synthetic dataset setup hit auth rate-limit windows during benchmark preparation; script retries handled the pressure and run completed.
+- verification evidence:
+  - `python scripts/admin_perf_baseline.py --output-json docs/perf/admin_perf_baseline_2026-03-06_r2.json --output-md docs/perf/admin_perf_baseline_2026-03-06_r2.md` -> success.
+  - measured p95:
+    - `admin_teachers=45.87ms`,
+    - `admin_slots=38.48ms`,
+    - `admin_kpi_overview=43.85ms`,
+    - `admin_kpi_sales=38.32ms`.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
+- ops follow-up (2026-03-06): supply-chain exception removed (`V3-02` completed).
+- implemented:
+  - JWT dependency migration:
+    - replaced `python-jose` with `PyJWT` in:
+      - `app/core/security.py`,
+      - `scripts/secret_rotation_dry_run.py`.
+  - dependency cleanup:
+    - removed transitive vulnerable chain (`ecdsa`, `rsa`, `pyasn1`) by dropping `python-jose`,
+    - `pyproject.toml` + `poetry.lock` now pin `pyjwt`.
+  - allowlist cleanup:
+    - removed temporary `CVE-2024-23342` entry from `ops/security/pip_audit_ignore.txt`.
+- conflict handling during implementation:
+  - upstream advisory metadata indicated no planned fix for `ecdsa`, so dependency replacement was chosen over waiting for a non-existent patched version.
+  - full local `pytest -q` run showed known integration noise from auth rate-limit windows (`429`) across heavy role-based suites; targeted JWT/security regression suite remained green.
+- verification evidence:
+  - `py -m poetry run ruff check app/core/security.py scripts/secret_rotation_dry_run.py` -> `All checks passed`.
+  - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto --skip-github-check` -> success.
+  - `py -m poetry run pytest -q tests/test_portal_auth_flow_integration.py tests/test_identity_rate_limit.py tests/test_config_security.py tests/test_security_surface.py tests/test_pii_field_visibility.py` -> `23 passed`.
+  - `py -m poetry run pytest -q tests/test_rbac_access_integration.py::test_admin_endpoint_returns_401_403_and_200_by_role` -> `1 passed`.
+  - `py -m poetry run pip-audit --skip-editable` -> `No known vulnerabilities found`.
+  - `py -m poetry run python scripts/supply_chain_gate.py --skip-npm` -> success (`pip_audit_ignore_ids: []`).
+  - `python scripts/deploy_smoke_check.py` -> success with required markers:
+    - `Role-based release gate passed.`,
+    - `Smoke checks passed.`.
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
 | --- | --- | --- | --- |
 | `V3-01` | P0 | Execute first production secret rotation window and publish outcome report. | Window `SR-2026-03-11-01` executed; report includes start/end times, rotated target key, deploy run link, smoke markers, rollback status. |
-| `V3-02` | P0 | Remove temporary `pip-audit` ignore for `CVE-2024-23342` once upstream fix exists. | Dependency upgraded to fixed version, ignore entry removed from `ops/security/pip_audit_ignore.txt`, `scripts/supply_chain_gate.py` passes without that ignore. |
+| `V3-02` | P0 | Completed (2026-03-06): remove temporary `pip-audit` ignore by eliminating vulnerable `python-jose`/`ecdsa` dependency chain. | `py -m poetry run pip-audit --skip-editable` reports no known vulnerabilities and `ops/security/pip_audit_ignore.txt` has no active IDs. |
 | `V3-03` | P1 | Enforce production auth rate-limiter on Redis and prevent memory fallback drift. | Production `.env` uses `AUTH_RATE_LIMIT_BACKEND=redis`; startup check blocks invalid prod memory config; deployment/runbook validation covers this. |
 | `V3-04` | P1 | Add deploy evidence artifact bundle (smoke logs + key markers) to release workflow. | Deploy workflow stores artifact with smoke output and explicit marker checks for `Role-based release gate passed.` and `Smoke checks passed.`. |
 | `V3-05` | P1 | Add monthly rollback drill workflow with machine-readable report. | Scheduled drill runs restore/rollback path on non-prod target, publishes JSON report with pass/fail, timings, and detected issues. |
@@ -412,3 +535,7 @@
   - `ops/secret_rotation_playbook.md`
 - Secret rotation schedule:
   - `ops/secret_rotation_schedule.md`
+- Secret rotation execution report template:
+  - `ops/secret_rotation_execution_report_2026-03-11.md`
+- Rollback drill workflow:
+  - `.github/workflows/rollback-drill.yml`

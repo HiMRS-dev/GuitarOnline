@@ -2,10 +2,10 @@
 
 from collections.abc import Sequence
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 30
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline"
-    frontend_admin_origin: tuple[str, ...] = ("http://localhost:5173",)
+    frontend_admin_origin: Annotated[tuple[str, ...], NoDecode] = ("http://localhost:5173",)
 
     booking_hold_minutes: int = 10
     booking_refund_window_hours: int = 24
@@ -47,7 +47,10 @@ class Settings(BaseSettings):
     auth_rate_limit_refresh_requests: int = 20
     auth_rate_limit_backend: Literal["memory", "redis"] = "memory"
     auth_rate_limit_redis_namespace: str = "auth_rate_limit"
-    auth_rate_limit_trusted_proxy_ips: tuple[str, ...] = ("127.0.0.1", "::1")
+    auth_rate_limit_trusted_proxy_ips: Annotated[tuple[str, ...], NoDecode] = (
+        "127.0.0.1",
+        "::1",
+    )
     auth_rate_limit_allow_in_memory_in_production: bool = False
 
     @field_validator("debug", mode="before")

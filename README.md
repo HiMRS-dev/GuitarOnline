@@ -124,13 +124,13 @@ Production-ready modular monolith backend for an online guitar school.
 
 | Secret | Required | Workflow | Notes |
 | --- | --- | --- | --- |
-| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify | Target server host/IP. |
-| `DEPLOY_USER` | Yes | deploy, backup-restore-verify | SSH user. |
-| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify | Absolute path on target host. |
-| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify | SSH authentication key. |
+| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Target server host/IP. |
+| `DEPLOY_USER` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | SSH user. |
+| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Absolute path on target host. |
+| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | SSH authentication key. |
 | `PROD_ENV_FILE_B64` | Yes | deploy | Base64 payload used to write `${DEPLOY_PATH}/.env`. |
-| `DEPLOY_PORT` | No | deploy, backup-restore-verify | Defaults to `22`. |
-| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify | Optional host-key pinning override. |
+| `DEPLOY_PORT` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Defaults to `22`. |
+| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Optional host-key pinning override. |
 | `AUTO_DEPLOY_ENABLED` | No | deploy | `true` enables push-triggered deploy on `main`. |
 
 ### Precedence Rules
@@ -468,6 +468,14 @@ Production-ready modular monolith backend for an online guitar school.
   - schedule: every Monday at `03:00 UTC`,
   - can also run manually via `workflow_dispatch` (`confirm=VERIFY`),
   - includes the same repository bootstrap logic for empty `${DEPLOY_PATH}`.
+- Scheduled backup + retention automation workflow:
+  - `.github/workflows/backup-schedule-retention.yml`
+  - schedule: daily at `02:30 UTC`,
+  - can also run manually via `workflow_dispatch` (`confirm=BACKUP`),
+  - default retention: keep `7` daily backups and `8` weekly snapshots,
+  - artifacts path on target host:
+    - `${DEPLOY_PATH}/backups/scheduled/daily`,
+    - `${DEPLOY_PATH}/backups/scheduled/weekly`.
 
 ## Release Checklist
 

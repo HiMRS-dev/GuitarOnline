@@ -26,13 +26,11 @@
 ## 4) Current Verified State (2026-03-06)
 - Branch:
   - `main`.
-- Latest commit:
-  - `d287cd6` (`test(integration): normalize enum SQL handling for ci parity`).
-- Working tree at handoff:
-  - clean.
-- Latest GitHub Actions status for this commit:
-  - `ci` run `22749188962`: `success`.
-  - `deploy` run `22749188961`: `success`.
+- Latest fully green commit on `main` before current step:
+  - `5d45730` (`ops(synthetic): add scheduled critical-path check and failure alerting`).
+- Latest GitHub Actions status for that commit:
+  - `ci` run `22755352282`: `success`.
+  - `deploy` run `22755352302`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -72,7 +70,7 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. Backup schedule + retention automation (`V2-04`) is not yet implemented.
+3. Restore rehearsal workflow with measurable RPO/RTO artifacts (`V2-05`) is not yet implemented.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -92,9 +90,9 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-04`: backup schedule + retention policy automation.
-2. `V2-05`: restore rehearsal workflow with RPO/RTO reporting.
-3. `V2-06`: performance baseline for admin-heavy endpoints.
+1. `V2-05`: restore rehearsal workflow with RPO/RTO reporting.
+2. `V2-06`: performance baseline for admin-heavy endpoints.
+3. `V2-07`: SQL/index optimization pass based on performance baseline.
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -177,6 +175,30 @@
   - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/run_synthetic_ops_remote.sh` -> success.
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_check.py --no-alert-on-failure` ->
     `Synthetic ops check passed.`.
+- `V2-04` completed (2026-03-06): scheduled backup + retention automation.
+- implemented:
+  - remote runner for periodic DB backups with retention policy enforcement:
+    - `scripts/run_backup_schedule_remote.sh`,
+    - writes isolated artifacts under `backups/scheduled/daily` and `backups/scheduled/weekly`.
+  - retention controls:
+    - `BACKUP_DAILY_KEEP` (default `7`),
+    - `BACKUP_WEEKLY_KEEP` (default `8`),
+    - `BACKUP_WEEKLY_DAY` (default `1`, Monday UTC),
+    - optional `BACKUP_FORCE_WEEKLY=true` for manual weekly snapshot run.
+  - scheduled workflow:
+    - `.github/workflows/backup-schedule-retention.yml`,
+    - daily cron (`30 2 * * *`) + manual `workflow_dispatch` (`confirm=BACKUP`).
+  - runbook updates:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict prevention decisions:
+  - retention cleanup is scoped only to `backups/scheduled/*` and does not touch
+    pre-deploy artifacts (`backups/predeploy-*`) or restore-verification artifacts (`backups/verify-*`).
+- verification evidence:
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/run_backup_schedule_remote.sh` -> success.
+  - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/backup-schedule-retention.yml` -> success.
+  - scheduled workflow input validation enforces numeric retention and weekday bounds before SSH run.
 
 ## 12) References
 - Full historical checkpoint archive:

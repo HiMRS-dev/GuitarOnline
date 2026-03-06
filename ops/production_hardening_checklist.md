@@ -48,6 +48,8 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 ## 4) Rollback Verification Safety
 
 - Keep `run_backup=true` on production deploys.
+- Keep scheduled backup retention workflow enabled:
+  - `.github/workflows/backup-schedule-retention.yml` (daily at `02:30 UTC`).
 - Ensure each release has a known previous-good ref (branch/tag/SHA).
 - Verify deploy rollback trap can return to previous SHA on failure (`scripts/deploy_remote.sh`).
 - Rehearse restore procedure on a non-production host:

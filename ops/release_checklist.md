@@ -37,6 +37,9 @@ Use this checklist before promoting a build to a target environment.
 - Verify backup file exists and is readable.
 - Verify restore process against backup artifact:
   - `bash scripts/verify_backup_restore.sh <backup.sql>`
+- Verify scheduled backup retention automation is healthy:
+  - workflow `.github/workflows/backup-schedule-retention.yml` is enabled,
+  - latest artifacts exist under `backups/scheduled/daily` (and `weekly` on weekly snapshot day).
 
 ## 3) Deploy
 

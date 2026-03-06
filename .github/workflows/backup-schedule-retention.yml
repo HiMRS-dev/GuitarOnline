@@ -1,0 +1,139 @@
+name: backup-schedule-retention
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to use for remote backup runner script"
+        required: true
+        default: "main"
+      daily_keep:
+        description: "How many daily backups to keep"
+        required: true
+        default: "7"
+      weekly_keep:
+        description: "How many weekly backups to keep"
+        required: true
+        default: "8"
+      weekly_day:
+        description: "ISO weekday for weekly snapshot (1=Mon ... 7=Sun)"
+        required: true
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
+          - "5"
+          - "6"
+          - "7"
+        default: "1"
+      force_weekly:
+        description: "Create weekly snapshot regardless of weekday"
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: "Type BACKUP to confirm"
+        required: true
+  schedule:
+    - cron: "30 2 * * *"
+
+jobs:
+  backup:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'BACKUP' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
+      BACKUP_DAILY_KEEP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.daily_keep || '7' }}
+      BACKUP_WEEKLY_KEEP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.weekly_keep || '8' }}
+      BACKUP_WEEKLY_DAY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.weekly_day || '1' }}
+      BACKUP_FORCE_WEEKLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force_weekly || 'false' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF_NAME }}
+
+      - name: Print backup schedule context
+        run: |
+          set -euo pipefail
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Ref for runner script: ${REF_NAME}"
+          echo "Daily keep: ${BACKUP_DAILY_KEEP}"
+          echo "Weekly keep: ${BACKUP_WEEKLY_KEEP}"
+          echo "Weekly day: ${BACKUP_WEEKLY_DAY}"
+          echo "Force weekly: ${BACKUP_FORCE_WEEKLY}"
+
+      - name: Validate required secrets and inputs
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+          if ! [[ "${BACKUP_DAILY_KEEP}" =~ ^[0-9]+$ ]] || [ "${BACKUP_DAILY_KEEP}" -lt 1 ]; then
+            echo "::error::BACKUP_DAILY_KEEP must be a positive integer. Got: ${BACKUP_DAILY_KEEP}"
+            exit 1
+          fi
+          if ! [[ "${BACKUP_WEEKLY_KEEP}" =~ ^[0-9]+$ ]] || [ "${BACKUP_WEEKLY_KEEP}" -lt 1 ]; then
+            echo "::error::BACKUP_WEEKLY_KEEP must be a positive integer. Got: ${BACKUP_WEEKLY_KEEP}"
+            exit 1
+          fi
+          if ! [[ "${BACKUP_WEEKLY_DAY}" =~ ^[1-7]$ ]]; then
+            echo "::error::BACKUP_WEEKLY_DAY must be 1..7. Got: ${BACKUP_WEEKLY_DAY}"
+            exit 1
+          fi
+          if [[ "${BACKUP_FORCE_WEEKLY}" != "true" && "${BACKUP_FORCE_WEEKLY}" != "false" ]]; then
+            echo "::error::BACKUP_FORCE_WEEKLY must be true or false. Got: ${BACKUP_FORCE_WEEKLY}"
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Run scheduled backup on target host
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          ssh -p "${port}" "${remote}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' BACKUP_DAILY_KEEP='${BACKUP_DAILY_KEEP}' BACKUP_WEEKLY_KEEP='${BACKUP_WEEKLY_KEEP}' BACKUP_WEEKLY_DAY='${BACKUP_WEEKLY_DAY}' BACKUP_FORCE_WEEKLY='${BACKUP_FORCE_WEEKLY}' bash -s" \
+            < scripts/run_backup_schedule_remote.sh

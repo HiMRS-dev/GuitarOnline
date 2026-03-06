@@ -772,7 +772,7 @@ Required GitHub repository secrets for `deploy`:
   - expected format: `/opt/guitaronline`.
 - `DEPLOY_SSH_PRIVATE_KEY`:
   - purpose: private SSH key for authentication,
-  - expected format: full multiline OpenSSH private key (`-----BEGIN OPENSSH PRIVATE KEY----- ...`).
+  - expected format: full multiline OpenSSH private key (header/footer + key body).
 - `PROD_ENV_FILE_B64`:
   - purpose: production `.env` payload uploaded during deploy,
   - expected format: base64 string generated from `.env`.

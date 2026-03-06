@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `34c7b8d` (`perf(admin): optimize heavy admin queries and add supporting indexes`).
+  - `954911a` (`feat(ci): add supply-chain security gate with sbom artifacts`).
 - Latest GitHub Actions status for that commit:
-  - `ci`: `success`.
-  - `deploy`: `success`.
+  - `ci` run `22758229431`: `success`.
+  - `deploy` run `22758229434`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -92,7 +92,8 @@
 ## 10) Immediate Queue (Next Iteration)
 1. `V2-09`: secret/key rotation procedure with dry-run test.
 2. `V2-10`: role-based end-to-end regression scenario in release gate.
-3. Validate `V2-08` gate behavior on GitHub-hosted runner (`npm audit` + artifact upload).
+3. Keep `V2-08` allowlist hygiene:
+   - review `ops/security/pip_audit_ignore.txt` and drop temporary exceptions as upstream fixes appear.
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -309,8 +310,9 @@
   - `python -m compileall scripts/supply_chain_gate.py` -> success.
   - `py -m poetry run python scripts/supply_chain_gate.py --skip-npm` -> success (artifacts emitted in `.tmp/security`).
   - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/ci.yml` -> success.
-  - local environment limitation:
-    - `npm` unavailable on this host; full npm-audit branch is validated in GitHub Actions runner.
+  - GitHub Actions validation:
+    - `ci` run `22758229431` -> `success` (includes `supply-chain` job and uploaded `supply-chain-security-artifacts`).
+    - `deploy` run `22758229434` -> `success`.
 
 ## 12) References
 - Full historical checkpoint archive:

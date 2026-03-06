@@ -282,6 +282,19 @@ Production-ready modular monolith backend for an online guitar school.
 - Vulnerability allowlist for temporary upstream exceptions:
   - `ops/security/pip_audit_ignore.txt`
 
+## Secret Rotation
+
+- Canonical playbook:
+  - `ops/secret_rotation_playbook.md`
+- Local dry-run rehearsal (non-destructive):
+  - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
+- GitHub Actions dry-run rehearsal against production env bundle:
+  - workflow `.github/workflows/secret-rotation-dry-run.yml`
+  - run with `workflow_dispatch` and `confirm=ROTATE`
+- Dry-run report artifacts:
+  - `.tmp/security/secret_rotation_dry_run_report.json`
+  - `.tmp/security/secret_rotation_dry_run_report.md`
+
 ## Workers
 
 - Run notifications outbox worker once:

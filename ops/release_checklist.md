@@ -15,6 +15,11 @@ Use this checklist before promoting a build to a target environment.
   - fallback manual method:
     - `powershell -ExecutionPolicy Bypass -File scripts/encode_env_base64.ps1`
     - update repository secret `PROD_ENV_FILE_B64`.
+- If key rotation is planned in this release window:
+  - run non-destructive rehearsal:
+    - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
+  - follow canonical rotation playbook:
+    - `ops/secret_rotation_playbook.md`.
 - If real on-call channels are required, render on-call Alertmanager config from env secrets:
   - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
 - Validate ops configuration:

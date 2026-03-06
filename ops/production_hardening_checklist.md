@@ -71,3 +71,6 @@ Use this checklist to move from "working deploy" to repeatable reliability.
   - `docs/perf/admin_perf_baseline_2026-03-06.md`,
   - `docs/perf/admin_perf_optimization_2026-03-06.md`.
 - Monthly: review latest `supply-chain-security-artifacts` from CI (`pip_audit.json`, `npm_audit.json`, `backend_sbom_cyclonedx.json`) and trim `ops/security/pip_audit_ignore.txt` when upstream fixes become available.
+- Monthly: run secret-rotation dry-run and archive report:
+  - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
+  - runbook: `ops/secret_rotation_playbook.md`.

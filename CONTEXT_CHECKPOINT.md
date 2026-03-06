@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `954911a` (`feat(ci): add supply-chain security gate with sbom artifacts`).
+  - `ac074ea` (`docs(checkpoint): sync v2-08 green ci/deploy status`).
 - Latest GitHub Actions status for that commit:
-  - `ci` run `22758229431`: `success`.
-  - `deploy` run `22758229434`: `success`.
+  - `ci` run `22758373453`: `success`.
+  - `deploy` run `22758373471`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -90,12 +90,13 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-09`: secret/key rotation procedure with dry-run test.
-2. `V2-10`: role-based end-to-end regression scenario in release gate.
-3. Keep `V2-08` allowlist hygiene:
+1. `V2-10`: role-based end-to-end regression scenario in release gate.
+2. Keep `V2-08` allowlist hygiene:
    - review `ops/security/pip_audit_ignore.txt` and drop temporary exceptions as upstream fixes appear.
+3. Schedule first production secret-rotation apply window using:
+   - `ops/secret_rotation_playbook.md`.
 4. Gate for closing iteration:
-   - top three tasks merged,
+   - remaining task (`V2-10`) merged,
    - `ci` and `deploy` green on `main`,
    - updated runbook with commands and expected output markers.
 
@@ -313,9 +314,36 @@
   - GitHub Actions validation:
     - `ci` run `22758229431` -> `success` (includes `supply-chain` job and uploaded `supply-chain-security-artifacts`).
     - `deploy` run `22758229434` -> `success`.
+- `V2-09` completed (2026-03-06): secret/key rotation procedure formalized with reproducible dry-run.
+- implemented:
+  - dry-run rehearsal script:
+    - `scripts/secret_rotation_dry_run.py`,
+    - validates candidate rotation key path (`SECRET_KEY`/`JWT_SECRET`), settings load, JWT invalidation semantics, and GitHub secret access check.
+  - manual reproducible workflow (production env bundle rehearsal):
+    - `.github/workflows/secret-rotation-dry-run.yml`
+    - `workflow_dispatch` with explicit `confirm=ROTATE`.
+  - runbook formalization:
+    - `ops/secret_rotation_playbook.md`
+    - defines scope, conflict controls, dry-run, apply procedure, and rollback steps.
+  - checklist/readme wiring:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict handling during implementation:
+  - key precedence conflict (`JWT_SECRET` overrides `SECRET_KEY`) addressed by explicit target resolution in dry-run logic.
+  - deploy drift conflict (target-host `.env` changed but `PROD_ENV_FILE_B64` stale) documented and enforced in playbook steps.
+- verification evidence:
+  - `py -m poetry run ruff check scripts/secret_rotation_dry_run.py` -> `All checks passed`.
+  - `python -m compileall scripts/secret_rotation_dry_run.py` -> success.
+  - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto` -> success.
+  - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/secret-rotation-dry-run.yml` -> success.
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` ->
+    `21 passed`.
 
 ## 12) References
 - Full historical checkpoint archive:
   - `docs/context/CONTEXT_CHECKPOINT_ARCHIVE_2026-03-06.md`
 - Release notes:
   - `docs/releases/v1.1.0.md`
+- Secret rotation runbook:
+  - `ops/secret_rotation_playbook.md`

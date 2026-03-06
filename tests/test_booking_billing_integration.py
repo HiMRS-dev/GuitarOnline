@@ -253,7 +253,7 @@ async def _count_active_bookings_for_slot(slot_id: UUID) -> int:
             SELECT COUNT(*)::int
             FROM bookings
             WHERE slot_id = $1
-              AND status IN ('hold', 'confirmed')
+              AND LOWER(status::text) IN ('hold', 'confirmed')
             """,
             slot_id,
         )
@@ -710,8 +710,7 @@ async def test_confirm_rejects_hold_when_slot_start_already_passed(
             """
             UPDATE availability_slots
             SET start_at = NOW() - INTERVAL '1 minute',
-                end_at = NOW() + INTERVAL '59 minutes',
-                status = 'hold'
+                end_at = NOW() + INTERVAL '59 minutes'
             WHERE id = $1
             """,
             UUID(slot["id"]),

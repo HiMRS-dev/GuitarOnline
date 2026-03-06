@@ -3543,3 +3543,19 @@ Latest local checks:
   - `curl -fsS http://localhost:8000/metrics` + pattern check for
     `guitaronline_http_requests_total|guitaronline_http_request_duration_seconds` -> matched.
 
+10.3 `H10` CI integration parity fix (2026-03-06):
+- CI integration run (`22749048598`) failed in booking+billing integration tests after prior stabilization:
+  - `test_rebook_same_slot_after_cancel_succeeds_with_active_booking_uniqueness`,
+  - `test_concurrent_hold_attempts_on_same_slot_allow_only_one_success`,
+  - `test_confirm_rejects_hold_when_slot_start_already_passed`.
+- root cause conflict:
+  - integration tests used raw SQL enum strings (`'hold'`, `'confirmed'`) while CI DB enum values are uppercase (`HOLD`, `CONFIRMED`), causing:
+    - false-negative active booking counter (`0` instead of `1`),
+    - raw SQL update failure and resulting `500` in past-slot confirm scenario.
+- conflict-safe fix in `tests/test_booking_billing_integration.py`:
+  - active-booking SQL now uses `LOWER(status::text) IN ('hold', 'confirmed')`,
+  - past-slot setup update no longer forces `status='hold'` via raw SQL (status is already set by API hold flow).
+- local verification after fix:
+  - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed`.
+  - `py -m poetry run pytest -q tests/test_booking_billing_integration.py` -> `6 passed, 4 skipped`.
+

@@ -1,0 +1,8 @@
+# Supply-chain vulnerability allowlist for CI `pip-audit`.
+# Format: one vulnerability ID per line.
+#
+# CVE-2024-23342 (ecdsa):
+# - Transitive dependency via `python-jose`.
+# - Upstream fix version is not currently published in PyPI metadata.
+# - Keep explicitly ignored until upstream remediation is available.
+CVE-2024-23342

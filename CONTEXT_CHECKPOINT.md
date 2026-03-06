@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `b21a4c8` (`fix(ci): satisfy secret-scan in admin perf baseline`).
+  - `34c7b8d` (`perf(admin): optimize heavy admin queries and add supporting indexes`).
 - Latest GitHub Actions status for that commit:
-  - `ci` run `22756373830`: `success`.
-  - `deploy` run `22756373823`: `success`.
+  - `ci`: `success`.
+  - `deploy`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -70,7 +70,7 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. Supply-chain security gates (`V2-08`) are not yet implemented.
+3. `pip-audit` allowlist has one temporary exception (`CVE-2024-23342` for transitive `ecdsa`) and must be revisited when upstream fix is published.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -90,9 +90,9 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-08`: supply-chain security gates (`pip-audit`, npm audit, SBOM).
-2. `V2-09`: secret/key rotation procedure with dry-run test.
-3. `V2-10`: role-based end-to-end regression scenario in release gate.
+1. `V2-09`: secret/key rotation procedure with dry-run test.
+2. `V2-10`: role-based end-to-end regression scenario in release gate.
+3. Validate `V2-08` gate behavior on GitHub-hosted runner (`npm audit` + artifact upload).
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -282,6 +282,35 @@
     `11 passed`.
   - p95 comparison (`run4` probe, same dataset):
     - aggregate p95 average improved from `42.93ms` to `40.56ms` (`~5.5%`).
+- `V2-08` completed (2026-03-06): CI supply-chain security gates and SBOM artifact wiring.
+- implemented:
+  - dependency security updates:
+    - `fastapi` -> `0.135.1`,
+    - `python-multipart` -> `0.0.22`,
+    - transitive `starlette` resolved to `0.49.3`.
+  - supply-chain gate script:
+    - `scripts/supply_chain_gate.py`,
+    - runs `pip-audit` (with reviewed allowlist), `npm audit`, and emits backend CycloneDX SBOM.
+  - allowlist policy file:
+    - `ops/security/pip_audit_ignore.txt` (temporary `CVE-2024-23342` for transitive `ecdsa`).
+  - CI integration:
+    - `.github/workflows/ci.yml` includes job `supply-chain` (gating `lint`) and uploads artifact `supply-chain-security-artifacts`.
+  - runbook/checklist updates:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict handling during implementation:
+  - `pip-audit --strict` conflicts with editable local package (`guitaronline`) not published on PyPI;
+    resolved by audited mode with `--skip-editable` plus explicit reviewed vulnerability allowlist.
+  - `web-admin` had no committed lockfile for reproducible `npm audit`;
+    gate now creates temporary `package-lock.json` for audit and removes it after execution.
+- verification evidence:
+  - `py -m poetry run ruff check scripts/supply_chain_gate.py` -> `All checks passed`.
+  - `python -m compileall scripts/supply_chain_gate.py` -> success.
+  - `py -m poetry run python scripts/supply_chain_gate.py --skip-npm` -> success (artifacts emitted in `.tmp/security`).
+  - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/ci.yml` -> success.
+  - local environment limitation:
+    - `npm` unavailable on this host; full npm-audit branch is validated in GitHub Actions runner.
 
 ## 12) References
 - Full historical checkpoint archive:

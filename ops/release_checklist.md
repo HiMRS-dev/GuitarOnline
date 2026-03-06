@@ -21,6 +21,9 @@ Use this checklist before promoting a build to a target environment.
   - `powershell -ExecutionPolicy Bypass -File scripts/validate_ops_configs.ps1`
 - Run security regression gate:
   - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py`
+- Verify supply-chain security gate is green in CI (`supply-chain` job):
+  - `.github/workflows/ci.yml`
+  - expected artifact: `supply-chain-security-artifacts` (`pip_audit.json`, `npm_audit.json`, `backend_sbom_cyclonedx.json`, `summary.json`).
 - Optional image warmup (unstable network):
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1`
 - Optional maintenance silence before deploy (warning alerts by default):

@@ -10,3 +10,4 @@ __pycache__/
 htmlcov/
 ops/alertmanager/alertmanager.oncall.generated.yml
 backups/
+.tmp/

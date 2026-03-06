@@ -272,6 +272,15 @@ Production-ready modular monolith backend for an online guitar school.
     - auth rate-limit dependencies,
     - response-model minimization for identity endpoints (no password hash/internal secret fields),
     - role-based PII field visibility (email fields exposed only on identity/admin contracts).
+- Supply-chain gate (CI-enforced in `.github/workflows/ci.yml`, job `supply-chain`):
+  - `py -m poetry run python scripts/supply_chain_gate.py`
+  - emitted machine-readable artifacts:
+    - `.tmp/security/pip_audit.json`,
+    - `.tmp/security/npm_audit.json`,
+    - `.tmp/security/backend_sbom_cyclonedx.json`,
+    - `.tmp/security/summary.json`.
+- Vulnerability allowlist for temporary upstream exceptions:
+  - `ops/security/pip_audit_ignore.txt`
 
 ## Workers
 

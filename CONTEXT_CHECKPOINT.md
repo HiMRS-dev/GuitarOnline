@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `ebf26ea` (`ops(backup): add scheduled backup retention automation`).
+  - `46ef5bb` (`ops(restore): add rehearsal workflow with rpo-rto artifact`).
 - Latest GitHub Actions status for that commit:
-  - `ci` run `22755661994`: `success`.
-  - `deploy` run `22755662001`: `success`.
+  - `ci` run `22755958980`: `success`.
+  - `deploy` run `22755958984`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -70,7 +70,7 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. Performance baseline for admin-heavy endpoints (`V2-06`) is not yet implemented.
+3. SQL/index optimization follow-up from admin baseline (`V2-07`) is not yet implemented.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -90,9 +90,9 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-06`: performance baseline for admin-heavy endpoints.
-2. `V2-07`: SQL/index optimization pass based on performance baseline.
-3. `V2-08`: supply-chain security gates (`pip-audit`, npm audit, SBOM).
+1. `V2-07`: SQL/index optimization pass based on performance baseline.
+2. `V2-08`: supply-chain security gates (`pip-audit`, npm audit, SBOM).
+3. `V2-09`: secret/key rotation procedure with dry-run test.
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -222,6 +222,32 @@
   - local containerized functional rehearsal run:
     - `COMPOSE_PROJECT_NAME=guitaronline DEPLOY_PATH=/repo bash scripts/run_restore_rehearsal_remote.sh` ->
       `rpo_seconds=143`, `rto_seconds=1.621`, report file emitted in `backups/reports/`.
+- `V2-06` completed (2026-03-06): admin-heavy endpoint performance baseline.
+- implemented:
+  - benchmark script:
+    - `scripts/admin_perf_baseline.py`,
+    - measures latency envelopes for:
+      - `/api/v1/admin/teachers`,
+      - `/api/v1/admin/slots`,
+      - `/api/v1/admin/kpi/overview`,
+      - `/api/v1/admin/kpi/sales`.
+  - committed baseline reports:
+    - `docs/perf/admin_perf_baseline_2026-03-06.json`,
+    - `docs/perf/admin_perf_baseline_2026-03-06.md`.
+  - runbook updates:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict resolved during implementation:
+  - identity rate limits (`429`) during synthetic data setup; baseline script now includes controlled retry/wait for register/login operations.
+- verification evidence:
+  - `py -m poetry run ruff check scripts/admin_perf_baseline.py` -> `All checks passed`.
+  - `python -m compileall scripts/admin_perf_baseline.py` -> success.
+  - `python scripts/admin_perf_baseline.py` -> success with baseline metrics:
+    - `admin_teachers p95=38.78ms`,
+    - `admin_slots p95=37.12ms`,
+    - `admin_kpi_overview p95=43.89ms`,
+    - `admin_kpi_sales p95=44.10ms`.
 
 ## 12) References
 - Full historical checkpoint archive:

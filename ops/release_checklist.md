@@ -76,6 +76,9 @@ Use this checklist before promoting a build to a target environment.
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - expected output includes `Load sanity passed`.
   - script automatically falls back to legacy scheduling endpoints when admin slot endpoints are unavailable.
+- Admin-heavy endpoint baseline snapshot:
+  - `python scripts/admin_perf_baseline.py`
+  - verify report is updated in `docs/perf/admin_perf_baseline_2026-03-06.md`.
 - Explicit health/readiness/metrics verification (do not skip):
   - `curl -fsS http://localhost:8000/health`
   - `curl -fsS http://localhost:8000/ready`

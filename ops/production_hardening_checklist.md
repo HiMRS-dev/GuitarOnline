@@ -67,3 +67,4 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 - Per deploy: sections 1 and 4.
 - Weekly: sections 2 and 3.
 - Monthly: full checklist + one rollback drill simulation.
+- Monthly: rerun `python scripts/admin_perf_baseline.py` and compare p95 values with latest committed baseline report.

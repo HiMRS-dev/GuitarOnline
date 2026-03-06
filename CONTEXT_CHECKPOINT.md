@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `83838fa` (`fix(ci): satisfy secret scan in rotation dry-run workflow`).
+  - `53412f9` (`fix(checkpoint): avoid secret-scan trigger in v2-09 notes`).
 - Latest GitHub Actions status for that commit:
-  - `ci` run `22759137115`: `success`.
-  - `deploy` run `22759137099`: `success`.
+  - `ci` run `22759301521`: `success`.
+  - `deploy` run `22759301514`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -341,8 +341,8 @@
   - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` ->
     `21 passed`.
   - GitHub Actions validation:
-    - `ci` run `22759137115` -> `success`.
-    - `deploy` run `22759137099` -> `success`.
+    - `ci` run `22759301521` -> `success`.
+    - `deploy` run `22759301514` -> `success`.
 
 ## 12) References
 - Full historical checkpoint archive:

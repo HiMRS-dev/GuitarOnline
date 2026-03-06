@@ -387,8 +387,13 @@ Production-ready modular monolith backend for an online guitar school.
   - inhibition suppresses warning alerts when matching critical is active (`alertname + service`),
   - `GuitarOnlineApiDown` inhibits `GuitarOnlineApiHigh5xxRate` / `GuitarOnlineApiHighP95Latency` for the same service.
 - Fire synthetic alerts for routing validation:
-  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
-  - confirm delivery in at least one real target channel (Slack/PagerDuty/Email).
+  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1`
+  - strict mode for all configured integrations:
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1 -RequireAllIntegrations`
+  - optional dry-run (config + baseline metrics only, no alert submit):
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1 -DryRun`
+  - low-level submit-only helper remains available:
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
 - Maintenance silence baseline:
   - create temporary silence (warning by default):
     - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release window"`

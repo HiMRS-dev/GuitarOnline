@@ -31,7 +31,11 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 - Confirm Alertmanager route tree is loaded and has no config errors (`:9093`).
 - Confirm Grafana dashboard loads and tracks request/error/latency panels (`:3000`).
 - Fire synthetic alert and confirm delivery in at least one real channel:
-  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
+  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1`
+  - strict routing verification:
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1 -RequireAllIntegrations`
+  - fallback submit-only helper:
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
 - Use maintenance silences during planned releases and expire after rollout:
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release"`
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_expire_silence.ps1 -SilenceId <id>`

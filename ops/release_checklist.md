@@ -89,8 +89,11 @@ Use this checklist before promoting a build to a target environment.
 - Auth and portal basic flow:
   - register -> login -> profile (`/api/v1/identity/users/me`) succeeds.
 - Alert routing synthetic test:
-  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
-  - verify delivery in at least one real channel (Slack/PagerDuty/Email).
+  - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1`
+  - strict mode for full integration matrix:
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1 -RequireAllIntegrations`
+  - fallback submit-only helper:
+    - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_synthetic.ps1`
 - Background worker:
   - `docker compose -f docker-compose.prod.yml logs --tail=100 outbox-worker` has no crash loop.
 

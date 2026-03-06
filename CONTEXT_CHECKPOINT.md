@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `ac074ea` (`docs(checkpoint): sync v2-08 green ci/deploy status`).
+  - `83838fa` (`fix(ci): satisfy secret scan in rotation dry-run workflow`).
 - Latest GitHub Actions status for that commit:
-  - `ci` run `22758373453`: `success`.
-  - `deploy` run `22758373471`: `success`.
+  - `ci` run `22759137115`: `success`.
+  - `deploy` run `22759137099`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -332,6 +332,7 @@
 - conflict handling during implementation:
   - key precedence conflict (`JWT_SECRET` overrides `SECRET_KEY`) addressed by explicit target resolution in dry-run logic.
   - deploy drift conflict (target-host `.env` changed but `PROD_ENV_FILE_B64` stale) documented and enforced in playbook steps.
+  - CI `secret-scan` false-positive on workflow error message (`secret: PROD_ENV_FILE_B64`) fixed by neutral wording in workflow validation output.
 - verification evidence:
   - `py -m poetry run ruff check scripts/secret_rotation_dry_run.py` -> `All checks passed`.
   - `python -m compileall scripts/secret_rotation_dry_run.py` -> success.
@@ -339,6 +340,9 @@
   - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/secret-rotation-dry-run.yml` -> success.
   - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` ->
     `21 passed`.
+  - GitHub Actions validation:
+    - `ci` run `22759137115` -> `success`.
+    - `deploy` run `22759137099` -> `success`.
 
 ## 12) References
 - Full historical checkpoint archive:

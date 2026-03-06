@@ -332,7 +332,7 @@
 - conflict handling during implementation:
   - key precedence conflict (`JWT_SECRET` overrides `SECRET_KEY`) addressed by explicit target resolution in dry-run logic.
   - deploy drift conflict (target-host `.env` changed but `PROD_ENV_FILE_B64` stale) documented and enforced in playbook steps.
-  - CI `secret-scan` false-positive on workflow error message (`secret: PROD_ENV_FILE_B64`) fixed by neutral wording in workflow validation output.
+  - CI `secret-scan` false-positive on workflow error message mentioning `PROD_ENV_FILE_B64` fixed by neutral wording in workflow validation output.
 - verification evidence:
   - `py -m poetry run ruff check scripts/secret_rotation_dry_run.py` -> `All checks passed`.
   - `python -m compileall scripts/secret_rotation_dry_run.py` -> success.

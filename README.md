@@ -124,13 +124,13 @@ Production-ready modular monolith backend for an online guitar school.
 
 | Secret | Required | Workflow | Notes |
 | --- | --- | --- | --- |
-| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Target server host/IP. |
-| `DEPLOY_USER` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | SSH user. |
-| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Absolute path on target host. |
-| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | SSH authentication key. |
+| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Target server host/IP. |
+| `DEPLOY_USER` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | SSH user. |
+| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Absolute path on target host. |
+| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | SSH authentication key. |
 | `PROD_ENV_FILE_B64` | Yes | deploy | Base64 payload used to write `${DEPLOY_PATH}/.env`. |
-| `DEPLOY_PORT` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Defaults to `22`. |
-| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention | Optional host-key pinning override. |
+| `DEPLOY_PORT` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Defaults to `22`. |
+| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal | Optional host-key pinning override. |
 | `AUTO_DEPLOY_ENABLED` | No | deploy | `true` enables push-triggered deploy on `main`. |
 
 ### Precedence Rules
@@ -476,6 +476,13 @@ Production-ready modular monolith backend for an online guitar school.
   - artifacts path on target host:
     - `${DEPLOY_PATH}/backups/scheduled/daily`,
     - `${DEPLOY_PATH}/backups/scheduled/weekly`.
+- Restore rehearsal workflow with RPO/RTO artifact:
+  - `.github/workflows/restore-rehearsal.yml`
+  - schedule: every Monday at `03:20 UTC`,
+  - can also run manually via `workflow_dispatch` (`confirm=RESTORE`),
+  - default source: latest file from `${DEPLOY_PATH}/backups/scheduled/daily`,
+  - optional manual override: `backup_file` input,
+  - uploads JSON artifact with measured `rpo_seconds` and `rto_seconds`.
 
 ## Release Checklist
 

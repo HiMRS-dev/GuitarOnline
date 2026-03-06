@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `5d45730` (`ops(synthetic): add scheduled critical-path check and failure alerting`).
+  - `ebf26ea` (`ops(backup): add scheduled backup retention automation`).
 - Latest GitHub Actions status for that commit:
-  - `ci` run `22755352282`: `success`.
-  - `deploy` run `22755352302`: `success`.
+  - `ci` run `22755661994`: `success`.
+  - `deploy` run `22755662001`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -70,7 +70,7 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. Restore rehearsal workflow with measurable RPO/RTO artifacts (`V2-05`) is not yet implemented.
+3. Performance baseline for admin-heavy endpoints (`V2-06`) is not yet implemented.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -90,9 +90,9 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-05`: restore rehearsal workflow with RPO/RTO reporting.
-2. `V2-06`: performance baseline for admin-heavy endpoints.
-3. `V2-07`: SQL/index optimization pass based on performance baseline.
+1. `V2-06`: performance baseline for admin-heavy endpoints.
+2. `V2-07`: SQL/index optimization pass based on performance baseline.
+3. `V2-08`: supply-chain security gates (`pip-audit`, npm audit, SBOM).
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -199,6 +199,29 @@
   - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/run_backup_schedule_remote.sh` -> success.
   - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/backup-schedule-retention.yml` -> success.
   - scheduled workflow input validation enforces numeric retention and weekday bounds before SSH run.
+- `V2-05` completed (2026-03-06): restore rehearsal workflow with RPO/RTO artifact.
+- implemented:
+  - remote restore rehearsal runner:
+    - `scripts/run_restore_rehearsal_remote.sh`,
+    - restores latest scheduled daily backup (or explicit backup override) into a fresh temporary DB,
+    - validates restored schema and writes JSON report with `rpo_seconds` + `rto_seconds`.
+  - scheduled workflow:
+    - `.github/workflows/restore-rehearsal.yml`,
+    - weekly cron (`20 3 * * 1`) + manual `workflow_dispatch` (`confirm=RESTORE`),
+    - downloads remote report and publishes GitHub artifact.
+  - runbook updates:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+- conflict prevention decisions:
+  - restore rehearsal reads scheduled backups (`backups/scheduled/daily`) and does not mutate production DB;
+    restore is executed into throwaway DB `restore_rehearsal_*` and auto-cleaned.
+- verification evidence:
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/run_restore_rehearsal_remote.sh` -> success.
+  - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/restore-rehearsal.yml` -> success.
+  - local containerized functional rehearsal run:
+    - `COMPOSE_PROJECT_NAME=guitaronline DEPLOY_PATH=/repo bash scripts/run_restore_rehearsal_remote.sh` ->
+      `rpo_seconds=143`, `rto_seconds=1.621`, report file emitted in `backups/reports/`.
 
 ## 12) References
 - Full historical checkpoint archive:

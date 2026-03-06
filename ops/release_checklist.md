@@ -40,6 +40,9 @@ Use this checklist before promoting a build to a target environment.
 - Verify scheduled backup retention automation is healthy:
   - workflow `.github/workflows/backup-schedule-retention.yml` is enabled,
   - latest artifacts exist under `backups/scheduled/daily` (and `weekly` on weekly snapshot day).
+- Verify restore rehearsal workflow produces RPO/RTO report artifact:
+  - workflow `.github/workflows/restore-rehearsal.yml` is enabled,
+  - latest run artifact includes `rpo_seconds` and `rto_seconds`.
 
 ## 3) Deploy
 

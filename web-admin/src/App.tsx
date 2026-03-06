@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 
 import { AdminLayout } from "./admin/AdminLayout";
@@ -71,8 +71,6 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isLoggedIn = useMemo(() => tokens !== null, [tokens]);
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -103,7 +101,7 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
       </section>
 
       <section className="card">
-        {!isLoggedIn ? (
+        {tokens === null ? (
           <form onSubmit={handleSubmit} className="auth-form">
             <label>
               <span>Email</span>

@@ -1,8 +1,6 @@
 import interactionPlugin from "@fullcalendar/interaction";
-import "@fullcalendar/core/index.css";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import "@fullcalendar/timegrid/index.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiClientError } from "../../shared/api/client";

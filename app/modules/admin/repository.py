@@ -111,12 +111,17 @@ class AdminRepository:
                 TeacherProfileTag.teacher_profile_id == TeacherProfile.id,
             ).where(func.lower(TeacherProfileTag.tag) == normalized_tag)
 
-        teacher_ids_stmt = base_stmt.distinct()
+        teacher_ids_stmt = base_stmt.group_by(
+            TeacherProfile.id,
+            TeacherProfile.created_at,
+        )
         total_stmt = select(func.count()).select_from(teacher_ids_stmt.subquery())
         total = int((await self.session.scalar(total_stmt)) or 0)
 
         paged_ids_stmt = (
-            teacher_ids_stmt.order_by(TeacherProfile.created_at.desc()).limit(limit).offset(offset)
+            teacher_ids_stmt.order_by(TeacherProfile.created_at.desc(), TeacherProfile.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
         teacher_profile_ids = list((await self.session.scalars(paged_ids_stmt)).all())
         if not teacher_profile_ids:

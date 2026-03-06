@@ -3104,6 +3104,7 @@ Verification tasks added/updated:
 Latest local checks:
 - `pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`pytest` command unavailable in shell environment).
 - `python -m pytest tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> failed (`No module named pytest` in active Python environment).
+- `py -m poetry run pytest -q tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> `12 passed`.
 - `python -m compileall app/core/enums.py app/modules/notifications tests/test_notification_templates.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/modules/notifications/delivery.py app/modules/notifications/outbox_worker.py tests/test_outbox_notifications_worker.py` -> success.
 - `python -m compileall app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> success.
@@ -3301,6 +3302,14 @@ Verification tasks added/updated:
 
 Latest local checks:
 - Node/npm-based checks (`npm run lint`, `npm run build`) were not executed in this shell session (dependencies not installed yet in `web-admin`).
+- `node --version` / `npm --version` -> unavailable in host shell.
+- containerized fallback (no host Node installation required):
+  - `docker run --rm -v ${PWD}\web-admin:/src:ro -w /work node:20-alpine sh -lc "cp -R /src ./web-admin && cd web-admin && npm install --silent --no-package-lock && npm run lint && npm run build"` -> passed.
+- build conflict fixes applied before successful run:
+  - `web-admin/src/App.tsx`: removed nullable-token narrowing issue (`tokens === null` branch check).
+  - `web-admin/tsconfig.node.json`: added `target/lib/types` and `skipLibCheck` for stable `tsc -b`.
+  - `web-admin/package.json`: added `@types/node` to dev dependencies.
+  - `web-admin/src/admin/pages/CalendarPage.tsx`: removed deprecated FullCalendar CSS imports incompatible with current package export map.
 
 ## 38) Epic H Implementation Progress (Started 2026-03-06)
 
@@ -3449,6 +3458,53 @@ Implemented in codebase:
 - release notes published:
   - `docs/releases/v1.1.0.md` with migration + rollback notes and gate evidence.
 
+10.1 `H10` local smoke closure follow-up (2026-03-06):
+- first local smoke attempt (`docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`)
+  failed with `500` on `GET /api/v1/admin/teachers` due PostgreSQL query error:
+  `SELECT DISTINCT ... ORDER BY` conflict.
+- conflict fix applied in repository:
+  - `app/modules/admin/repository.py` (`list_teachers`):
+    - replaced `distinct()` paging source with grouped ID query (`group_by(id, created_at)`),
+    - added deterministic tie-break ordering (`created_at desc`, `id desc`).
+- follow-up smoke attempt then revealed schema drift in running stack:
+  - missing relation `teacher_profile_tags`.
+- infra reconciliation applied:
+  - rebuilt app container from current workspace code:
+    `docker compose -f docker-compose.prod.yml up -d --build app`,
+  - applied migrations in running stack:
+    `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`.
+- final local smoke result:
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
+  - output: `Smoke checks passed.`.
+
+10.2 `H10` full local test-suite closure on running stack (2026-03-06):
+- first full run attempt:
+  - `py -m poetry run pytest -q` -> `36 failed, 205 passed, 1 skipped`.
+- root-cause conflicts identified:
+  - integration auth registration flow hit runtime rate-limits (`429`) under dense RBAC/integration scenarios,
+  - slot-time collisions in `tests/test_booking_billing_integration.py` under shared test teacher/state.
+- conflict-safe fixes applied:
+  - production compose app env now supports explicit auth rate-limit overrides
+    for deterministic integration-suite runs without changing default limits:
+    - `AUTH_RATE_LIMIT_WINDOW_SECONDS`,
+    - `AUTH_RATE_LIMIT_REGISTER_REQUESTS`,
+    - `AUTH_RATE_LIMIT_LOGIN_REQUESTS`,
+    - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`.
+  - integration slot generation hardening in
+    `tests/test_booking_billing_integration.py`:
+    - unique slot-time offset per call,
+    - fresh teacher user per test fixture invocation while preserving cached admin/student.
+- app restarted with temporary high limits for local suite execution:
+  - `AUTH_RATE_LIMIT_REGISTER_REQUESTS=1000`,
+  - `AUTH_RATE_LIMIT_LOGIN_REQUESTS=1000`,
+  - `AUTH_RATE_LIMIT_REFRESH_REQUESTS=1000`.
+- final full run result:
+  - `py -m poetry run pytest -q` -> `237 passed, 5 skipped`.
+- post-run runtime baseline restored:
+  - app service recreated without temporary overrides,
+  - effective runtime values verified back to defaults:
+    - register/login/refresh/window = `5/10/20/60`.
+
 Verification tasks added/updated:
 - static checks:
   - `rg -n ".{101}" scripts/deploy_smoke_check.py` -> no overlong lines found.
@@ -3475,4 +3531,15 @@ Verification tasks added/updated:
 
 Latest local checks:
 - runtime smoke execution was not performed in this shell session (local integration stack was not started).
+- `py -m poetry run ruff check app/modules/admin/repository.py` -> `All checks passed`.
+- `py -m poetry run pytest -q tests/test_admin_teachers_list.py` -> `2 passed`.
+- `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py` -> `Smoke checks passed.`.
+- `py -m poetry run pytest -q` (first attempt on running stack) -> `36 failed, 205 passed, 1 skipped`.
+- `py -m poetry run pytest -q tests/test_booking_billing_integration.py` (after integration fixes) -> `6 passed, 4 skipped`.
+- `py -m poetry run pytest -q` (final) -> `237 passed, 5 skipped`.
+- explicit probes after smoke:
+  - `curl -fsS http://localhost:8000/health` -> `{"status":"ok"}`.
+  - `curl -fsS http://localhost:8000/ready` -> `{"status":"ready","database":"ok",...}`.
+  - `curl -fsS http://localhost:8000/metrics` + pattern check for
+    `guitaronline_http_requests_total|guitaronline_http_request_duration_seconds` -> matched.
 

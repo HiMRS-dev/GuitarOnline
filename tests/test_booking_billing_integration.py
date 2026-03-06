@@ -7,6 +7,7 @@ import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from itertools import count
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -36,6 +37,7 @@ class AuthUsers:
 _CACHED_AUTH_USERS: AuthUsers | None = None
 _INTEGRATION_STACK_HEALTHY: bool | None = None
 _INTEGRATION_STACK_ERROR: str | None = None
+_SLOT_CALL_COUNTER = count(start=0, step=1)
 
 
 def _assert_status(response: httpx.Response, expected_status: int) -> None:
@@ -50,7 +52,9 @@ def _auth_headers(access_token: str) -> dict[str, str]:
 
 
 def _future_range(hours_from_now: int, duration_minutes: int = 60) -> tuple[str, str]:
-    start_at = datetime.now(UTC) + timedelta(hours=hours_from_now)
+    # Keep slot intervals unique across the whole module run to avoid overlap collisions.
+    unique_offset_hours = next(_SLOT_CALL_COUNTER) * 2
+    start_at = datetime.now(UTC) + timedelta(hours=hours_from_now + unique_offset_hours)
     end_at = start_at + timedelta(minutes=duration_minutes)
     return start_at.isoformat(), end_at.isoformat()
 
@@ -295,8 +299,13 @@ async def auth_users(api_client: httpx.AsyncClient) -> AuthUsers:
             teacher=await _register_and_login(api_client, role="teacher"),
             student=await _register_and_login(api_client, role="student"),
         )
+        return _CACHED_AUTH_USERS
 
-    return _CACHED_AUTH_USERS
+    return AuthUsers(
+        admin=_CACHED_AUTH_USERS.admin,
+        teacher=await _register_and_login(api_client, role="teacher"),
+        student=_CACHED_AUTH_USERS.student,
+    )
 
 
 @pytest.mark.asyncio

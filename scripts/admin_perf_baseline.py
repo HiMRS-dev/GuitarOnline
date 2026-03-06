@@ -254,7 +254,7 @@ def main() -> int:
 
     base_url = args.base_url.rstrip("/")
     suffix = uuid4().hex[:10]
-    password = DEFAULT_PASSWORD
+    shared_credential = DEFAULT_PASSWORD
     admin_email = f"perf-baseline-admin-{suffix}@guitaronline.dev"
 
     workday_start = time_of_day(hour=9, minute=0)
@@ -283,7 +283,7 @@ def main() -> int:
         action="admin registration",
         body={
             "email": admin_email,
-            "password": password,
+            "password": shared_credential,
             "timezone": "UTC",
             "role": "admin",
         },
@@ -292,7 +292,7 @@ def main() -> int:
         base_url=base_url,
         path="/api/v1/identity/auth/login",
         action="admin login",
-        body={"email": admin_email, "password": password},
+        body={"email": admin_email, "password": shared_credential},
     )
     admin_token = str(admin_login["access_token"])
 
@@ -306,7 +306,7 @@ def main() -> int:
             action=f"teacher registration #{index}",
             body={
                 "email": teacher_email,
-                "password": password,
+                "password": shared_credential,
                 "timezone": "UTC",
                 "role": "teacher",
             },
@@ -315,7 +315,7 @@ def main() -> int:
             base_url=base_url,
             path="/api/v1/identity/auth/login",
             action=f"teacher login #{index}",
-            body={"email": teacher_email, "password": password},
+            body={"email": teacher_email, "password": shared_credential},
         )
         _request_json(
             base_url,

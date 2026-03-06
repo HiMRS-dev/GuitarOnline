@@ -67,6 +67,11 @@ jobs:
           docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" \
             prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
 
+      - name: Validate Prometheus alert thresholds (synthetic)
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.5.0 test rules /etc/prometheus/alerts.test.yml
+
       - name: Validate Alertmanager config
         run: |
           docker run --rm --entrypoint amtool -v "$PWD/ops/alertmanager:/etc/alertmanager:ro" \

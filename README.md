@@ -356,7 +356,15 @@ Production-ready modular monolith backend for an online guitar school.
 - Prometheus alert rules baseline:
   - API down for 2m,
   - 5xx ratio > 5% for 5m,
-  - p95 latency > 1s for 10m.
+  - p95 latency > 1s for 10m,
+  - readiness success ratio < 99% for 5m (when `/ready` traffic exists).
+- SLI recording rules (5m windows):
+  - `guitaronline:sli:error_ratio:5m`,
+  - `guitaronline:sli:availability_ratio:5m`,
+  - `guitaronline:sli:p95_latency_seconds:5m`,
+  - `guitaronline:sli:readiness_success_ratio:5m`.
+- Synthetic threshold validation (promtool rule tests):
+  - `docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 test rules /etc/prometheus/alerts.test.yml`
 
 ## Alert Receiver Onboarding
 

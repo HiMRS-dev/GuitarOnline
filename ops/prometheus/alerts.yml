@@ -1,5 +1,33 @@
 groups:
-  - name: guitaronline-api
+  - name: guitaronline-api-sli-recording
+    rules:
+      - record: guitaronline:sli:error_ratio:5m
+        expr: |
+          (
+            sum(rate(guitaronline_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(guitaronline_http_requests_total[5m])), 0.001)
+          )
+
+      - record: guitaronline:sli:availability_ratio:5m
+        expr: 1 - guitaronline:sli:error_ratio:5m
+
+      - record: guitaronline:sli:p95_latency_seconds:5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(guitaronline_http_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: guitaronline:sli:readiness_success_ratio:5m
+        expr: |
+          (
+            sum(rate(guitaronline_http_requests_total{path="/ready",status_code=~"2.."}[5m]))
+            /
+            clamp_min(sum(rate(guitaronline_http_requests_total{path="/ready"}[5m])), 0.001)
+          )
+
+  - name: guitaronline-api-alerts
     rules:
       - alert: GuitarOnlineApiDown
         expr: up{job="guitaronline-api"} == 0
@@ -12,30 +40,38 @@ groups:
           description: "Prometheus cannot scrape app:8000/metrics for at least 2 minutes."
 
       - alert: GuitarOnlineApiHigh5xxRate
-        expr: |
-          (
-            sum(rate(guitaronline_http_requests_total{status_code=~"5.."}[5m]))
-            /
-            clamp_min(sum(rate(guitaronline_http_requests_total[5m])), 0.001)
-          ) > 0.05
+        expr: guitaronline:sli:error_ratio:5m > 0.05
         for: 5m
         labels:
           service: guitaronline-api
           severity: warning
         annotations:
           summary: "High 5xx error ratio"
-          description: "5xx ratio is above 5% for at least 5 minutes."
+          description: "SLI error ratio is above 5% for at least 5 minutes."
 
       - alert: GuitarOnlineApiHighP95Latency
-        expr: |
-          histogram_quantile(
-            0.95,
-            sum by (le) (rate(guitaronline_http_request_duration_seconds_bucket[5m]))
-          ) > 1
+        expr: guitaronline:sli:p95_latency_seconds:5m > 1
         for: 10m
         labels:
           service: guitaronline-api
           severity: warning
         annotations:
           summary: "High API latency"
-          description: "API p95 latency is above 1s for at least 10 minutes."
+          description: "SLI p95 latency is above 1s for at least 10 minutes."
+
+      - alert: GuitarOnlineApiReadinessDegraded
+        expr: |
+          (
+            guitaronline:sli:readiness_success_ratio:5m < 0.99
+          )
+          and
+          (
+            sum(rate(guitaronline_http_requests_total{path="/ready"}[5m])) > 0.01
+          )
+        for: 5m
+        labels:
+          service: guitaronline-api
+          severity: critical
+        annotations:
+          summary: "API readiness degraded"
+          description: "Ready success ratio is below 99% for at least 5 minutes."

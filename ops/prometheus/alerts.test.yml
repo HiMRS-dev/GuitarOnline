@@ -1,0 +1,145 @@
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: no_alerts_when_sli_is_healthy
+    interval: 1m
+    input_series:
+      - series: 'up{job="guitaronline-api"}'
+        values: "1+0x30"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/api/v1/health",status_code="200"}'
+        values: "0+1000x30"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="200"}'
+        values: "0+50x30"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="503"}'
+        values: "0+0x30"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/health",le="0.5"}'
+        values: "0+950x30"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/health",le="1"}'
+        values: "0+1000x30"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/health",le="+Inf"}'
+        values: "0+1000x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GuitarOnlineApiDown
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: GuitarOnlineApiHigh5xxRate
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: GuitarOnlineApiHighP95Latency
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: GuitarOnlineApiReadinessDegraded
+        exp_alerts: []
+
+  - name: api_down_fires_critical
+    interval: 1m
+    input_series:
+      - series: 'up{job="guitaronline-api"}'
+        values: "0+0x10"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: GuitarOnlineApiDown
+        exp_alerts:
+          - exp_labels:
+              alertname: GuitarOnlineApiDown
+              job: guitaronline-api
+              service: guitaronline-api
+              severity: critical
+            exp_annotations:
+              summary: "GuitarOnline API is down"
+              description: "Prometheus cannot scrape app:8000/metrics for at least 2 minutes."
+
+  - name: high_5xx_ratio_fires_warning
+    interval: 1m
+    input_series:
+      - series: 'up{job="guitaronline-api"}'
+        values: "1+0x20"
+      - series: 'guitaronline_http_requests_total{method="POST",path="/api/v1/identity/auth/login",status_code="200"}'
+        values: "0+90x20"
+      - series: 'guitaronline_http_requests_total{method="POST",path="/api/v1/identity/auth/login",status_code="500"}'
+        values: "0+10x20"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="200"}'
+        values: "0+50x20"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="503"}'
+        values: "0+0x20"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="POST",path="/api/v1/identity/auth/login",le="0.5"}'
+        values: "0+95x20"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="POST",path="/api/v1/identity/auth/login",le="1"}'
+        values: "0+100x20"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="POST",path="/api/v1/identity/auth/login",le="+Inf"}'
+        values: "0+100x20"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: GuitarOnlineApiHigh5xxRate
+        exp_alerts:
+          - exp_labels:
+              alertname: GuitarOnlineApiHigh5xxRate
+              service: guitaronline-api
+              severity: warning
+            exp_annotations:
+              summary: "High 5xx error ratio"
+              description: "SLI error ratio is above 5% for at least 5 minutes."
+
+  - name: high_p95_latency_fires_warning
+    interval: 1m
+    input_series:
+      - series: 'up{job="guitaronline-api"}'
+        values: "1+0x30"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/api/v1/booking/me",status_code="200"}'
+        values: "0+100x30"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="200"}'
+        values: "0+50x30"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="503"}'
+        values: "0+0x30"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/booking/me",le="0.5"}'
+        values: "0+10x30"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/booking/me",le="1"}'
+        values: "0+20x30"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/booking/me",le="2.5"}'
+        values: "0+100x30"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/booking/me",le="+Inf"}'
+        values: "0+100x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GuitarOnlineApiHighP95Latency
+        exp_alerts:
+          - exp_labels:
+              alertname: GuitarOnlineApiHighP95Latency
+              service: guitaronline-api
+              severity: warning
+            exp_annotations:
+              summary: "High API latency"
+              description: "SLI p95 latency is above 1s for at least 10 minutes."
+
+  - name: readiness_degraded_fires_critical
+    interval: 1m
+    input_series:
+      - series: 'up{job="guitaronline-api"}'
+        values: "1+0x20"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/api/v1/identity/users/me",status_code="200"}'
+        values: "0+1000x20"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="200"}'
+        values: "0+80x20"
+      - series: 'guitaronline_http_requests_total{method="GET",path="/ready",status_code="503"}'
+        values: "0+20x20"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/identity/users/me",le="0.5"}'
+        values: "0+950x20"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/identity/users/me",le="1"}'
+        values: "0+1000x20"
+      - series: 'guitaronline_http_request_duration_seconds_bucket{method="GET",path="/api/v1/identity/users/me",le="+Inf"}'
+        values: "0+1000x20"
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: GuitarOnlineApiReadinessDegraded
+        exp_alerts:
+          - exp_labels:
+              alertname: GuitarOnlineApiReadinessDegraded
+              service: guitaronline-api
+              severity: critical
+            exp_annotations:
+              summary: "API readiness degraded"
+              description: "Ready success ratio is below 99% for at least 5 minutes."

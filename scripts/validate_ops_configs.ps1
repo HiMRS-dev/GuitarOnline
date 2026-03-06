@@ -38,6 +38,12 @@ try {
         throw "promtool rules validation failed"
     }
 
+    docker run --rm --entrypoint promtool -v "${repoRoot}/ops/prometheus:/etc/prometheus:ro" `
+        prom/prometheus:v3.5.0 test rules /etc/prometheus/alerts.test.yml
+    if ($LASTEXITCODE -ne 0) {
+        throw "promtool synthetic alert-threshold tests failed"
+    }
+
     docker run --rm --entrypoint amtool -v "${repoRoot}/ops/alertmanager:/etc/alertmanager:ro" `
         prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
     if ($LASTEXITCODE -ne 0) {

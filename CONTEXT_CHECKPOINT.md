@@ -72,7 +72,7 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. Alert receiver integrations (Slack/PagerDuty/email) are still baseline-level and need final ops wiring.
+3. Synthetic operational checks for critical path (`V2-03`) are not yet automated on schedule.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -92,9 +92,9 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-02`: SLO/SLI definitions and dashboard thresholds.
-2. `V2-03`: synthetic operational checks wired to alerting.
-3. `V2-04`: backup schedule + retention policy automation.
+1. `V2-03`: synthetic operational checks wired to alerting.
+2. `V2-04`: backup schedule + retention policy automation.
+3. `V2-05`: restore rehearsal workflow with RPO/RTO reporting.
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -122,6 +122,37 @@
     delivery passed with metrics delta:
     - `slack.notifications_total +1`,
     - `slack.requests_failed_total +0`.
+- `V2-02` completed (2026-03-06): SLO/SLI pack for API + DB-readiness with synthetic threshold validation.
+- implemented:
+  - Prometheus SLI recording rules in `ops/prometheus/alerts.yml`:
+    - `guitaronline:sli:error_ratio:5m`,
+    - `guitaronline:sli:availability_ratio:5m`,
+    - `guitaronline:sli:p95_latency_seconds:5m`,
+    - `guitaronline:sli:readiness_success_ratio:5m`.
+  - Alert thresholds in `ops/prometheus/alerts.yml`:
+    - `GuitarOnlineApiDown`,
+    - `GuitarOnlineApiHigh5xxRate`,
+    - `GuitarOnlineApiHighP95Latency`,
+    - `GuitarOnlineApiReadinessDegraded`.
+  - Synthetic threshold test suite:
+    - `ops/prometheus/alerts.test.yml` (`promtool test rules` scenarios for healthy and breach states).
+  - CI/ops gating updated:
+    - `.github/workflows/ci.yml` now runs `promtool test rules`,
+    - `scripts/validate_ops_configs.ps1` now runs `promtool test rules`.
+  - Dashboard SLO wiring:
+    - `ops/grafana/dashboards/guitaronline-api-overview.json` now reads SLI recording rules and includes readiness-success stat with thresholds.
+  - compose readiness signal improvement:
+    - `docker-compose.prod.yml` app healthcheck uses `/ready` (DB-aware signal).
+  - alert-noise inhibition updated for new readiness alert:
+    - `ops/alertmanager/alertmanager.yml`,
+    - `scripts/render_alertmanager_oncall_config.ps1`.
+- verification evidence:
+  - `docker run ... promtool check config /etc/prometheus/prometheus.yml` -> success.
+  - `docker run ... promtool check rules /etc/prometheus/alerts.yml` -> success.
+  - `docker run ... promtool test rules /etc/prometheus/alerts.test.yml` -> success.
+  - `docker run ... amtool check-config /etc/alertmanager/alertmanager.yml` -> success.
+  - `docker compose -f docker-compose.prod.yml config -q` -> success.
+  - `powershell -ExecutionPolicy Bypass -File scripts/validate_ops_configs.ps1` -> success.
 
 ## 12) References
 - Full historical checkpoint archive:

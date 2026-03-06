@@ -221,7 +221,7 @@ inhibit_rules:
   - source_matchers:
       - alertname="GuitarOnlineApiDown"
     target_matchers:
-      - alertname=~"GuitarOnlineApiHigh5xxRate|GuitarOnlineApiHighP95Latency"
+      - alertname=~"GuitarOnlineApiHigh5xxRate|GuitarOnlineApiHighP95Latency|GuitarOnlineApiReadinessDegraded"
     equal: ["service"]
 
 receivers:

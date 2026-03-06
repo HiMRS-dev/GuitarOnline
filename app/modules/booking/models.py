@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +23,9 @@ class Booking(BaseModelMixin, Base):
     """Lesson booking model."""
 
     __tablename__ = "bookings"
+    __table_args__ = (
+        Index("ix_bookings_slot_status", "slot_id", "status"),
+    )
 
     slot_id: Mapped[UUID] = mapped_column(
         ForeignKey("availability_slots.id", ondelete="RESTRICT"),

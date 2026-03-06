@@ -1,0 +1,54 @@
+{
+  "generated_at_utc": "2026-03-06T09:28:16+00:00",
+  "base_url": "http://localhost:8000",
+  "config": {
+    "warmup": 5,
+    "iterations": 30,
+    "teacher_query_token": "perf-baseline-28aa1ce8b4",
+    "heavy_teacher_id": "ed0f1321-bd3c-402a-bf2a-f8e5602bc6dc",
+    "slot_from_utc": "2026-03-09T00:00:00+00:00",
+    "slot_to_utc": "2026-06-21T23:59:59+00:00"
+  },
+  "benchmarks": [
+    {
+      "endpoint": "admin_teachers",
+      "path": "/api/v1/admin/teachers?q=perf-baseline-28aa1ce8b4&limit=100&offset=0",
+      "samples": 30,
+      "min_ms": 19.55,
+      "avg_ms": 33.73,
+      "p50_ms": 33.14,
+      "p95_ms": 42.58,
+      "max_ms": 80.46
+    },
+    {
+      "endpoint": "admin_slots",
+      "path": "/api/v1/admin/slots?teacher_id=ed0f1321-bd3c-402a-bf2a-f8e5602bc6dc&from_utc=2026-03-09T00%3A00%3A00%2B00%3A00&to_utc=2026-06-21T23%3A59%3A59%2B00%3A00&limit=100&offset=0",
+      "samples": 30,
+      "min_ms": 17.02,
+      "avg_ms": 31.26,
+      "p50_ms": 32.56,
+      "p95_ms": 40.29,
+      "max_ms": 43.0
+    },
+    {
+      "endpoint": "admin_kpi_overview",
+      "path": "/api/v1/admin/kpi/overview",
+      "samples": 30,
+      "min_ms": 19.01,
+      "avg_ms": 32.79,
+      "p50_ms": 33.44,
+      "p95_ms": 43.38,
+      "max_ms": 54.96
+    },
+    {
+      "endpoint": "admin_kpi_sales",
+      "path": "/api/v1/admin/kpi/sales?from_utc=2025-09-07T08%3A54%3A33%2B00%3A00&to_utc=2026-03-06T09%3A28%3A12%2B00%3A00",
+      "samples": 30,
+      "min_ms": 15.6,
+      "avg_ms": 27.1,
+      "p50_ms": 28.63,
+      "p95_ms": 35.98,
+      "max_ms": 39.31
+    }
+  ]
+}

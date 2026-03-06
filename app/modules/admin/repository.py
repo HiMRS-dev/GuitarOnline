@@ -85,12 +85,14 @@ class AdminRepository:
         """List teachers for admin scheduling and moderation flows."""
         normalized_q = q.strip() if q else None
         normalized_tag = tag.strip().lower() if tag else None
+        teacher_role_id_subquery = (
+            select(Role.id).where(Role.name == RoleEnum.TEACHER).scalar_subquery()
+        )
 
         base_stmt: Select[tuple[UUID]] = (
             select(TeacherProfile.id)
             .join(User, User.id == TeacherProfile.user_id)
-            .join(Role, Role.id == User.role_id)
-            .where(Role.name == RoleEnum.TEACHER)
+            .where(User.role_id == teacher_role_id_subquery)
         )
 
         if status is not None:
@@ -106,20 +108,21 @@ class AdminRepository:
                 ),
             )
         if normalized_tag:
-            base_stmt = base_stmt.join(
-                TeacherProfileTag,
-                TeacherProfileTag.teacher_profile_id == TeacherProfile.id,
-            ).where(func.lower(TeacherProfileTag.tag) == normalized_tag)
+            tag_exists = (
+                select(TeacherProfileTag.id)
+                .where(
+                    TeacherProfileTag.teacher_profile_id == TeacherProfile.id,
+                    func.lower(TeacherProfileTag.tag) == normalized_tag,
+                )
+                .exists()
+            )
+            base_stmt = base_stmt.where(tag_exists)
 
-        teacher_ids_stmt = base_stmt.group_by(
-            TeacherProfile.id,
-            TeacherProfile.created_at,
-        )
-        total_stmt = select(func.count()).select_from(teacher_ids_stmt.subquery())
+        total_stmt = select(func.count()).select_from(base_stmt.subquery())
         total = int((await self.session.scalar(total_stmt)) or 0)
 
         paged_ids_stmt = (
-            teacher_ids_stmt.order_by(TeacherProfile.created_at.desc(), TeacherProfile.id.desc())
+            base_stmt.order_by(TeacherProfile.created_at.desc(), TeacherProfile.id.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -620,11 +623,8 @@ class AdminRepository:
         role_counts = await self._count_users_by_role()
         booking_counts = await self._count_bookings_by_status()
         lesson_counts = await self._count_lessons_by_status()
-        payment_counts = await self._count_payments_by_status()
+        payment_snapshot = await self._get_payments_overview_snapshot()
         package_counts = await self._count_packages_by_status()
-
-        payments_succeeded_amount = await self._sum_payments_by_status(PaymentStatusEnum.SUCCEEDED)
-        payments_refunded_amount = await self._sum_payments_by_status(PaymentStatusEnum.REFUNDED)
 
         users_students = role_counts.get(RoleEnum.STUDENT, 0)
         users_teachers = role_counts.get(RoleEnum.TEACHER, 0)
@@ -642,10 +642,12 @@ class AdminRepository:
         )
         lessons_canceled = lesson_counts.get(LessonStatusEnum.CANCELED, 0)
 
-        payments_pending = payment_counts.get(PaymentStatusEnum.PENDING, 0)
-        payments_succeeded = payment_counts.get(PaymentStatusEnum.SUCCEEDED, 0)
-        payments_failed = payment_counts.get(PaymentStatusEnum.FAILED, 0)
-        payments_refunded = payment_counts.get(PaymentStatusEnum.REFUNDED, 0)
+        payments_pending = int(payment_snapshot["pending"])
+        payments_succeeded = int(payment_snapshot["succeeded"])
+        payments_failed = int(payment_snapshot["failed"])
+        payments_refunded = int(payment_snapshot["refunded"])
+        payments_succeeded_amount = Decimal(payment_snapshot["succeeded_amount"])
+        payments_refunded_amount = Decimal(payment_snapshot["refunded_amount"])
 
         packages_active = package_counts.get(PackageStatusEnum.ACTIVE, 0)
         packages_expired = package_counts.get(PackageStatusEnum.EXPIRED, 0)
@@ -704,50 +706,28 @@ class AdminRepository:
             LessonPackage.created_at <= to_utc,
         )
 
-        payments_succeeded_count = int(
-            (
-                await self.session.scalar(
-                    select(func.count(Payment.id)).where(
-                        Payment.status == PaymentStatusEnum.SUCCEEDED,
-                        *payments_window_filter,
-                    ),
-                )
-            )
-            or 0,
-        )
-        payments_refunded_count = int(
-            (
-                await self.session.scalar(
-                    select(func.count(Payment.id)).where(
-                        Payment.status == PaymentStatusEnum.REFUNDED,
-                        *payments_window_filter,
-                    ),
-                )
-            )
-            or 0,
-        )
-        payments_succeeded_amount = Decimal(
-            (
-                await self.session.scalar(
-                    select(func.coalesce(func.sum(Payment.amount), 0)).where(
-                        Payment.status == PaymentStatusEnum.SUCCEEDED,
-                        *payments_window_filter,
-                    ),
-                )
-            )
-            or 0,
-        )
-        payments_refunded_amount = Decimal(
-            (
-                await self.session.scalar(
-                    select(func.coalesce(func.sum(Payment.amount), 0)).where(
-                        Payment.status == PaymentStatusEnum.REFUNDED,
-                        *payments_window_filter,
-                    ),
-                )
-            )
-            or 0,
-        )
+        payments_aggregate_stmt = select(
+            func.count(Payment.id)
+            .filter(Payment.status == PaymentStatusEnum.SUCCEEDED)
+            .label("payments_succeeded_count"),
+            func.count(Payment.id)
+            .filter(Payment.status == PaymentStatusEnum.REFUNDED)
+            .label("payments_refunded_count"),
+            func.coalesce(
+                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.SUCCEEDED),
+                0,
+            ).label("payments_succeeded_amount"),
+            func.coalesce(
+                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
+                0,
+            ).label("payments_refunded_amount"),
+        ).where(*payments_window_filter)
+        payments_aggregate = (await self.session.execute(payments_aggregate_stmt)).one()
+
+        payments_succeeded_count = int(payments_aggregate.payments_succeeded_count or 0)
+        payments_refunded_count = int(payments_aggregate.payments_refunded_count or 0)
+        payments_succeeded_amount = Decimal(payments_aggregate.payments_succeeded_amount or 0)
+        payments_refunded_amount = Decimal(payments_aggregate.payments_refunded_amount or 0)
         payments_net_amount = payments_succeeded_amount - payments_refunded_amount
 
         packages_created_total = int(
@@ -758,15 +738,15 @@ class AdminRepository:
             )
             or 0,
         )
-        created_packages_subquery = (
-            select(LessonPackage.id).where(*packages_window_filter).subquery()
-        )
         packages_created_paid = int(
             (
                 await self.session.scalar(
-                    select(func.count(func.distinct(Payment.package_id))).where(
+                    select(func.count(func.distinct(LessonPackage.id)))
+                    .select_from(LessonPackage)
+                    .join(Payment, Payment.package_id == LessonPackage.id)
+                    .where(
                         Payment.status == PaymentStatusEnum.SUCCEEDED,
-                        Payment.package_id.in_(select(created_packages_subquery.c.id)),
+                        *packages_window_filter,
                         *payments_window_filter,
                     ),
                 )
@@ -830,6 +810,39 @@ class AdminRepository:
         stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.status == status)
         value = (await self.session.scalar(stmt)) or Decimal("0")
         return Decimal(value)
+
+    async def _get_payments_overview_snapshot(self) -> dict[str, int | Decimal]:
+        stmt = select(
+            func.count(Payment.id)
+            .filter(Payment.status == PaymentStatusEnum.PENDING)
+            .label("pending"),
+            func.count(Payment.id)
+            .filter(Payment.status == PaymentStatusEnum.SUCCEEDED)
+            .label("succeeded"),
+            func.count(Payment.id)
+            .filter(Payment.status == PaymentStatusEnum.FAILED)
+            .label("failed"),
+            func.count(Payment.id)
+            .filter(Payment.status == PaymentStatusEnum.REFUNDED)
+            .label("refunded"),
+            func.coalesce(
+                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.SUCCEEDED),
+                0,
+            ).label("succeeded_amount"),
+            func.coalesce(
+                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
+                0,
+            ).label("refunded_amount"),
+        )
+        row = (await self.session.execute(stmt)).one()
+        return {
+            "pending": int(row.pending or 0),
+            "succeeded": int(row.succeeded or 0),
+            "failed": int(row.failed or 0),
+            "refunded": int(row.refunded or 0),
+            "succeeded_amount": Decimal(row.succeeded_amount or 0),
+            "refunded_amount": Decimal(row.refunded_amount or 0),
+        }
 
     async def get_operations_overview(
         self,

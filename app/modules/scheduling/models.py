@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +21,13 @@ class AvailabilitySlot(BaseModelMixin, Base):
     """Teacher availability slot created by admin."""
 
     __tablename__ = "availability_slots"
+    __table_args__ = (
+        Index(
+            "ix_availability_slots_teacher_start_at",
+            "teacher_id",
+            "start_at",
+        ),
+    )
 
     teacher_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),

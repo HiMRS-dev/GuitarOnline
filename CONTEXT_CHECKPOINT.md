@@ -27,10 +27,10 @@
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `46ef5bb` (`ops(restore): add rehearsal workflow with rpo-rto artifact`).
+  - `b21a4c8` (`fix(ci): satisfy secret-scan in admin perf baseline`).
 - Latest GitHub Actions status for that commit:
-  - `ci` run `22755958980`: `success`.
-  - `deploy` run `22755958984`: `success`.
+  - `ci` run `22756373830`: `success`.
+  - `deploy` run `22756373823`: `success`.
 
 ## 5) Latest Validation Evidence
 - Full local suite (after stabilization):
@@ -70,7 +70,7 @@
 ## 8) Open Risks / Technical Debt
 1. External Docker registry/network reliability remains environment-dependent.
 2. `AUTH_RATE_LIMIT_BACKEND=memory` is not suitable for multi-instance production.
-3. SQL/index optimization follow-up from admin baseline (`V2-07`) is not yet implemented.
+3. Supply-chain security gates (`V2-08`) are not yet implemented.
 4. Checkpoint hygiene must remain strict:
    - append concise deltas only,
    - rotate/archive before this file exceeds ~1200 lines.
@@ -90,9 +90,9 @@
 | `V2-10` | P2 | Add role-based E2E regression scenario to release gate. | Release workflow runs critical path (`admin/teacher/student`) and blocks on failure. |
 
 ## 10) Immediate Queue (Next Iteration)
-1. `V2-07`: SQL/index optimization pass based on performance baseline.
-2. `V2-08`: supply-chain security gates (`pip-audit`, npm audit, SBOM).
-3. `V2-09`: secret/key rotation procedure with dry-run test.
+1. `V2-08`: supply-chain security gates (`pip-audit`, npm audit, SBOM).
+2. `V2-09`: secret/key rotation procedure with dry-run test.
+3. `V2-10`: role-based end-to-end regression scenario in release gate.
 4. Gate for closing iteration:
    - top three tasks merged,
    - `ci` and `deploy` green on `main`,
@@ -249,6 +249,39 @@
     - `admin_slots p95=37.12ms`,
     - `admin_kpi_overview p95=43.89ms`,
     - `admin_kpi_sales p95=44.10ms`.
+- `V2-07` completed (2026-03-06): SQL/index optimization pass based on baseline findings.
+- implemented:
+  - DB index migrations:
+    - `20260306_0017_admin_performance_indexes.py`,
+    - `20260306_0018_admin_teachers_trgm_indexes.py`.
+  - index coverage additions:
+    - `availability_slots(teacher_id, start_at)`,
+    - `bookings(slot_id, status)`,
+    - `teacher_profiles(created_at)`,
+    - `lesson_packages(created_at)`,
+    - `lesson_packages(status, created_at)`,
+    - `payments(status, created_at)`,
+    - `payments(package_id, status, created_at)`,
+    - PostgreSQL GIN trigram indexes for `teacher_profiles.display_name` and `users.email`.
+  - query-path optimizations:
+    - `list_teachers` tag filter path uses `EXISTS` (no duplicate-producing join/group-by),
+    - `get_kpi_sales` consolidates payment aggregations and paid-package conversion path,
+    - `get_kpi_overview` consolidates payment counts + amounts into one aggregate query.
+  - new probe tooling + report:
+    - `scripts/admin_perf_probe.py`,
+    - `docs/perf/admin_perf_probe_preopt_2026-03-06_run4.json`,
+    - `docs/perf/admin_perf_probe_optimized_2026-03-06_run4.json`,
+    - `docs/perf/admin_perf_optimization_2026-03-06.md`.
+- conflict handling during implementation:
+  - baseline load induced auth rate-limit pressure; used controlled retries + explicit Redis limiter resets between measurements.
+  - to ensure fair comparison, measured pre/post builds on same dataset and identical probe parameters.
+- verification evidence:
+  - `py -m poetry run ruff check ...` for changed admin/model/migration/probe files -> `All checks passed`.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed`.
+  - `py -m poetry run pytest -q tests/test_admin_teachers_list.py tests/test_admin_slots_list.py tests/test_admin_kpi_overview.py tests/test_admin_kpi_sales.py` ->
+    `11 passed`.
+  - p95 comparison (`run4` probe, same dataset):
+    - aggregate p95 average improved from `42.93ms` to `40.56ms` (`~5.5%`).
 
 ## 12) References
 - Full historical checkpoint archive:

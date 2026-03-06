@@ -79,6 +79,7 @@ Use this checklist before promoting a build to a target environment.
 - Admin-heavy endpoint baseline snapshot:
   - `python scripts/admin_perf_baseline.py`
   - verify report is updated in `docs/perf/admin_perf_baseline_2026-03-06.md`.
+  - compare against optimization report: `docs/perf/admin_perf_optimization_2026-03-06.md`.
 - Explicit health/readiness/metrics verification (do not skip):
   - `curl -fsS http://localhost:8000/health`
   - `curl -fsS http://localhost:8000/ready`

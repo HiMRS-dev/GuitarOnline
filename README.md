@@ -101,6 +101,8 @@ Production-ready modular monolith backend for an online guitar school.
   - report outputs:
     - `docs/perf/admin_perf_baseline_2026-03-06.json`,
     - `docs/perf/admin_perf_baseline_2026-03-06.md`.
+  - optimization follow-up comparison:
+    - `docs/perf/admin_perf_optimization_2026-03-06.md`.
 - Explicit ops probe verification after smoke:
   - `curl -fsS http://localhost:8000/health`
   - `curl -fsS http://localhost:8000/ready`

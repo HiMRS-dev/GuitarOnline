@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,6 +23,10 @@ class LessonPackage(BaseModelMixin, Base):
     """Student lessons package."""
 
     __tablename__ = "lesson_packages"
+    __table_args__ = (
+        Index("ix_lesson_packages_created_at", "created_at"),
+        Index("ix_lesson_packages_status_created_at", "status", "created_at"),
+    )
 
     student_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -53,6 +57,10 @@ class Payment(BaseModelMixin, Base):
     """Payment model for billing transactions."""
 
     __tablename__ = "payments"
+    __table_args__ = (
+        Index("ix_payments_status_created_at", "status", "created_at"),
+        Index("ix_payments_package_status_created_at", "package_id", "status", "created_at"),
+    )
 
     package_id: Mapped[UUID] = mapped_column(
         ForeignKey("lesson_packages.id", ondelete="CASCADE"),

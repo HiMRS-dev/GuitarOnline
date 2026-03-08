@@ -100,6 +100,7 @@ if [ ! -d ".git" ]; then
 fi
 sync_ref "${ref_name}"
 
+log "Validating compose file and app container access"
 if [ ! -f "${compose_file}" ]; then
   die "Compose file not found: ${compose_file}"
 fi
@@ -109,20 +110,26 @@ fi
 if ! docker compose -f "${compose_file}" exec -T app true >/dev/null 2>&1; then
   die "App container is not reachable via docker compose exec."
 fi
+log "App container is reachable."
 
-dry_run_arg=""
+retention_cmd=(
+  docker compose -f "${compose_file}" exec -T app python -
+  --retention-days "${retention_days}"
+  --email-prefixes "${email_prefixes}"
+)
 if [ "${dry_run}" = "true" ]; then
-  dry_run_arg="--dry-run"
+  retention_cmd+=(--dry-run)
 fi
 
 log "Running synthetic retention (ref=${ref_name}, days=${retention_days}, dry_run=${dry_run}, prefixes=${email_prefixes})"
-retention_output="$(
-  docker compose -f "${compose_file}" exec -T app python - \
-    --retention-days "${retention_days}" \
-    --email-prefixes "${email_prefixes}" \
-    ${dry_run_arg} \
-    < scripts/synthetic_ops_retention.py 2>&1
-)"
-printf '%s\n' "${retention_output}"
+retention_output_file="$(mktemp)"
+if ! "${retention_cmd[@]}" < scripts/synthetic_ops_retention.py 2>&1 | tee "${retention_output_file}"; then
+  rm -f "${retention_output_file}"
+  die "Synthetic retention command failed."
+fi
+if [ ! -s "${retention_output_file}" ]; then
+  log "Retention command produced no output."
+fi
+rm -f "${retention_output_file}"
 
 log "Synthetic retention finished successfully."

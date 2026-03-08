@@ -116,10 +116,13 @@ if [ "${dry_run}" = "true" ]; then
 fi
 
 log "Running synthetic retention (ref=${ref_name}, days=${retention_days}, dry_run=${dry_run}, prefixes=${email_prefixes})"
-docker compose -f "${compose_file}" exec -T app python - \
-  --retention-days "${retention_days}" \
-  --email-prefixes "${email_prefixes}" \
-  ${dry_run_arg} \
-  < scripts/synthetic_ops_retention.py
+retention_output="$(
+  docker compose -f "${compose_file}" exec -T app python - \
+    --retention-days "${retention_days}" \
+    --email-prefixes "${email_prefixes}" \
+    ${dry_run_arg} \
+    < scripts/synthetic_ops_retention.py 2>&1
+)"
+printf '%s\n' "${retention_output}"
 
 log "Synthetic retention finished successfully."

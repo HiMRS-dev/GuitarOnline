@@ -214,6 +214,21 @@ def _emit_failure_alert(
     _post_alerts_v2(alertmanager_url, payload, timeout_seconds)
 
 
+def _extract_slot_conflict_message(payload: dict[str, object]) -> str | None:
+    error_obj = payload.get("error")
+    if not isinstance(error_obj, dict):
+        return None
+    code = str(error_obj.get("code", "")).strip().lower()
+    message = str(error_obj.get("message", "")).strip()
+    details = error_obj.get("details")
+    details_text = json.dumps(details, sort_keys=True).lower() if isinstance(details, dict) else ""
+
+    if code in {"business_rule_violation", "conflict"}:
+        if "overlap" in message.lower() or "overlap" in details_text:
+            return message or "Slot overlaps with an existing slot"
+    return None
+
+
 def _create_slot_with_retry(
     base_url: str,
     *,
@@ -223,6 +238,7 @@ def _create_slot_with_retry(
     timeout_seconds: int,
     max_attempts: int = 8,
 ) -> dict[str, object]:
+    last_conflict_message = ""
     for attempt in range(max_attempts):
         slot_start = initial_start + timedelta(minutes=65 * attempt)
         slot_end = slot_start + timedelta(minutes=30)
@@ -230,7 +246,7 @@ def _create_slot_with_retry(
             base_url,
             "/api/v1/admin/slots",
             method="POST",
-            expected={201, 409},
+            expected={201, 409, 422},
             timeout_seconds=timeout_seconds,
             headers=_auth_headers(admin_token),
             body={
@@ -241,8 +257,16 @@ def _create_slot_with_retry(
         )
         if status == 201:
             return payload
+        conflict_message = _extract_slot_conflict_message(payload)
+        if conflict_message is None:
+            raise RuntimeError(
+                "POST /api/v1/admin/slots failed with non-retryable response "
+                f"(status={status}): {json.dumps(payload, sort_keys=True)}",
+            )
+        last_conflict_message = conflict_message
     raise RuntimeError(
-        f"Failed to create synthetic slot after {max_attempts} attempts due overlap/conflict",
+        "Failed to create synthetic slot after "
+        f"{max_attempts} attempts due overlap/conflict: {last_conflict_message}",
     )
 
 

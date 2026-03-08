@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline"
     frontend_admin_origin: Annotated[tuple[str, ...], NoDecode] = ("http://localhost:5173",)
+    kpi_excluded_email_prefixes: Annotated[tuple[str, ...], NoDecode] = ("synthetic-ops-",)
 
     booking_hold_minutes: int = 10
     booking_refund_window_hours: int = 24
@@ -101,6 +102,22 @@ class Settings(BaseSettings):
             return origins or ("http://localhost:5173",)
         raise TypeError(
             "FRONTEND_ADMIN_ORIGIN must be a comma-separated string or list",
+        )
+
+    @field_validator("kpi_excluded_email_prefixes", mode="before")
+    @classmethod
+    def parse_kpi_excluded_email_prefixes(cls, value: object) -> tuple[str, ...]:
+        """Parse KPI excluded email prefixes from env value."""
+        if value is None:
+            return ("synthetic-ops-",)
+        if isinstance(value, str):
+            prefixes = tuple(item.strip() for item in value.split(",") if item.strip())
+            return prefixes or ("synthetic-ops-",)
+        if isinstance(value, Sequence):
+            prefixes = tuple(str(item).strip() for item in value if str(item).strip())
+            return prefixes or ("synthetic-ops-",)
+        raise TypeError(
+            "KPI_EXCLUDED_EMAIL_PREFIXES must be a comma-separated string or list",
         )
 
     @model_validator(mode="after")

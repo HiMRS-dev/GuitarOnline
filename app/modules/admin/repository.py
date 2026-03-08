@@ -8,8 +8,9 @@ from uuid import UUID
 
 from sqlalchemy import Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
+from app.core.config import get_settings
 from app.core.enums import (
     BookingStatusEnum,
     LessonStatusEnum,
@@ -36,6 +37,7 @@ ACTIVE_BOOKING_STATUSES: tuple[BookingStatusEnum, ...] = (
     BookingStatusEnum.HOLD,
     BookingStatusEnum.CONFIRMED,
 )
+settings = get_settings()
 
 
 class AdminRepository:
@@ -43,6 +45,16 @@ class AdminRepository:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    @staticmethod
+    def _non_synthetic_email_filters(email_column: object) -> list[object]:
+        filters: list[object] = []
+        for prefix in settings.kpi_excluded_email_prefixes:
+            normalized = prefix.strip().lower()
+            if not normalized:
+                continue
+            filters.append(func.lower(email_column).notlike(f"{normalized}%"))
+        return filters
 
     async def create_action(
         self,
@@ -705,6 +717,7 @@ class AdminRepository:
             LessonPackage.created_at >= from_utc,
             LessonPackage.created_at <= to_utc,
         )
+        non_synthetic_package_owner_filter = self._non_synthetic_email_filters(User.email)
 
         payments_aggregate_stmt = select(
             func.count(Payment.id)
@@ -721,7 +734,10 @@ class AdminRepository:
                 func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
                 0,
             ).label("payments_refunded_amount"),
-        ).where(*payments_window_filter)
+        ).select_from(Payment).join(LessonPackage, LessonPackage.id == Payment.package_id).join(
+            User,
+            User.id == LessonPackage.student_id,
+        ).where(*payments_window_filter, *non_synthetic_package_owner_filter)
         payments_aggregate = (await self.session.execute(payments_aggregate_stmt)).one()
 
         payments_succeeded_count = int(payments_aggregate.payments_succeeded_count or 0)
@@ -733,7 +749,10 @@ class AdminRepository:
         packages_created_total = int(
             (
                 await self.session.scalar(
-                    select(func.count(LessonPackage.id)).where(*packages_window_filter),
+                    select(func.count(LessonPackage.id))
+                    .select_from(LessonPackage)
+                    .join(User, User.id == LessonPackage.student_id)
+                    .where(*packages_window_filter, *non_synthetic_package_owner_filter),
                 )
             )
             or 0,
@@ -743,11 +762,13 @@ class AdminRepository:
                 await self.session.scalar(
                     select(func.count(func.distinct(LessonPackage.id)))
                     .select_from(LessonPackage)
+                    .join(User, User.id == LessonPackage.student_id)
                     .join(Payment, Payment.package_id == LessonPackage.id)
                     .where(
                         Payment.status == PaymentStatusEnum.SUCCEEDED,
                         *packages_window_filter,
                         *payments_window_filter,
+                        *non_synthetic_package_owner_filter,
                     ),
                 )
             )
@@ -779,35 +800,70 @@ class AdminRepository:
         stmt = (
             select(Role.name, func.count(User.id))
             .join(User, User.role_id == Role.id)
+            .where(*self._non_synthetic_email_filters(User.email))
             .group_by(Role.name)
         )
         rows = (await self.session.execute(stmt)).all()
         return {role_name: int(count) for role_name, count in rows}
 
     async def _count_bookings_by_status(self) -> dict[BookingStatusEnum, int]:
-        stmt = select(Booking.status, func.count(Booking.id)).group_by(Booking.status)
+        student_user = aliased(User)
+        teacher_user = aliased(User)
+        stmt = (
+            select(Booking.status, func.count(Booking.id))
+            .join(student_user, student_user.id == Booking.student_id)
+            .join(teacher_user, teacher_user.id == Booking.teacher_id)
+            .where(*self._non_synthetic_email_filters(student_user.email))
+            .where(*self._non_synthetic_email_filters(teacher_user.email))
+            .group_by(Booking.status)
+        )
         rows = (await self.session.execute(stmt)).all()
         return {status: int(count) for status, count in rows}
 
     async def _count_lessons_by_status(self) -> dict[LessonStatusEnum, int]:
-        stmt = select(Lesson.status, func.count(Lesson.id)).group_by(Lesson.status)
+        student_user = aliased(User)
+        teacher_user = aliased(User)
+        stmt = (
+            select(Lesson.status, func.count(Lesson.id))
+            .join(student_user, student_user.id == Lesson.student_id)
+            .join(teacher_user, teacher_user.id == Lesson.teacher_id)
+            .where(*self._non_synthetic_email_filters(student_user.email))
+            .where(*self._non_synthetic_email_filters(teacher_user.email))
+            .group_by(Lesson.status)
+        )
         rows = (await self.session.execute(stmt)).all()
         return {status: int(count) for status, count in rows}
 
     async def _count_payments_by_status(self) -> dict[PaymentStatusEnum, int]:
-        stmt = select(Payment.status, func.count(Payment.id)).group_by(Payment.status)
+        stmt = (
+            select(Payment.status, func.count(Payment.id))
+            .select_from(Payment)
+            .join(LessonPackage, LessonPackage.id == Payment.package_id)
+            .join(User, User.id == LessonPackage.student_id)
+            .where(*self._non_synthetic_email_filters(User.email))
+            .group_by(Payment.status)
+        )
         rows = (await self.session.execute(stmt)).all()
         return {status: int(count) for status, count in rows}
 
     async def _count_packages_by_status(self) -> dict[PackageStatusEnum, int]:
-        stmt = select(LessonPackage.status, func.count(LessonPackage.id)).group_by(
-            LessonPackage.status,
+        stmt = (
+            select(LessonPackage.status, func.count(LessonPackage.id))
+            .join(User, User.id == LessonPackage.student_id)
+            .where(*self._non_synthetic_email_filters(User.email))
+            .group_by(LessonPackage.status)
         )
         rows = (await self.session.execute(stmt)).all()
         return {status: int(count) for status, count in rows}
 
     async def _sum_payments_by_status(self, status: PaymentStatusEnum) -> Decimal:
-        stmt = select(func.coalesce(func.sum(Payment.amount), 0)).where(Payment.status == status)
+        stmt = (
+            select(func.coalesce(func.sum(Payment.amount), 0))
+            .select_from(Payment)
+            .join(LessonPackage, LessonPackage.id == Payment.package_id)
+            .join(User, User.id == LessonPackage.student_id)
+            .where(Payment.status == status, *self._non_synthetic_email_filters(User.email))
+        )
         value = (await self.session.scalar(stmt)) or Decimal("0")
         return Decimal(value)
 
@@ -833,7 +889,10 @@ class AdminRepository:
                 func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
                 0,
             ).label("refunded_amount"),
-        )
+        ).select_from(Payment).join(LessonPackage, LessonPackage.id == Payment.package_id).join(
+            User,
+            User.id == LessonPackage.student_id,
+        ).where(*self._non_synthetic_email_filters(User.email))
         row = (await self.session.execute(stmt)).one()
         return {
             "pending": int(row.pending or 0),

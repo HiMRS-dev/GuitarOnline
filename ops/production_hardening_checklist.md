@@ -43,6 +43,8 @@ Use this checklist to move from "working deploy" to repeatable reliability.
   - confirm output includes `Synthetic ops check passed.`
 - Keep scheduled remote probe enabled:
   - `.github/workflows/synthetic-ops-check.yml` (hourly cron + manual dispatch).
+- Keep scheduled synthetic retention cleanup enabled:
+  - `.github/workflows/synthetic-ops-retention.yml` (daily at `03:45 UTC`).
 - Use maintenance silences during planned releases and expire after rollout:
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release"`
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_expire_silence.ps1 -SilenceId <id>`

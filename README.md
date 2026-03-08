@@ -127,6 +127,10 @@ Production-ready modular monolith backend for an online guitar school.
 | `REDIS_URL` | Conditionally yes | app/workers | Mandatory when `AUTH_RATE_LIMIT_BACKEND=redis`. |
 | `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` | Conditionally yes | app/workers | Must be `true` only for `memory` backend in production. |
 | `FRONTEND_ADMIN_ORIGIN` | Yes | app CORS | Allowed origins for admin frontend CORS policy. |
+| `KPI_EXCLUDED_EMAIL_PREFIXES` | No | app KPI | Comma-separated email prefixes excluded from `/api/v1/admin/kpi/*` aggregates (default: `synthetic-ops-`). |
+| `SYNTHETIC_RETENTION_DAYS` | No | ops scripts | Default retention horizon (days) for `scripts/synthetic_ops_retention.py` (default: `14`). |
+| `SYNTHETIC_RETENTION_EMAIL_PREFIXES` | No | ops scripts | Comma-separated prefixes targeted by synthetic retention cleanup (default: `synthetic-ops-`). |
+| `SYNTHETIC_RETENTION_DRY_RUN` | No | ops scripts | Default dry-run mode for synthetic retention script (`true`/`false`, default: `false`). |
 | `ADMIN_UI_API_BASE_URL` | No | admin-ui profile | Build-time API base for `web-admin` Docker profile. |
 | `ADMIN_UI_BASE_PATH` | No | admin-ui profile | Build-time base path for `web-admin` (`/admin/` by default). |
 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | No | monitoring | Defaults exist, but set explicit secure values in production. |
@@ -135,13 +139,13 @@ Production-ready modular monolith backend for an online guitar school.
 
 | Secret | Required | Workflow | Notes |
 | --- | --- | --- | --- |
-| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Target server host/IP. |
-| `DEPLOY_USER` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | SSH user. |
-| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Absolute path on target host. |
-| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | SSH authentication key. |
+| `DEPLOY_HOST` | Yes | deploy, backup-restore-verify, synthetic-ops-check, synthetic-ops-retention, backup-schedule-retention, restore-rehearsal, rollback-drill | Target server host/IP. |
+| `DEPLOY_USER` | Yes | deploy, backup-restore-verify, synthetic-ops-check, synthetic-ops-retention, backup-schedule-retention, restore-rehearsal, rollback-drill | SSH user. |
+| `DEPLOY_PATH` | Yes | deploy, backup-restore-verify, synthetic-ops-check, synthetic-ops-retention, backup-schedule-retention, restore-rehearsal, rollback-drill | Absolute path on target host. |
+| `DEPLOY_SSH_PRIVATE_KEY` | Yes | deploy, backup-restore-verify, synthetic-ops-check, synthetic-ops-retention, backup-schedule-retention, restore-rehearsal, rollback-drill | SSH authentication key. |
 | `PROD_ENV_FILE_B64` | Yes | deploy | Base64 payload used to write `${DEPLOY_PATH}/.env`. |
-| `DEPLOY_PORT` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Defaults to `22`. |
-| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify, synthetic-ops-check, backup-schedule-retention, restore-rehearsal, rollback-drill | Optional host-key pinning override. |
+| `DEPLOY_PORT` | No | deploy, backup-restore-verify, synthetic-ops-check, synthetic-ops-retention, backup-schedule-retention, restore-rehearsal, rollback-drill | Defaults to `22`. |
+| `DEPLOY_KNOWN_HOSTS` | No | deploy, backup-restore-verify, synthetic-ops-check, synthetic-ops-retention, backup-schedule-retention, restore-rehearsal, rollback-drill | Optional host-key pinning override. |
 | `AUTO_DEPLOY_ENABLED` | No | deploy | `true` enables push-triggered deploy on `main`. |
 
 ### Precedence Rules
@@ -453,6 +457,13 @@ Production-ready modular monolith backend for an online guitar school.
 - Scheduled remote execution:
   - GitHub Actions workflow: `.github/workflows/synthetic-ops-check.yml`
   - cadence: hourly (`15 * * * *`) and manual `workflow_dispatch`.
+- Synthetic data retention cleanup:
+  - local/prod-host run:
+    - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_retention.py --retention-days 14 --email-prefixes synthetic-ops-`
+  - dry-run mode:
+    - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_retention.py --retention-days 14 --email-prefixes synthetic-ops- --dry-run`
+  - scheduled remote workflow:
+    - `.github/workflows/synthetic-ops-retention.yml` (daily at `03:45 UTC`).
 - Maintenance silence baseline:
   - create temporary silence (warning by default):
     - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_create_silence.ps1 -DurationMinutes 90 -Comment "planned release window"`

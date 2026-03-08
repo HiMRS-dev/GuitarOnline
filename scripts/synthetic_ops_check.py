@@ -106,6 +106,26 @@ def _request_json(
     return status, json.loads(content.decode("utf-8"))
 
 
+def _extract_page_items(payload: dict[str, object], endpoint: str) -> list[dict[str, object]]:
+    items = payload.get("items")
+    if not isinstance(items, list):
+        raise RuntimeError(f"{endpoint} did not return paginated items list")
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _parse_datetime_utc(raw_value: object, *, field_name: str) -> datetime:
+    if not isinstance(raw_value, str):
+        raise RuntimeError(f"Expected string for {field_name}, got: {type(raw_value).__name__}")
+    normalized = raw_value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid datetime value for {field_name}: {raw_value}") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
 def _ensure_user(
     base_url: str,
     *,
@@ -241,7 +261,7 @@ def _create_slot_with_retry(
     last_conflict_message = ""
     for attempt in range(max_attempts):
         slot_start = initial_start + timedelta(minutes=65 * attempt)
-        slot_end = slot_start + timedelta(minutes=30)
+        slot_end = slot_start + timedelta(minutes=60)
         status, payload = _request_json(
             base_url,
             "/api/v1/admin/slots",
@@ -268,6 +288,87 @@ def _create_slot_with_retry(
         "Failed to create synthetic slot after "
         f"{max_attempts} attempts due overlap/conflict: {last_conflict_message}",
     )
+
+
+def _find_reusable_open_slot(
+    base_url: str,
+    *,
+    admin_token: str,
+    teacher_id: str,
+    from_utc: datetime,
+    timeout_seconds: int,
+) -> dict[str, object] | None:
+    query = urlencode(
+        {
+            "teacher_id": teacher_id,
+            "from_utc": from_utc.isoformat(),
+            "limit": 100,
+            "offset": 0,
+        },
+    )
+    _, slots_page = _request_json(
+        base_url,
+        f"/api/v1/admin/slots?{query}",
+        expected={200},
+        timeout_seconds=timeout_seconds,
+        headers=_auth_headers(admin_token),
+    )
+    now_utc = datetime.now(UTC)
+    for slot in _extract_page_items(slots_page, "/api/v1/admin/slots"):
+        if str(slot.get("slot_status", "")).strip().lower() != "open":
+            continue
+        slot_id = slot.get("slot_id")
+        if not slot_id:
+            continue
+        start_at_utc = _parse_datetime_utc(slot.get("start_at_utc"), field_name="start_at_utc")
+        if start_at_utc <= now_utc:
+            continue
+        return {"slot_id": str(slot_id)}
+    return None
+
+
+def _find_reusable_active_package(
+    base_url: str,
+    *,
+    admin_token: str,
+    student_id: str,
+    timeout_seconds: int,
+) -> dict[str, object] | None:
+    query = urlencode(
+        {
+            "student_id": student_id,
+            "status": "active",
+            "limit": 100,
+            "offset": 0,
+        },
+    )
+    _, packages_page = _request_json(
+        base_url,
+        f"/api/v1/admin/packages?{query}",
+        expected={200},
+        timeout_seconds=timeout_seconds,
+        headers=_auth_headers(admin_token),
+    )
+    now_utc = datetime.now(UTC)
+    for package in _extract_page_items(packages_page, "/api/v1/admin/packages"):
+        package_id = package.get("package_id")
+        if not package_id:
+            continue
+        try:
+            lessons_left = int(package.get("lessons_left", 0))
+            lessons_reserved = int(package.get("lessons_reserved", 0))
+        except (TypeError, ValueError):
+            continue
+        if (lessons_left - lessons_reserved) <= 0:
+            continue
+        expires_at_utc = _parse_datetime_utc(
+            package.get("expires_at_utc"),
+            field_name="expires_at_utc",
+        )
+        if expires_at_utc <= now_utc:
+            continue
+        return {"package_id": str(package_id)}
+    return None
 
 
 def run_synthetic_ops_check(
@@ -360,35 +461,55 @@ def run_synthetic_ops_check(
         raise SyntheticCheckError("admin_teachers_list", str(exc)) from exc
 
     try:
+        base_slot_start = datetime.now(UTC).replace(second=0, microsecond=0) + timedelta(hours=30)
         run_id = uuid4().hex
         jitter_minutes = int(run_id[:4], 16) % 720
-        initial_slot_start = (
-            datetime.now(UTC)
-            .replace(second=0, microsecond=0)
-            + timedelta(hours=30, minutes=jitter_minutes)
-        )
-        created_slot = _create_slot_with_retry(
+
+        slot_for_booking = _find_reusable_open_slot(
             base_url,
             admin_token=admin.access_token,
             teacher_id=teacher.user_id,
-            initial_start=initial_slot_start,
+            from_utc=base_slot_start,
             timeout_seconds=timeout_seconds,
         )
-        _, created_package = _request_json(
+        if slot_for_booking is None:
+            slot_for_booking = _create_slot_with_retry(
+                base_url,
+                admin_token=admin.access_token,
+                teacher_id=teacher.user_id,
+                initial_start=base_slot_start + timedelta(minutes=jitter_minutes),
+                timeout_seconds=timeout_seconds,
+            )
+            print(f"Created new synthetic slot: {slot_for_booking['slot_id']}")
+        else:
+            print(f"Reusing synthetic slot: {slot_for_booking['slot_id']}")
+
+        package_for_booking = _find_reusable_active_package(
             base_url,
-            "/api/v1/admin/packages",
-            method="POST",
-            expected={201},
+            admin_token=admin.access_token,
+            student_id=student.user_id,
             timeout_seconds=timeout_seconds,
-            headers=_auth_headers(admin.access_token),
-            body={
-                "student_id": student.user_id,
-                "lessons_total": 1,
-                "expires_at_utc": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
-                "price_amount": "10.00",
-                "price_currency": "USD",
-            },
         )
+        if package_for_booking is None:
+            _, package_for_booking = _request_json(
+                base_url,
+                "/api/v1/admin/packages",
+                method="POST",
+                expected={201},
+                timeout_seconds=timeout_seconds,
+                headers=_auth_headers(admin.access_token),
+                body={
+                    "student_id": student.user_id,
+                    "lessons_total": 1,
+                    "expires_at_utc": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+                    "price_amount": "10.00",
+                    "price_currency": "USD",
+                },
+            )
+            print(f"Created new synthetic package: {package_for_booking['package_id']}")
+        else:
+            print(f"Reusing synthetic package: {package_for_booking['package_id']}")
+
         _, hold_booking = _request_json(
             base_url,
             "/api/v1/booking/hold",
@@ -397,8 +518,8 @@ def run_synthetic_ops_check(
             timeout_seconds=timeout_seconds,
             headers=_auth_headers(student.access_token),
             body={
-                "slot_id": str(created_slot["slot_id"]),
-                "package_id": str(created_package["package_id"]),
+                "slot_id": str(slot_for_booking["slot_id"]),
+                "package_id": str(package_for_booking["package_id"]),
             },
         )
         _, confirmed = _request_json(

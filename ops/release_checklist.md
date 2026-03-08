@@ -134,6 +134,9 @@ Use this checklist before promoting a build to a target environment.
 - Synthetic critical-path ops probe:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_check.py`
   - expected output includes `Synthetic ops check passed.`
+- Synthetic data retention (optional weekly/manual hygiene):
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/synthetic_ops_retention.py --retention-days 14 --email-prefixes synthetic-ops- --dry-run`
+  - scheduled automation workflow: `.github/workflows/synthetic-ops-retention.yml` (daily).
 - Background worker:
   - `docker compose -f docker-compose.prod.yml logs --tail=100 outbox-worker` has no crash loop.
 

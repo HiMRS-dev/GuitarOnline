@@ -92,3 +92,16 @@ def test_debug_release_alias_is_parsed_as_false() -> None:
 def test_debug_development_alias_is_parsed_as_true() -> None:
     settings = Settings(_env_file=None, debug="development")
     assert settings.debug is True
+
+
+def test_kpi_excluded_email_prefixes_default_value() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.kpi_excluded_email_prefixes == ("synthetic-ops-",)
+
+
+def test_kpi_excluded_email_prefixes_parsing_from_comma_string() -> None:
+    settings = Settings(
+        _env_file=None,
+        kpi_excluded_email_prefixes="synthetic-ops-,deploy-smoke-",
+    )
+    assert settings.kpi_excluded_email_prefixes == ("synthetic-ops-", "deploy-smoke-")

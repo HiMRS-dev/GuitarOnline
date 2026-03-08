@@ -1,0 +1,120 @@
+name: synthetic-ops-retention
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to use for remote retention runner script"
+        required: true
+        default: "main"
+      retention_days:
+        description: "Delete synthetic records older than N days"
+        required: true
+        default: "14"
+      email_prefixes:
+        description: "Comma-separated synthetic email prefixes to cleanup"
+        required: true
+        default: "synthetic-ops-"
+      dry_run:
+        description: "Show candidates without deleting"
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: "Type RETENTION to confirm"
+        required: true
+  schedule:
+    - cron: "45 3 * * *"
+
+jobs:
+  retention:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'RETENTION' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
+      SYNTHETIC_RETENTION_DAYS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.retention_days || '14' }}
+      SYNTHETIC_RETENTION_EMAIL_PREFIXES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.email_prefixes || 'synthetic-ops-' }}
+      SYNTHETIC_RETENTION_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF_NAME }}
+
+      - name: Print synthetic-retention context
+        run: |
+          set -euo pipefail
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Ref for runner script: ${REF_NAME}"
+          echo "Retention days: ${SYNTHETIC_RETENTION_DAYS}"
+          echo "Email prefixes: ${SYNTHETIC_RETENTION_EMAIL_PREFIXES}"
+          echo "Dry run: ${SYNTHETIC_RETENTION_DRY_RUN}"
+
+      - name: Validate required secrets and inputs
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+          if ! [[ "${SYNTHETIC_RETENTION_DAYS}" =~ ^[0-9]+$ ]] || [ "${SYNTHETIC_RETENTION_DAYS}" -lt 1 ]; then
+            echo "::error::SYNTHETIC_RETENTION_DAYS must be a positive integer. Got: ${SYNTHETIC_RETENTION_DAYS}"
+            exit 1
+          fi
+          if [ -z "${SYNTHETIC_RETENTION_EMAIL_PREFIXES}" ]; then
+            echo "::error::SYNTHETIC_RETENTION_EMAIL_PREFIXES must not be empty."
+            exit 1
+          fi
+          if [[ "${SYNTHETIC_RETENTION_DRY_RUN}" != "true" && "${SYNTHETIC_RETENTION_DRY_RUN}" != "false" ]]; then
+            echo "::error::SYNTHETIC_RETENTION_DRY_RUN must be true or false. Got: ${SYNTHETIC_RETENTION_DRY_RUN}"
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Run synthetic retention on target host
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          ssh -p "${port}" "${remote}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' SYNTHETIC_RETENTION_DAYS='${SYNTHETIC_RETENTION_DAYS}' SYNTHETIC_RETENTION_EMAIL_PREFIXES='${SYNTHETIC_RETENTION_EMAIL_PREFIXES}' SYNTHETIC_RETENTION_DRY_RUN='${SYNTHETIC_RETENTION_DRY_RUN}' bash -s" \
+            < scripts/run_synthetic_retention_remote.sh

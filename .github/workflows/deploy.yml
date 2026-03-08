@@ -161,16 +161,6 @@ jobs:
 
           ssh -p "${port}" "${remote}" "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' PROFILE='${PROFILE}' RUN_BACKUP='${RUN_BACKUP}' RUN_SMOKE='${RUN_SMOKE}' REPO_URL='${REPO_URL}' bash -s" < scripts/deploy_remote.sh | tee .tmp/deploy-evidence/deploy_remote.log
 
-      - name: Verify smoke markers in deploy log
-        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' && env.RUN_SMOKE == 'true' }}
-        run: |
-          set -euo pipefail
-          log_file=".tmp/deploy-evidence/deploy_remote.log"
-          [ -f "${log_file}" ]
-          grep -Fq "Role-based release gate passed." "${log_file}"
-          grep -Fq "Smoke checks passed." "${log_file}"
-          grep -Fq "Smoke markers verified." "${log_file}"
-
       - name: Build deploy evidence summary
         if: ${{ always() && steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |

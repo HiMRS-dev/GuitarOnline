@@ -107,7 +107,7 @@ fi
 if [ ! -f "scripts/synthetic_ops_retention.py" ]; then
   die "Retention script not found in repository checkout: scripts/synthetic_ops_retention.py"
 fi
-if ! docker compose -f "${compose_file}" exec -T app true >/dev/null 2>&1; then
+if ! docker compose -f "${compose_file}" exec -T app true </dev/null >/dev/null 2>&1; then
   die "App container is not reachable via docker compose exec."
 fi
 log "App container is reachable."

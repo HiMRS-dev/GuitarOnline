@@ -92,5 +92,5 @@ jobs:
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           port="${DEPLOY_PORT:-22}"
           ssh -p "${port}" "${remote}" \
-            "DEPLOY_PATH='${DEPLOY_PATH}' SYNTHETIC_OPS_ALERT_ON_FAILURE='${SYNTHETIC_OPS_ALERT_ON_FAILURE}' bash -s" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' SYNTHETIC_OPS_ALERT_ON_FAILURE='${SYNTHETIC_OPS_ALERT_ON_FAILURE}' bash -s" \
             < scripts/run_synthetic_ops_remote.sh

@@ -1,4 +1,4 @@
-# GuitarOnline Context Checkpoint (Condensed 2026-03-06)
+# GuitarOnline Context Checkpoint (Condensed 2026-03-09)
 
 ## 1) Purpose
 - Single operational source of truth for current project state and next execution steps.
@@ -24,16 +24,26 @@
 - Admin UI (`web-admin`) is integrated, including optional production profile (`admin-ui`).
 - v1.2 hardening plan (`V2-01`..`V2-10`) is fully implemented.
 
-## 4) Current Verified State (2026-03-06)
+## 4) Current Verified State (2026-03-09)
 - Branch:
   - `main`.
 - Latest fully green commit on `main` before current step:
-  - `53412f9` (`fix(checkpoint): avoid secret-scan trigger in v2-09 notes`).
-- Latest GitHub Actions status for that commit:
-  - `ci` run `22759301521`: `success`.
-  - `deploy` run `22759301514`: `success`.
+  - `a7e6353` (`Sync synthetic ops runner to ref and execute check script from stdin`).
+- Latest GitHub Actions status for that commit and follow-up checks:
+  - `ci` run `22832985074`: `success`.
+  - `synthetic-ops-check` run `22833075023`: `success`.
+  - `synthetic-ops-retention` run `22832998541`: `success` (`dry_run=true`).
 
 ## 5) Latest Validation Evidence
+- Synthetic ops reliability/hygiene verification after March fixes:
+  - `synthetic-ops-check` run `22833075023` -> `success`
+    (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
+  - `synthetic-ops-check` run `22832986353` -> `success`.
+  - `synthetic-ops-retention` run `22832998541` (`dry_run=true`) -> `success`,
+    `Candidates: bookings=0, slots=0, packages=0`.
+  - `synthetic-ops-retention` run `22832868444` (`dry_run=false`) -> `success`,
+    `Deleted: bookings=0, slots=0, packages=0`.
+  - `ci` run `22832985074` -> `success`.
 - Full local suite (after stabilization):
   - `py -m poetry run pytest -q` -> `237 passed, 5 skipped`.
 - Targeted integration retest after CI parity fix:
@@ -68,6 +78,14 @@
     - rollback drill blocks `APP_ENV=production/prod` by default unless explicitly overridden (`allow_production=true` for manual dispatch).
 11. Supply-chain dead-end resolved for `CVE-2024-23342`:
     - replaced `python-jose` with `PyJWT`, removed transitive `ecdsa`, and cleared temporary `pip-audit` ignore entry.
+12. Synthetic booking-flow slot overlap flakiness fixed:
+    - `scripts/synthetic_ops_check.py` now retries overlap `422` responses and reuses existing open synthetic slot/package before creating new data.
+13. Synthetic slot duration aligned to 60 minutes:
+    - synthetic slot creation in `scripts/synthetic_ops_check.py` now matches target booking duration and reduces schedule fragmentation.
+14. Synthetic retention runner truncation fixed:
+    - `scripts/run_synthetic_retention_remote.sh` no longer lets precheck `docker compose exec` consume runner stdin (`</dev/null` guard) and now emits visible execution checkpoints.
+15. Synthetic-check runner stale-ref drift fixed:
+    - `scripts/run_synthetic_ops_remote.sh` + `.github/workflows/synthetic-ops-check.yml` now sync remote repo to `REF_NAME` and execute `synthetic_ops_check.py` from current checkout via stdin.
 
 ## 7) Operations Quick Start
 1. Start stack:
@@ -515,6 +533,38 @@
   - `python scripts/deploy_smoke_check.py` -> success with required markers:
     - `Role-based release gate passed.`,
     - `Smoke checks passed.`.
+- ops follow-up (2026-03-09): synthetic ops hygiene and remote-runner reliability hardening.
+- implemented:
+  - synthetic booking flow stability and data reuse:
+    - `scripts/synthetic_ops_check.py` now retries overlap `422` conflicts,
+    - synthetic slot duration set to `60` minutes,
+    - reuses open synthetic slots and active synthetic packages before creating new records.
+  - KPI hygiene for synthetic users:
+    - `app/core/config.py` + `app/modules/admin/repository.py` now exclude synthetic email prefixes from admin KPI aggregates.
+  - automated synthetic retention:
+    - `scripts/synthetic_ops_retention.py`,
+    - `scripts/run_synthetic_retention_remote.sh`,
+    - `.github/workflows/synthetic-ops-retention.yml` (daily cron + manual dispatch).
+  - synthetic-check remote execution hardening:
+    - `scripts/run_synthetic_ops_remote.sh` + `.github/workflows/synthetic-ops-check.yml` now sync remote checkout to `REF_NAME` and run script from current checkout via stdin.
+- conflict handling during implementation:
+  - remote runner precheck consumed stdin and truncated script execution; fixed by redirecting precheck stdin from `/dev/null`.
+  - retention/check output visibility in Actions logs improved with explicit runner checkpoints and streamed command output.
+- verification evidence:
+  - `synthetic-ops-check` run `22832955385` -> failed with slot-overlap `422` before remote-ref sync hardening.
+  - `synthetic-ops-check` run `22832986353` -> `success`.
+  - `synthetic-ops-check` run `22833075023` -> `success`.
+  - `synthetic-ops-retention` run `22832998541` (`dry_run=true`) -> `success`, `Candidates: bookings=0, slots=0, packages=0`.
+  - `synthetic-ops-retention` run `22832868444` (`dry_run=false`) -> `success`, `Deleted: bookings=0, slots=0, packages=0`.
+  - `ci` run `22832985074` -> `success`.
+- commit trail:
+  - `c82b014` (`Fix synthetic ops slot retry for overlap 422 responses`).
+  - `77f51ee` (`Add synthetic data retention workflow and KPI exclusion filters`).
+  - `fc343c9` (`Run synthetic retention from stdin and sync remote ref`).
+  - `8d9cc0c` (`Print retention script output in remote runner`).
+  - `6b66ec2` (`Stream retention output and add remote checkpoints`).
+  - `6239c70` (`Prevent compose precheck from consuming remote script stdin`).
+  - `a7e6353` (`Sync synthetic ops runner to ref and execute check script from stdin`).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |

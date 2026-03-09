@@ -237,7 +237,7 @@ class LessonsService:
         if booking.package_id is None:
             raise ConflictException("Lesson booking has no package")
 
-        package = await self.billing_repository.get_package_by_id(booking.package_id)
+        package = await self.billing_repository.get_package_by_id_for_update(booking.package_id)
         if package is None:
             raise NotFoundException("Package not found")
         if package.lessons_reserved <= 0:

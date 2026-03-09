@@ -45,6 +45,11 @@ class BillingRepository:
         stmt = select(LessonPackage).where(LessonPackage.id == package_id)
         return await self.session.scalar(stmt)
 
+    async def get_package_by_id_for_update(self, package_id: UUID) -> LessonPackage | None:
+        """Load package row with write lock for lesson-balance mutations."""
+        stmt = select(LessonPackage).where(LessonPackage.id == package_id).with_for_update()
+        return await self.session.scalar(stmt)
+
     async def list_packages_by_student(
         self,
         student_id: UUID,

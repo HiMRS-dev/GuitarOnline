@@ -70,6 +70,9 @@ class FakeBillingRepository:
     async def get_package_by_id(self, package_id: UUID) -> FakePackage | None:
         return self.packages.get(package_id)
 
+    async def get_package_by_id_for_update(self, package_id: UUID) -> FakePackage | None:
+        return self.packages.get(package_id)
+
     async def consume_reserved_package_lesson(self, package: FakePackage) -> None:
         if package.lessons_reserved <= 0:
             return

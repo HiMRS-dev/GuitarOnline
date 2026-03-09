@@ -7,6 +7,8 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from app.core.enums import RoleEnum
+
 
 class Settings(BaseSettings):
     """Runtime application settings."""
@@ -48,6 +50,7 @@ class Settings(BaseSettings):
     auth_rate_limit_refresh_requests: int = 20
     auth_rate_limit_backend: Literal["memory", "redis"] = "memory"
     auth_rate_limit_redis_namespace: str = "auth_rate_limit"
+    auth_register_allowed_roles: Annotated[tuple[RoleEnum, ...], NoDecode] = (RoleEnum.STUDENT,)
     auth_rate_limit_trusted_proxy_ips: Annotated[tuple[str, ...], NoDecode] = (
         "127.0.0.1",
         "::1",
@@ -87,6 +90,40 @@ class Settings(BaseSettings):
         raise TypeError(
             "AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS must be a comma-separated string or list",
         )
+
+    @field_validator("auth_register_allowed_roles", mode="before")
+    @classmethod
+    def parse_auth_register_allowed_roles(cls, value: object) -> tuple[RoleEnum, ...]:
+        """Parse self-registration role allowlist from env value."""
+        if value is None:
+            return (RoleEnum.STUDENT,)
+
+        if isinstance(value, str):
+            raw_items: Sequence[object] = value.split(",")
+        elif isinstance(value, Sequence):
+            raw_items = value
+        else:
+            raise TypeError(
+                "AUTH_REGISTER_ALLOWED_ROLES must be a comma-separated string or list",
+            )
+
+        roles: list[RoleEnum] = []
+        for raw_item in raw_items:
+            normalized = str(raw_item).strip().lower()
+            if not normalized:
+                continue
+            try:
+                role = RoleEnum(normalized)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Unsupported role in AUTH_REGISTER_ALLOWED_ROLES: {raw_item}",
+                ) from exc
+            roles.append(role)
+
+        if not roles:
+            raise ValueError("AUTH_REGISTER_ALLOWED_ROLES must include at least one role")
+
+        return tuple(roles)
 
     @field_validator("frontend_admin_origin", mode="before")
     @classmethod

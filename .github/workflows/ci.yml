@@ -84,6 +84,30 @@ jobs:
       - name: Run lint checks
         run: poetry run ruff check app tests
 
+  web-admin:
+    runs-on: ubuntu-latest
+    needs: [secret-scan, supply-chain]
+    defaults:
+      run:
+        working-directory: web-admin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run frontend lint
+        run: npm run lint
+
+      - name: Run frontend build
+        run: npm run build
+
   ops-config:
     runs-on: ubuntu-latest
     needs: [lint]
@@ -116,7 +140,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [lint, ops-config]
+    needs: [lint, ops-config, web-admin]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,7 +161,7 @@ jobs:
 
   migration:
     runs-on: ubuntu-latest
-    needs: [lint, ops-config]
+    needs: [lint, ops-config, web-admin]
     services:
       postgres:
         image: postgres:16
@@ -213,6 +237,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline
           AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS: 127.0.0.1,::1
+          AUTH_REGISTER_ALLOWED_ROLES: student,teacher,admin
         run: |
           poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 > api.log 2>&1 &
           echo $! > api.pid

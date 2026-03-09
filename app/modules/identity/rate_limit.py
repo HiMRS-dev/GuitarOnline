@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from ipaddress import ip_address, ip_network
 
 from fastapi import Request
 
@@ -32,11 +33,35 @@ def _resolve_client_ip(request: Request, *, trusted_proxy_ips: set[str]) -> str:
     forwarded_for = request.headers.get("x-forwarded-for")
     if not forwarded_for:
         return client_ip
-    if client_ip not in trusted_proxy_ips:
+    if not _is_trusted_proxy(client_ip, trusted_proxy_ips):
         return client_ip
 
     forwarded_client = forwarded_for.split(",")[0].strip()
     return forwarded_client or client_ip
+
+
+def _is_trusted_proxy(client_ip: str, trusted_proxy_ips: set[str]) -> bool:
+    if client_ip in trusted_proxy_ips:
+        return True
+
+    try:
+        client_address = ip_address(client_ip)
+    except ValueError:
+        return False
+
+    for trusted_proxy in trusted_proxy_ips:
+        candidate = trusted_proxy.strip()
+        if not candidate or candidate == client_ip:
+            continue
+        try:
+            if "/" in candidate:
+                if client_address in ip_network(candidate, strict=False):
+                    return True
+            elif client_address == ip_address(candidate):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 async def _enforce_limit(request: Request, *, action: str, max_requests: int) -> None:

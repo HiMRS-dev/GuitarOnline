@@ -12,6 +12,13 @@ type ApiRequestOptions = {
 };
 
 type ErrorPayload = {
+  error?: {
+    message?: string;
+    details?: {
+      detail?: string | { msg?: string };
+      errors?: Array<{ message?: string }>;
+    } | null;
+  };
   detail?: string | { msg?: string };
 };
 
@@ -25,6 +32,29 @@ export class ApiClientError extends Error {
 }
 
 function normalizeBackendError(status: number, payload: ErrorPayload | null): ApiClientError {
+  const backendMessage = payload?.error?.message;
+  if (typeof backendMessage === "string" && backendMessage.trim()) {
+    return new ApiClientError(backendMessage, status);
+  }
+
+  const backendDetail = payload?.error?.details?.detail;
+  if (typeof backendDetail === "string" && backendDetail.trim()) {
+    return new ApiClientError(backendDetail, status);
+  }
+  if (
+    backendDetail &&
+    typeof backendDetail === "object" &&
+    typeof backendDetail.msg === "string" &&
+    backendDetail.msg.trim()
+  ) {
+    return new ApiClientError(backendDetail.msg, status);
+  }
+
+  const firstValidationMessage = payload?.error?.details?.errors?.[0]?.message;
+  if (typeof firstValidationMessage === "string" && firstValidationMessage.trim()) {
+    return new ApiClientError(firstValidationMessage, status);
+  }
+
   const detail = payload?.detail;
   if (typeof detail === "string" && detail.trim()) {
     return new ApiClientError(detail, status);

@@ -43,12 +43,22 @@ class FakeAuditRepository:
     async def list_pending_outbox(self, limit: int) -> list[FakeOutboxEvent]:
         return [event for event in self.events if event.status == OutboxStatusEnum.PENDING][:limit]
 
+    async def claim_pending_outbox(self, limit: int) -> list[FakeOutboxEvent]:
+        return await self.list_pending_outbox(limit)
+
     async def list_failed_outbox(self, limit: int, max_retries: int) -> list[FakeOutboxEvent]:
         return [
             event
             for event in self.events
             if event.status == OutboxStatusEnum.FAILED and event.retries < max_retries
         ][:limit]
+
+    async def claim_retryable_failed_outbox(
+        self,
+        limit: int,
+        max_retries: int,
+    ) -> list[FakeOutboxEvent]:
+        return await self.list_failed_outbox(limit, max_retries)
 
     async def mark_outbox_pending(self, event: FakeOutboxEvent) -> FakeOutboxEvent:
         event.status = OutboxStatusEnum.PENDING
@@ -82,6 +92,7 @@ class FakeAuditRepository:
 class FakeNotificationsRepository:
     def __init__(self) -> None:
         self.notifications: list[FakeNotification] = []
+        self.by_idempotency_key: dict[str, FakeNotification] = {}
 
     async def create_notification(
         self,
@@ -90,6 +101,7 @@ class FakeNotificationsRepository:
         template_key: str | None,
         title: str,
         body: str,
+        idempotency_key: str | None = None,
     ) -> FakeNotification:
         notification = FakeNotification(
             id=uuid4(),
@@ -100,7 +112,12 @@ class FakeNotificationsRepository:
             body=body,
         )
         self.notifications.append(notification)
+        if idempotency_key is not None:
+            self.by_idempotency_key[idempotency_key] = notification
         return notification
+
+    async def get_by_idempotency_key(self, idempotency_key: str) -> FakeNotification | None:
+        return self.by_idempotency_key.get(idempotency_key)
 
     async def set_status(
         self,
@@ -379,3 +396,42 @@ async def test_worker_marks_event_failed_when_payload_invalid() -> None:
     assert event.status == OutboxStatusEnum.FAILED
     assert event.retries == 1
     assert notifications_repo.notifications == []
+
+
+@pytest.mark.asyncio
+async def test_worker_skips_delivery_for_already_sent_idempotent_notification() -> None:
+    student_id = uuid4()
+    event = FakeOutboxEvent(
+        id=uuid4(),
+        event_type="booking.confirmed",
+        payload={"student_id": str(student_id), "booking_id": str(uuid4())},
+    )
+    delivery_client = FakeDeliveryClient()
+    worker, _, notifications_repo = make_worker(
+        [event],
+        delivery_client=delivery_client,
+        now=datetime(2026, 2, 23, 12, 0, tzinfo=UTC),
+    )
+
+    idempotency_key = (
+        f"outbox:{event.id}:{student_id}:email:"
+        f"{NotificationTemplateKeyEnum.BOOKING_CONFIRMED.value}:0"
+    )
+    existing = FakeNotification(
+        id=uuid4(),
+        user_id=student_id,
+        channel="email",
+        template_key=NotificationTemplateKeyEnum.BOOKING_CONFIRMED.value,
+        title="Booking confirmed",
+        body="cached",
+        status=NotificationStatusEnum.SENT,
+        sent_at=datetime(2026, 2, 23, 11, 59, tzinfo=UTC),
+    )
+    notifications_repo.notifications.append(existing)
+    notifications_repo.by_idempotency_key[idempotency_key] = existing
+
+    stats = await worker.run_once()
+
+    assert stats == {"requeued": 0, "processed": 1, "failed": 0, "dispatched": 0}
+    assert event.status == OutboxStatusEnum.PROCESSED
+    assert delivery_client.messages == []

@@ -48,6 +48,16 @@ class BookingRepository:
         )
         return await self.session.scalar(stmt)
 
+    async def get_booking_by_id_for_update(self, booking_id: UUID) -> Booking | None:
+        """Load booking row with write lock for status transitions."""
+        stmt = (
+            select(Booking)
+            .options(selectinload(Booking.slot), selectinload(Booking.package))
+            .where(Booking.id == booking_id)
+            .with_for_update()
+        )
+        return await self.session.scalar(stmt)
+
     async def list_bookings(
         self,
         user_id: UUID,

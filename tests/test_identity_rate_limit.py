@@ -148,3 +148,77 @@ async def test_refresh_rate_limit_is_independent_from_login(
 
     # Refresh has separate key and should pass once.
     await identity_rate_limit.enforce_refresh_rate_limit(request)
+
+
+@pytest.mark.asyncio
+async def test_login_rate_limit_uses_forwarded_ip_when_proxy_in_trusted_cidr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    class CapturingLimiter:
+        async def acquire(
+            self,
+            key: str,
+            *,
+            max_requests: int,
+            window_seconds: int,
+        ) -> tuple[bool, int]:
+            captured["key"] = key
+            captured["max_requests"] = str(max_requests)
+            captured["window_seconds"] = str(window_seconds)
+            return True, 0
+
+    settings = SimpleNamespace(
+        auth_rate_limit_window_seconds=120,
+        auth_rate_limit_register_requests=5,
+        auth_rate_limit_login_requests=7,
+        auth_rate_limit_refresh_requests=20,
+        auth_rate_limit_trusted_proxy_ips=("172.16.0.0/12",),
+    )
+    monkeypatch.setattr(identity_rate_limit, "get_rate_limiter", lambda: CapturingLimiter())
+    monkeypatch.setattr(identity_rate_limit, "get_settings", lambda: settings)
+
+    request = _make_request(client_ip="172.18.0.10", x_forwarded_for="2.2.2.2, 3.3.3.3")
+    await identity_rate_limit.enforce_login_rate_limit(request)
+
+    assert captured["key"] == "identity:login:2.2.2.2"
+    assert captured["max_requests"] == "7"
+    assert captured["window_seconds"] == "120"
+
+
+@pytest.mark.asyncio
+async def test_login_rate_limit_ignores_invalid_trusted_proxy_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    class CapturingLimiter:
+        async def acquire(
+            self,
+            key: str,
+            *,
+            max_requests: int,
+            window_seconds: int,
+        ) -> tuple[bool, int]:
+            captured["key"] = key
+            captured["max_requests"] = str(max_requests)
+            captured["window_seconds"] = str(window_seconds)
+            return True, 0
+
+    settings = SimpleNamespace(
+        auth_rate_limit_window_seconds=120,
+        auth_rate_limit_register_requests=5,
+        auth_rate_limit_login_requests=7,
+        auth_rate_limit_refresh_requests=20,
+        auth_rate_limit_trusted_proxy_ips=("not-an-ip",),
+    )
+    monkeypatch.setattr(identity_rate_limit, "get_rate_limiter", lambda: CapturingLimiter())
+    monkeypatch.setattr(identity_rate_limit, "get_settings", lambda: settings)
+
+    request = _make_request(client_ip="172.18.0.10", x_forwarded_for="2.2.2.2, 3.3.3.3")
+    await identity_rate_limit.enforce_login_rate_limit(request)
+
+    assert captured["key"] == "identity:login:172.18.0.10"
+    assert captured["max_requests"] == "7"
+    assert captured["window_seconds"] == "120"

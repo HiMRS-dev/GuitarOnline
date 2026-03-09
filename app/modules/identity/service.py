@@ -47,6 +47,10 @@ class IdentityService:
         if existing_user is not None:
             raise ConflictException("User with this email already exists")
 
+        allowed_roles = set(get_settings().auth_register_allowed_roles)
+        if payload.role not in allowed_roles:
+            raise UnauthorizedException("Self-registration is disabled for requested role")
+
         role = await self.repository.get_role_by_name(payload.role)
         if role is None:
             raise NotFoundException("Role not found")

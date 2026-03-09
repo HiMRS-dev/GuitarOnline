@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,6 +26,15 @@ class LessonPackage(BaseModelMixin, Base):
     __table_args__ = (
         Index("ix_lesson_packages_created_at", "created_at"),
         Index("ix_lesson_packages_status_created_at", "status", "created_at"),
+        CheckConstraint("lessons_total > 0", name="lessons_total_positive"),
+        CheckConstraint("lessons_left >= 0", name="lessons_left_non_negative"),
+        CheckConstraint("lessons_reserved >= 0", name="lessons_reserved_non_negative"),
+        CheckConstraint("lessons_left <= lessons_total", name="lessons_left_lte_total"),
+        CheckConstraint("lessons_reserved <= lessons_total", name="lessons_reserved_lte_total"),
+        CheckConstraint(
+            "lessons_left + lessons_reserved <= lessons_total",
+            name="lessons_balance_lte_total",
+        ),
     )
 
     student_id: Mapped[UUID] = mapped_column(

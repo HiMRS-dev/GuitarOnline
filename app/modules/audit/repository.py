@@ -73,6 +73,17 @@ class AuditRepository:
         )
         return (await self.session.scalars(stmt)).all()
 
+    async def claim_pending_outbox(self, limit: int) -> list[OutboxEvent]:
+        """Claim pending outbox rows for worker processing in current transaction."""
+        stmt = (
+            select(OutboxEvent)
+            .where(OutboxEvent.status == OutboxStatusEnum.PENDING)
+            .order_by(OutboxEvent.occurred_at.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        return (await self.session.scalars(stmt)).all()
+
     async def list_failed_outbox(self, limit: int, max_retries: int) -> list[OutboxEvent]:
         stmt = (
             select(OutboxEvent)
@@ -82,6 +93,24 @@ class AuditRepository:
             )
             .order_by(OutboxEvent.updated_at.asc())
             .limit(limit)
+        )
+        return (await self.session.scalars(stmt)).all()
+
+    async def claim_retryable_failed_outbox(
+        self,
+        limit: int,
+        max_retries: int,
+    ) -> list[OutboxEvent]:
+        """Claim retryable failed outbox rows for worker requeue in current transaction."""
+        stmt = (
+            select(OutboxEvent)
+            .where(
+                OutboxEvent.status == OutboxStatusEnum.FAILED,
+                OutboxEvent.retries < max_retries,
+            )
+            .order_by(OutboxEvent.updated_at.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
         )
         return (await self.session.scalars(stmt)).all()
 

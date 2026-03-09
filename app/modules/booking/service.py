@@ -186,7 +186,7 @@ class BookingService:
 
     async def confirm_booking(self, booking_id: UUID, actor: User) -> Booking:
         """Confirm held booking and consume lesson from package."""
-        booking = await self.booking_repository.get_booking_by_id(booking_id)
+        booking = await self.booking_repository.get_booking_by_id_for_update(booking_id)
         if booking is None:
             raise NotFoundException("Booking not found")
 
@@ -210,7 +210,7 @@ class BookingService:
         if booking.package_id is None:
             raise BusinessRuleException("Booking package is required")
 
-        package = await self.billing_repository.get_package_by_id(booking.package_id)
+        package = await self.billing_repository.get_package_by_id_for_update(booking.package_id)
         if package is None:
             raise NotFoundException("Package not found")
 
@@ -248,7 +248,7 @@ class BookingService:
         actor: User,
     ) -> Booking:
         """Cancel booking with refund rules based on 24h window."""
-        booking = await self.booking_repository.get_booking_by_id(booking_id)
+        booking = await self.booking_repository.get_booking_by_id_for_update(booking_id)
         if booking is None:
             raise NotFoundException("Booking not found")
 
@@ -263,7 +263,7 @@ class BookingService:
         refund_returned = False
 
         if booking.status == BookingStatusEnum.CONFIRMED and booking.package_id is not None:
-            package = await self.billing_repository.get_package_by_id(booking.package_id)
+            package = await self.billing_repository.get_package_by_id_for_update(booking.package_id)
             if package is None:
                 raise NotFoundException("Package not found")
 
@@ -327,7 +327,7 @@ class BookingService:
         actor: User,
     ) -> Booking:
         """Reschedule as cancel + new booking."""
-        old_booking = await self.booking_repository.get_booking_by_id(booking_id)
+        old_booking = await self.booking_repository.get_booking_by_id_for_update(booking_id)
         if old_booking is None:
             raise NotFoundException("Booking not found")
         self._validate_actor_access(old_booking, actor)

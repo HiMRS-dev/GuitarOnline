@@ -589,3 +589,34 @@
   - `ops/secret_rotation_execution_report_2026-03-11.md`
 - Rollback drill workflow:
   - `.github/workflows/rollback-drill.yml`
+
+## 14) Architecture Remediation Status (Update 2026-03-09)
+| ID | Priority | Status | Implemented | Remaining |
+| --- | --- | --- | --- | --- |
+| `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`. | Add protected admin flow for `teacher/admin` provisioning (invite/approve) and run migration audit for already elevated accounts. |
+| `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added package balance DB check constraints + Alembic migration `20260309_0019`. | Add dedicated concurrent integration test: two confirms on different slots using same package. |
+| `AR-03` | HIGH | Partial | Outbox worker now claims pending/retryable events via `FOR UPDATE SKIP LOCKED`; added notification idempotency key derived from outbox event + recipient + template + index. | Move worker transaction boundary to commit per event (or equivalent durable step boundary) to reduce post-send/pre-commit duplication window. |
+| `AR-04` | HIGH | Partial | Trusted proxy matching now supports CIDR in identity rate-limit resolver; proxy compose profile now sets trusted proxy CIDR defaults for reverse-proxy mode. | Add explicit production runbook documentation for proxy/rate-limit configuration and validation procedure. |
+| `AR-05` | MEDIUM | Open | — | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
+| `AR-06` | MEDIUM | Open | — | Reduce exposed ops surface in compose: close internal service ports, remove unsafe default creds fallback, enforce TLS/HSTS path. |
+| `AR-07` | MEDIUM | Open | — | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
+| `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | — |
+| `AR-09` | MEDIUM | Partial | CI now includes dedicated `web-admin` job (`npm install`, `npm run lint`, `npm run build`) and gates backend test/migration jobs on it. | Add frontend smoke e2e checks in CI/release gate. |
+
+## 15) Remaining Prioritized Queue
+1. `P0` `AR-01`: implement protected `teacher/admin` provisioning flow (invite/approve), then run and store elevated-account audit report.
+2. `P0` `AR-03`: switch outbox worker to per-event commit boundary (or equivalent exactly-once-safe handoff contract).
+3. `P1` `AR-02`: add concurrent confirm integration test for shared package race scenario and keep it in CI.
+4. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
+5. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
+6. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
+7. `P2` `AR-07`: migrate token handling away from `localStorage`.
+8. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+
+## 16) Validation Snapshot For This Update
+- Local environment constraints:
+  - `poetry`, `pytest`, and `node` are not installed in current shell, so full runtime/unit/frontend test execution was not possible from this workstation.
+- Completed validation in this update:
+  - Python syntax verification via `python -m compileall` for all changed backend/tests/migration files.
+  - Compose config validation for proxy profile:
+    - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config -q` -> success.

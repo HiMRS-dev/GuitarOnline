@@ -107,6 +107,9 @@ class FakeBookingRepository:
     async def get_booking_by_id(self, booking_id: UUID) -> FakeBooking | None:
         return self._bookings.get(booking_id)
 
+    async def get_booking_by_id_for_update(self, booking_id: UUID) -> FakeBooking | None:
+        return self._bookings.get(booking_id)
+
     async def save(self, booking: FakeBooking) -> FakeBooking:
         self._bookings[booking.id] = booking
         return booking
@@ -158,6 +161,9 @@ class FakeBillingRepository:
         self.consume_reserved_calls = 0
 
     async def get_package_by_id(self, package_id: UUID) -> FakePackage | None:
+        return self._packages.get(package_id)
+
+    async def get_package_by_id_for_update(self, package_id: UUID) -> FakePackage | None:
         return self._packages.get(package_id)
 
     async def reserve_package_lesson(self, package: FakePackage) -> None:

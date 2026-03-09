@@ -64,18 +64,32 @@ class NotificationsOutboxWorker:
         stats = {"requeued": 0, "processed": 0, "failed": 0, "dispatched": 0}
         stats["requeued"] = await self._requeue_retryable_failed_events()
 
-        events = await self.audit_repository.list_pending_outbox(limit=self.batch_size)
+        events = await self.audit_repository.claim_pending_outbox(limit=self.batch_size)
         for event in events:
             try:
                 messages = await self._build_messages(event)
-                for message in messages:
-                    notification = await self.notifications_repository.create_notification(
-                        user_id=message.user_id,
-                        channel=message.channel,
-                        template_key=message.template_key,
-                        title=message.title,
-                        body=message.body,
+                for message_index, message in enumerate(messages):
+                    idempotency_key = self._build_notification_idempotency_key(
+                        event=event,
+                        message_index=message_index,
+                        message=message,
                     )
+                    notification = await self.notifications_repository.get_by_idempotency_key(
+                        idempotency_key,
+                    )
+                    if notification is None:
+                        notification = await self.notifications_repository.create_notification(
+                            user_id=message.user_id,
+                            channel=message.channel,
+                            template_key=message.template_key,
+                            title=message.title,
+                            body=message.body,
+                            idempotency_key=idempotency_key,
+                        )
+
+                    if notification.status == NotificationStatusEnum.SENT:
+                        continue
+
                     delivery_message = DeliveryMessage(
                         notification_id=notification.id,
                         user_id=message.user_id,
@@ -138,7 +152,7 @@ class NotificationsOutboxWorker:
 
     async def _requeue_retryable_failed_events(self) -> int:
         now = self.now_provider()
-        failed_events = await self.audit_repository.list_failed_outbox(
+        failed_events = await self.audit_repository.claim_retryable_failed_outbox(
             limit=self.batch_size,
             max_retries=self.max_retries,
         )
@@ -157,6 +171,18 @@ class NotificationsOutboxWorker:
         )
         last_attempt_at = event.updated_at or event.occurred_at
         return now >= last_attempt_at + timedelta(seconds=backoff_seconds)
+
+    @staticmethod
+    def _build_notification_idempotency_key(
+        *,
+        event: OutboxEvent,
+        message_index: int,
+        message: NotificationMessage,
+    ) -> str:
+        template_key = message.template_key or "none"
+        return (
+            f"outbox:{event.id}:{message.user_id}:{message.channel}:{template_key}:{message_index}"
+        )[:191]
 
     def _build_booking_template_contexts(
         self,

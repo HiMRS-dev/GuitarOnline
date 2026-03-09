@@ -27,14 +27,25 @@
 ## 4) Current Verified State (2026-03-09)
 - Branch:
   - `main`.
-- Latest fully green commit on `main` before current step:
-  - `a7e6353` (`Sync synthetic ops runner to ref and execute check script from stdin`).
-- Latest GitHub Actions status for that commit and follow-up checks:
-  - `ci` run `22832985074`: `success`.
-  - `synthetic-ops-check` run `22833075023`: `success`.
-  - `synthetic-ops-retention` run `22832998541`: `success` (`dry_run=true`).
+- Latest CI status:
+  - `ci` run `22834159254`: `failure` (`integration` job only).
+  - `integration` job `66227542417` failed on `POST /api/v1/booking/{id}/confirm` with DB `CheckViolationError`:
+    `ck_lesson_packages_ck_lesson_packages_lessons_balance_lte_total`.
+- Root cause:
+  - check constraint introduced in migration `20260309_0019`
+    (`lessons_left + lessons_reserved <= lessons_total`) conflicts with package semantics
+    where `lessons_reserved` is a subset of `lessons_left`.
+- Hotfix prepared in current branch state:
+  - model constraint changed to `lessons_reserved <= lessons_left`
+    in `app/modules/billing/models.py`.
+  - forward migration added:
+    `alembic/versions/20260309_0020_fix_lesson_package_reserved_constraint.py`.
 
 ## 5) Latest Validation Evidence
+- CI failure evidence (GitHub Actions logs):
+  - `gh run view 22834159254 --job 66227542417 --log`
+    shows repeated `sqlalchemy.exc.IntegrityError` / `asyncpg.exceptions.CheckViolationError`
+    from `booking/service.py` line with `reserve_package_lesson(...)`.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -50,6 +61,11 @@
   - `py -m poetry run pytest -q tests/test_booking_billing_integration.py` -> `6 passed, 4 skipped`.
 - Lint check for integration file:
   - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed`.
+- Local regression after hotfix (`2026-03-09`):
+  - `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_lessons_complete.py tests/test_billing_payment_rules.py`
+    -> `48 passed`.
+  - `py -m poetry run pytest -q tests/test_booking_billing_integration.py`
+    -> `10 skipped` (local API/DB integration stack was not running in this shell).
 - Smoke and probes on running stack:
   - `python scripts/deploy_smoke_check.py` ->
     `Role-based release gate passed.` then `Smoke checks passed.`
@@ -594,13 +610,13 @@
 | ID | Priority | Status | Implemented | Remaining |
 | --- | --- | --- | --- | --- |
 | `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`. | Add protected admin flow for `teacher/admin` provisioning (invite/approve) and run migration audit for already elevated accounts. |
-| `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added package balance DB check constraints + Alembic migration `20260309_0019`. | Add dedicated concurrent integration test: two confirms on different slots using same package. |
+| `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`) after CI integration failure on `20260309_0019`. | Add dedicated concurrent integration test: two confirms on different slots using same package; re-run full CI to confirm green after `0020`. |
 | `AR-03` | HIGH | Partial | Outbox worker now claims pending/retryable events via `FOR UPDATE SKIP LOCKED`; added notification idempotency key derived from outbox event + recipient + template + index. | Move worker transaction boundary to commit per event (or equivalent durable step boundary) to reduce post-send/pre-commit duplication window. |
 | `AR-04` | HIGH | Partial | Trusted proxy matching now supports CIDR in identity rate-limit resolver; proxy compose profile now sets trusted proxy CIDR defaults for reverse-proxy mode. | Add explicit production runbook documentation for proxy/rate-limit configuration and validation procedure. |
-| `AR-05` | MEDIUM | Open | — | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
-| `AR-06` | MEDIUM | Open | — | Reduce exposed ops surface in compose: close internal service ports, remove unsafe default creds fallback, enforce TLS/HSTS path. |
-| `AR-07` | MEDIUM | Open | — | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
-| `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | — |
+| `AR-05` | MEDIUM | Open | N/A | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
+| `AR-06` | MEDIUM | Open | N/A | Reduce exposed ops surface in compose: close internal service ports, remove unsafe default creds fallback, enforce TLS/HSTS path. |
+| `AR-07` | MEDIUM | Open | N/A | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
+| `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | N/A |
 | `AR-09` | MEDIUM | Partial | CI now includes dedicated `web-admin` job (`npm install`, `npm run lint`, `npm run build`) and gates backend test/migration jobs on it. | Add frontend smoke e2e checks in CI/release gate. |
 
 ## 15) Remaining Prioritized Queue
@@ -614,9 +630,14 @@
 8. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
-- Local environment constraints:
-  - `poetry`, `pytest`, and `node` are not installed in current shell, so full runtime/unit/frontend test execution was not possible from this workstation.
 - Completed validation in this update:
-  - Python syntax verification via `python -m compileall` for all changed backend/tests/migration files.
-  - Compose config validation for proxy profile:
-    - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config -q` -> success.
+  - CI failure triage:
+    - `gh run list --workflow ci.yml --limit 5`
+    - `gh run view 22834159254 --job 66227542417 --log`
+  - Local backend regression checks:
+    - `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_lessons_complete.py tests/test_billing_payment_rules.py`
+      -> `48 passed`.
+  - Integration suite command execution:
+    - `py -m poetry run pytest -q tests/test_booking_billing_integration.py`
+      -> `10 skipped` (integration stack absent in local shell).
+

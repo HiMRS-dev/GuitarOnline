@@ -32,8 +32,8 @@ class LessonPackage(BaseModelMixin, Base):
         CheckConstraint("lessons_left <= lessons_total", name="lessons_left_lte_total"),
         CheckConstraint("lessons_reserved <= lessons_total", name="lessons_reserved_lte_total"),
         CheckConstraint(
-            "lessons_left + lessons_reserved <= lessons_total",
-            name="lessons_balance_lte_total",
+            "lessons_reserved <= lessons_left",
+            name="lessons_reserved_lte_left",
         ),
     )
 

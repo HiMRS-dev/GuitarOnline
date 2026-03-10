@@ -39,3 +39,13 @@ def test_grafana_credentials_require_explicit_env_values() -> None:
         "GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}"
         in prod_compose
     )
+
+
+def test_deploy_script_fails_closed_on_missing_grafana_credentials() -> None:
+    deploy_script = Path("scripts/deploy_remote.sh").read_text(encoding="utf-8")
+
+    assert "validate_grafana_admin_env()" in deploy_script
+    assert "Set both GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD." in deploy_script
+    assert "append_env_override" not in deploy_script
+    assert "JWT_SECRET" not in deploy_script
+    assert "SECRET_KEY" not in deploy_script

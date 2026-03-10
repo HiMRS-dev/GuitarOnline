@@ -1017,7 +1017,7 @@
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |
 | `AR-05` | MEDIUM | Done | Added strict `AppEnvEnum` (`development`, `test`, `staging`, `production`) and made `Settings.app_env` required (`Field(...)`) so startup fails fast when `APP_ENV` is missing/invalid; normalized legacy aliases (`dev/testing/stage/prod`) to canonical values to prevent deploy drift; security gating now compares enum and production controls trigger only for canonical `production`; CI test/migration/integration steps now set explicit `APP_ENV=development`. | N/A |
-| `AR-06` | MEDIUM | Done | Hardened ingress/ops surface: proxy profile now closes host exposure for app + monitoring ports (`8000`, `9090`, `9093`, `3000`), enforces HTTPS with `80 -> 443` redirect and HSTS in `ops/nginx/default.conf`, and requires mounted TLS assets (`tls.crt`/`tls.key`); removed Grafana `admin/admin` compose fallback by requiring explicit `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`; deploy preflight validates proxy TLS assets and auto-provisions missing legacy Grafana env keys from existing app secret to keep deploy pipeline compatible. | N/A |
+| `AR-06` | MEDIUM | Done | Hardened ingress/ops surface: proxy profile now closes host exposure for app + monitoring ports (`8000`, `9090`, `9093`, `3000`), enforces HTTPS with `80 -> 443` redirect and HSTS in `ops/nginx/default.conf`, and requires mounted TLS assets (`tls.crt`/`tls.key`); removed Grafana `admin/admin` compose fallback by requiring explicit `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`; deploy preflight validates proxy TLS assets and fails closed when `GRAFANA_ADMIN_*` are missing (no app-secret reuse and no `.env` auto-mutation). | N/A |
 | `AR-07` | MEDIUM | Done | Replaced frontend auth token persistence with cookie-refresh + in-memory access sessions (`portal` and `web-admin`); backend login/refresh now sets/rotates `HttpOnly` refresh cookie and new `POST /identity/auth/logout` revokes/clears refresh token; added baseline security headers and route-aware CSP middleware (docs/openapi excluded). | N/A |
 | `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | N/A |
 | `AR-09` | MEDIUM | Done | Added Playwright smoke e2e harness for `web-admin` (`playwright.config.ts`, `e2e/admin-smoke.spec.ts`, npm script `test:smoke:e2e`); CI `web-admin` job now runs browser install + smoke e2e gate; deploy workflow now executes web-admin smoke e2e gate before remote deployment starts. | N/A |
@@ -1035,6 +1035,7 @@
    - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
    - completed `2026-03-10`: reduced `ops-config` env-file parity drift by switching CI job to shared validator `scripts/validate_ops_configs.ps1`.
    - completed `2026-03-10`: reduced secret-scan false positives via context-aware allowlist tuning in `scripts/secret_guard.py` + regression tests (`tests/test_secret_guard.py`).
+   - completed `2026-03-10`: hardened deploy preflight to require explicit `GRAFANA_ADMIN_USER` + `GRAFANA_ADMIN_PASSWORD` in target `.env` (removed `.env` auto-append and removed `JWT_SECRET`/`SECRET_KEY` fallback reuse).
    - in progress `2026-03-10`: monitor secret-scan signal quality and adjust heuristics only when new false-positive patterns are evidenced.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 
@@ -1055,6 +1056,11 @@
       - `synthetic-ops-check` latest scheduled run `22887703269` -> `success`.
       - `synthetic-ops-retention` latest scheduled run `22887942123` -> `success`.
       - `restore-rehearsal` latest scheduled run before cadence switch `22839205066` -> `failure` (weekly cadence conflict now removed by daily schedule update).
+  - OPS-01 deploy-preflight fail-closed hardening validation:
+    - `py -m poetry run ruff check tests/test_proxy_rate_limit_config.py` -> `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py` -> `5 passed`.
+    - `py -m poetry run pytest -q tests/test_ci_ops_config_workflow.py tests/test_web_admin_smoke_gate_assets.py tests/test_ops_schedule_cadence.py` -> `7 passed`.
+    - `scripts/deploy_remote.sh` no longer mutates `.env` for Grafana credentials and no longer reuses `JWT_SECRET`/`SECRET_KEY` as monitoring secret fallback.
   - OPS-01 verification chain runs (`workflow_dispatch`, `main`):
     - historical failed chain (before final hardening):
       - `backup-schedule-retention` run `22883213068` (`success`),

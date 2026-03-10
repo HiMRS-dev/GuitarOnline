@@ -60,7 +60,7 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 - Keep scheduled backup retention workflow enabled:
   - `.github/workflows/backup-schedule-retention.yml` (daily at `02:30 UTC`).
 - Keep restore rehearsal workflow enabled and review latest RPO/RTO artifact:
-  - `.github/workflows/restore-rehearsal.yml` (weekly at `03:20 UTC`).
+  - `.github/workflows/restore-rehearsal.yml` (daily at `03:20 UTC`).
 - Keep monthly rollback drill workflow enabled and review latest report artifact:
   - `.github/workflows/rollback-drill.yml` (first Monday at `04:10 UTC`).
   - keep default guard (`allow_production=false`) and run on non-production target.

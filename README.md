@@ -544,7 +544,7 @@ Production-ready modular monolith backend for an online guitar school.
     - `${DEPLOY_PATH}/backups/scheduled/weekly`.
 - Restore rehearsal workflow with RPO/RTO artifact:
   - `.github/workflows/restore-rehearsal.yml`
-  - schedule: every Monday at `03:20 UTC`,
+  - schedule: daily at `03:20 UTC`,
   - can also run manually via `workflow_dispatch` (`confirm=RESTORE`),
   - default source: latest file from `${DEPLOY_PATH}/backups/scheduled/daily`,
   - optional manual override: `backup_file` input,

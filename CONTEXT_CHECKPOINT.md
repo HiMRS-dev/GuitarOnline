@@ -1,4 +1,4 @@
-# GuitarOnline Context Checkpoint (Condensed 2026-03-09)
+# GuitarOnline Context Checkpoint (Condensed 2026-03-10)
 
 ## 1) Purpose
 - Single operational source of truth for current project state and next execution steps.
@@ -1017,6 +1017,9 @@
    - completed `2026-03-10`: harden diagnostics in `.github/workflows/restore-rehearsal.yml` and `.github/workflows/rollback-drill.yml` (capture stdout+stderr, avoid silent `grep` exits, print explicit parse/precheck errors).
    - completed `2026-03-10`: enforce restore/rollback backup preflight consistency with `scripts/run_restore_rehearsal_remote.sh` and `scripts/run_backup_schedule_remote.sh`.
    - completed `2026-03-10`: rerun verification chain on `main` @ `c7ac8c0` is green (`22883983026` success -> `22883993503` success -> `22884013826` success) with rollback report artifact.
+   - completed `2026-03-10`: resolved cadence conflict for long-cycle acceptance by changing `.github/workflows/restore-rehearsal.yml` schedule from weekly to daily (`20 3 * * *`), aligned with requirement of 7 consecutive daily green scheduled runs.
+   - completed `2026-03-10`: synchronized docs to new restore cadence in `README.md` and `ops/production_hardening_checklist.md`.
+   - completed `2026-03-10`: added schedule guardrail tests in `tests/test_ops_schedule_cadence.py` (restore=daily, synthetic-retention=daily, synthetic-check=hourly).
    - in progress `2026-03-10`: continue accumulating scheduled-run streak evidence toward acceptance criterion (7 consecutive days for scheduled synthetic/restore plus >=1 successful rollback drill artifact already achieved).
    - completed `2026-03-10`: concurrent regression coverage for booking/package invariant race validated by green `ci` run `22884453747` (includes passing `integration` job).
    - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
@@ -1030,6 +1033,18 @@
   - Workflow YAML parse check:
     - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/backup-schedule-retention.yml','.github/workflows/restore-rehearsal.yml','.github/workflows/rollback-drill.yml')]; print('workflow-yaml-parse: ok')"`
       -> `workflow-yaml-parse: ok`.
+  - OPS-01 cadence-alignment validation:
+    - `py -m poetry run ruff check tests/test_ops_schedule_cadence.py` -> `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_ops_schedule_cadence.py tests/test_ci_ops_config_workflow.py tests/test_web_admin_smoke_gate_assets.py` -> `7 passed`.
+    - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/restore-rehearsal.yml','.github/workflows/synthetic-ops-check.yml','.github/workflows/synthetic-ops-retention.yml')]; print('workflow-yaml-parse: ok')"` -> `workflow-yaml-parse: ok`.
+    - workflow_dispatch stability probe on `main` @ `6197487`:
+      - `restore-rehearsal` run `22887909751` -> `success`.
+      - `synthetic-ops-check` run `22887923231` -> `success`.
+      - `synthetic-ops-retention` run `22887923222` -> `success`.
+    - scheduled-history snapshot:
+      - `synthetic-ops-check` latest scheduled run `22887703269` -> `success`.
+      - `synthetic-ops-retention` latest scheduled run `22887942123` -> `success`.
+      - `restore-rehearsal` latest scheduled run before cadence switch `22839205066` -> `failure` (weekly cadence conflict now removed by daily schedule update).
   - OPS-01 verification chain runs (`workflow_dispatch`, `main`):
     - historical failed chain (before final hardening):
       - `backup-schedule-retention` run `22883213068` (`success`),

@@ -85,13 +85,15 @@
     - `scripts/deploy_remote.sh` now auto-provisions missing `GRAFANA_ADMIN_*` from existing app secret (no `admin/admin` fallback),
     - `deploy` run `22885444883` -> `success`,
     - `ci` run `22885444892` -> `success` (all jobs green, including `test`, `migration`, `integration`).
-- AR-07 token/session model hardening (`2026-03-10`, local validation before push):
+- AR-07 token/session model hardening (`2026-03-10`, `push`, `main` @ `a8c89541ae69525298334f1930b12bb3b279e332`):
   - backend now sets/rotates `HttpOnly` refresh cookie on login/refresh and revokes+clears it on `POST /api/v1/identity/auth/logout`,
   - frontend auth flows (`portal` + `web-admin`) now use cookie-based refresh + in-memory access token (no auth token persistence in `localStorage`),
   - security headers middleware added (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, route-aware CSP with `/docs`/`/redoc`/`/openapi*` exception).
   - `py -m poetry run ruff check app/core/config.py app/main.py app/modules/identity/router.py app/modules/identity/service.py tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py tests/test_security_surface.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py tests/test_portal_page.py` -> `42 passed`.
   - `node -v` -> `CommandNotFoundException` in current shell (cannot run local `web-admin` lint/build here).
+  - `deploy` run `22886142964` -> `success`.
+  - `ci` run `22886142960` -> `success` (all jobs green, including `web-admin`, `test`, `migration`, `integration`).
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -868,6 +870,8 @@
 - verification evidence:
   - `py -m poetry run ruff check app/core/config.py app/main.py app/modules/identity/router.py app/modules/identity/service.py tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py tests/test_security_surface.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py tests/test_portal_page.py` -> `42 passed`.
+  - `deploy` run `22886142964` (`main`, push `a8c8954`) -> `success`.
+  - `ci` run `22886142960` (`main`, push `a8c8954`) -> `success` (all jobs green, including `web-admin`, `test`, `migration`, and `integration`).
   - added regression tests:
     - `tests/test_identity_refresh_cookie.py`,
     - `tests/test_security_headers.py`.
@@ -993,6 +997,8 @@
       `All checks passed!`.
     - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py tests/test_security_surface.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py tests/test_portal_page.py` ->
       `42 passed in 1.61s`.
+    - `deploy` run `22886142964` (`main`, push `a8c8954`) -> `success`.
+    - `ci` run `22886142960` (`main`, push `a8c8954`) -> `success` (all jobs green, including `web-admin`, `test`, `migration`, `integration`).
     - `node -v` -> failed (`CommandNotFoundException`; local `web-admin` lint/build unavailable in this shell).
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

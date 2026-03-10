@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
 import app.main as main_module
+from app.modules.admin.schemas import AdminProvisionedUserRead
 from app.modules.identity.rate_limit import (
     enforce_login_rate_limit,
     enforce_refresh_rate_limit,
@@ -62,3 +63,12 @@ def test_identity_response_models_are_minimized() -> None:
     for field_name in forbidden_fields:
         assert field_name not in UserRead.model_fields
         assert field_name not in TokenPair.model_fields
+
+
+def test_admin_provision_response_model_is_minimized() -> None:
+    provision_route = _route("/api/v1/admin/users/provision", "POST")
+    assert provision_route.response_model is AdminProvisionedUserRead
+
+    forbidden_fields = {"password", "password_hash", "role_id", "secret_key"}
+    for field_name in forbidden_fields:
+        assert field_name not in AdminProvisionedUserRead.model_fields

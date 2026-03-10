@@ -19,6 +19,7 @@ from app.core.enums import (
     SlotStatusEnum,
     TeacherStatusEnum,
 )
+from app.core.security import hash_password
 from app.modules.admin.models import AdminAction
 from app.modules.admin.repository import AdminRepository
 from app.modules.admin.schemas import (
@@ -29,11 +30,13 @@ from app.modules.admin.schemas import (
     AdminNotificationListItemRead,
     AdminOperationsOverviewRead,
     AdminPackageListItemRead,
+    AdminProvisionedUserRead,
     AdminSlotBlockRead,
     AdminSlotListItemRead,
     AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
+    AdminUserProvisionRequest,
 )
 from app.modules.identity.models import User
 from app.modules.notifications.templates import normalize_template_key
@@ -217,6 +220,61 @@ class AdminService:
         if item is None:
             raise NotFoundException("Teacher profile not found")
         return AdminTeacherDetailRead.model_validate(item)
+
+    async def provision_user(
+        self,
+        actor: User,
+        *,
+        payload: AdminUserProvisionRequest,
+    ) -> AdminProvisionedUserRead:
+        """Provision elevated user role via admin-only flow."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can provision users")
+
+        existing_user = await self.repository.get_user_by_email(payload.email)
+        if existing_user is not None:
+            raise ConflictException("User with this email already exists")
+
+        role = await self.repository.get_role_by_name(payload.role)
+        if role is None:
+            raise NotFoundException("Role not found")
+
+        teacher_profile_payload: dict[str, object] | None = None
+        if payload.teacher_profile is not None:
+            teacher_profile_payload = payload.teacher_profile.model_dump()
+
+        provisioned_user = await self.repository.create_provisioned_user(
+            email=payload.email,
+            password_hash=hash_password(payload.password),
+            timezone=payload.timezone,
+            role_id=role.id,
+            role_name=payload.role,
+            teacher_profile=teacher_profile_payload,
+            admin_id=actor.id,
+        )
+
+        profile = provisioned_user.teacher_profile
+        teacher_profile = None
+        if profile is not None:
+            teacher_profile = {
+                "profile_id": profile.id,
+                "display_name": profile.display_name,
+                "status": profile.status,
+                "verified": profile.is_approved,
+            }
+
+        return AdminProvisionedUserRead.model_validate(
+            {
+                "user_id": provisioned_user.id,
+                "email": provisioned_user.email,
+                "timezone": provisioned_user.timezone,
+                "role": provisioned_user.role.name,
+                "is_active": provisioned_user.is_active,
+                "created_at_utc": provisioned_user.created_at,
+                "updated_at_utc": provisioned_user.updated_at,
+                "teacher_profile": teacher_profile,
+            },
+        )
 
     async def list_slots(
         self,

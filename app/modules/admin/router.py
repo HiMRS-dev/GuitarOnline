@@ -27,6 +27,7 @@ from app.modules.admin.schemas import (
     AdminPackageCreateRead,
     AdminPackageCreateRequest,
     AdminPackageListItemRead,
+    AdminProvisionedUserRead,
     AdminSlotBlockRead,
     AdminSlotBlockRequest,
     AdminSlotBulkCreateRead,
@@ -37,6 +38,7 @@ from app.modules.admin.schemas import (
     AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
+    AdminUserProvisionRequest,
 )
 from app.modules.admin.service import AdminService, get_admin_service
 from app.modules.billing.schemas import PackageCreateAdmin
@@ -127,6 +129,20 @@ async def disable_admin_teacher(
 ) -> AdminTeacherDetailRead:
     """Disable teacher profile from admin panel."""
     return await service.disable_teacher(current_user, teacher_id=teacher_id)
+
+
+@router.post(
+    "/users/provision",
+    response_model=AdminProvisionedUserRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def provision_admin_user(
+    payload: AdminUserProvisionRequest,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminProvisionedUserRead:
+    """Provision teacher/admin accounts through protected admin workflow."""
+    return await service.provision_user(current_user, payload=payload)
 
 
 @router.post("/slots", response_model=AdminSlotCreateRead, status_code=status.HTTP_201_CREATED)

@@ -75,6 +75,87 @@ class AdminRepository:
         await self.session.flush()
         return action_obj
 
+    async def get_role_by_name(self, role_name: RoleEnum) -> Role | None:
+        """Resolve role row by enum name."""
+        stmt = select(Role).where(Role.name == role_name)
+        return await self.session.scalar(stmt)
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        """Return user by email with role/profile relationships preloaded."""
+        stmt = (
+            select(User)
+            .where(User.email == email)
+            .options(
+                selectinload(User.role),
+                selectinload(User.teacher_profile),
+            )
+        )
+        return await self.session.scalar(stmt)
+
+    async def create_provisioned_user(
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        timezone: str,
+        role_id: UUID,
+        role_name: RoleEnum,
+        teacher_profile: dict[str, object] | None,
+        admin_id: UUID,
+    ) -> User:
+        """Create privileged user and optional teacher profile with audit trail."""
+        user = User(
+            email=email,
+            password_hash=password_hash,
+            timezone=timezone,
+            role_id=role_id,
+        )
+        self.session.add(user)
+        await self.session.flush()
+
+        profile: TeacherProfile | None = None
+        if role_name == RoleEnum.TEACHER:
+            profile_payload = teacher_profile or {}
+            profile = TeacherProfile(
+                user_id=user.id,
+                display_name=str(profile_payload.get("display_name", "")),
+                bio=str(profile_payload.get("bio", "")),
+                experience_years=int(profile_payload.get("experience_years", 0)),
+                status=TeacherStatusEnum.PENDING,
+                is_approved=False,
+            )
+            self.session.add(profile)
+            await self.session.flush()
+
+        self.session.add(
+            AuditLog(
+                actor_id=admin_id,
+                action="admin.user.provision",
+                entity_type="user",
+                entity_id=str(user.id),
+                payload={
+                    "email": user.email,
+                    "role": str(role_name),
+                    "teacher_profile_id": str(profile.id) if profile is not None else None,
+                    "teacher_profile_created": profile is not None,
+                },
+            ),
+        )
+        await self.session.flush()
+
+        stmt = (
+            select(User)
+            .where(User.id == user.id)
+            .options(
+                selectinload(User.role),
+                selectinload(User.teacher_profile),
+            )
+        )
+        created_user = await self.session.scalar(stmt)
+        if created_user is None:
+            return user
+        return created_user
+
     async def list_actions(self, limit: int, offset: int) -> tuple[list[AdminAction], int]:
         base_stmt: Select[tuple[AdminAction]] = select(AdminAction)
         count_stmt = select(func.count()).select_from(base_stmt.subquery())

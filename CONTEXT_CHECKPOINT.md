@@ -657,6 +657,31 @@
   - `gh workflow run rollback-drill.yml -f ref=main -f target_ref=main -f backup_file= -f allow_production=false -f confirm=ROLLBACK` -> run `22884013826` (`success`).
 - commit trail:
   - `c7ac8c0` (`Harden workflow marker parsing and rollback remote execution`).
+- architecture follow-up (2026-03-10): `AR-01` protected elevated-role provisioning flow (teacher/admin) implemented.
+- implemented:
+  - admin-only provisioning endpoint:
+    - `POST /api/v1/admin/users/provision` in `app/modules/admin/router.py`,
+    - request/response contracts in `app/modules/admin/schemas.py`:
+      - `AdminUserProvisionRequest`,
+      - `AdminProvisionedUserRead`.
+  - service orchestration in `app/modules/admin/service.py`:
+    - explicit admin-role gate,
+    - duplicate-email conflict handling,
+    - role existence validation,
+    - password hashing before persistence.
+  - repository persistence in `app/modules/admin/repository.py`:
+    - creates privileged `users` records for `teacher`/`admin`,
+    - auto-creates `teacher_profiles` in `pending` state for provisioned teachers,
+    - writes audit entry `admin.user.provision` to `audit_logs`.
+  - regression/security tests:
+    - new `tests/test_admin_user_provisioning.py`,
+    - extended `tests/test_security_surface.py` with minimized response-model check for provisioning route.
+- conflict handling during implementation:
+  - provisioning for `teacher` now always creates a pending profile to avoid orphan teacher accounts that break moderation/listing flows expecting `teacher_profiles` records.
+  - schema-level role guard blocks provisioning of `student` via this elevated endpoint, preventing bypass of public self-registration policy intent.
+- verification evidence:
+  - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_user_provisioning.py tests/test_security_surface.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_admin_user_provisioning.py tests/test_security_surface.py tests/test_identity_registration_security.py` -> `12 passed`.
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -685,7 +710,7 @@
 ## 14) Architecture Remediation Status (Update 2026-03-09)
 | ID | Priority | Status | Implemented | Remaining |
 | --- | --- | --- | --- | --- |
-| `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`. | Add protected admin flow for `teacher/admin` provisioning (invite/approve) and run migration audit for already elevated accounts. |
+| `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; added protected admin provisioning flow `POST /api/v1/admin/users/provision` for `teacher/admin` with audit trail `admin.user.provision`. | Run and store elevated-account audit report for already provisioned privileged users; finalize operational runbook for invite/approve handling around the new endpoint. |
 | `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`) after CI integration failure on `20260309_0019`; added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`. | Re-run full CI/integration to confirm green after `0020` + new concurrent confirm regression case. |
 | `AR-03` | HIGH | Partial | Outbox worker now claims pending/retryable events via `FOR UPDATE SKIP LOCKED`; added notification idempotency key derived from outbox event + recipient + template + index. | Move worker transaction boundary to commit per event (or equivalent durable step boundary) to reduce post-send/pre-commit duplication window. |
 | `AR-04` | HIGH | Partial | Trusted proxy matching now supports CIDR in identity rate-limit resolver; proxy compose profile now sets trusted proxy CIDR defaults for reverse-proxy mode. | Add explicit production runbook documentation for proxy/rate-limit configuration and validation procedure. |
@@ -705,7 +730,7 @@
    - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
-2. `P0` `AR-01`: implement protected `teacher/admin` provisioning flow (invite/approve), then run and store elevated-account audit report.
+2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
 3. `P0` `AR-03`: switch outbox worker to per-event commit boundary (or equivalent exactly-once-safe handoff contract).
 4. `P1` `AR-02`: partial `2026-03-10` - concurrent confirm integration test for shared package race scenario added; pending green CI confirmation.
 5. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
@@ -732,6 +757,11 @@
     - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed!`.
     - `py -m poetry run pytest -q tests/test_booking_billing_integration.py -k concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success` ->
       `1 skipped, 10 deselected` (integration stack unavailable in current shell).
+  - AR-01 provisioning flow validation:
+    - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_user_provisioning.py tests/test_security_surface.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_admin_user_provisioning.py tests/test_security_surface.py tests/test_identity_registration_security.py` ->
+      `12 passed in 2.72s`.
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

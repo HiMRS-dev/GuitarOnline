@@ -6,12 +6,13 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.enums import (
     BookingStatusEnum,
     NotificationStatusEnum,
     PackageStatusEnum,
+    RoleEnum,
     SlotBookingAggregateStatusEnum,
     SlotStatusEnum,
     TeacherStatusEnum,
@@ -66,6 +67,57 @@ class AdminActionRead(BaseModel):
     payload: dict
     created_at: datetime
     updated_at: datetime
+
+
+class AdminProvisionTeacherProfileRequest(BaseModel):
+    """Teacher profile payload for admin provisioning flow."""
+
+    display_name: str = Field(min_length=1, max_length=128)
+    bio: str = Field(default="", max_length=5000)
+    experience_years: int = Field(default=0, ge=0, le=80)
+
+
+class AdminUserProvisionRequest(BaseModel):
+    """Admin-only user provisioning request for elevated roles."""
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    timezone: str = Field(default="UTC", max_length=64)
+    role: RoleEnum
+    teacher_profile: AdminProvisionTeacherProfileRequest | None = None
+
+    @model_validator(mode="after")
+    def validate_role_specific_payload(self) -> AdminUserProvisionRequest:
+        """Allow provisioning only for teacher/admin with role-specific payload."""
+        if self.role == RoleEnum.TEACHER and self.teacher_profile is None:
+            raise ValueError("teacher_profile is required when role=teacher")
+        if self.role == RoleEnum.ADMIN and self.teacher_profile is not None:
+            raise ValueError("teacher_profile must be omitted when role=admin")
+        if self.role not in (RoleEnum.TEACHER, RoleEnum.ADMIN):
+            raise ValueError("Provisioning endpoint allows only teacher/admin roles")
+        return self
+
+
+class AdminProvisionTeacherProfileRead(BaseModel):
+    """Provisioned teacher profile snapshot in admin response."""
+
+    profile_id: UUID
+    display_name: str
+    status: TeacherStatusEnum
+    verified: bool
+
+
+class AdminProvisionedUserRead(BaseModel):
+    """Provisioned user response without sensitive fields."""
+
+    user_id: UUID
+    email: EmailStr
+    timezone: str
+    role: RoleEnum
+    is_active: bool
+    created_at_utc: datetime
+    updated_at_utc: datetime
+    teacher_profile: AdminProvisionTeacherProfileRead | None = None
 
 
 class AdminKpiOverviewRead(BaseModel):

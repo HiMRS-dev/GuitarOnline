@@ -72,6 +72,11 @@
   - hardened proxy header policy:
     - `ops/nginx/default.conf` now overwrites `X-Forwarded-For` with `$remote_addr` (no pass-through chain).
   - CI run `22884632609` -> `success` (all jobs green, including `test` and `integration`).
+- AR-05 strict APP_ENV fail-fast validation rerun (`2026-03-10`, `push`, `main` @ `3b3c34118b37b2b8efc4a2da4f4298013fded527`):
+  - introduced strict `AppEnvEnum` and required `APP_ENV` in `Settings` (`Field(...)`) with legacy alias normalization.
+  - CI workflow runtime steps now explicitly provide `APP_ENV=development` for `test`/`migration`/`integration`.
+  - CI run `22884942507` -> `success` (all jobs green, including `test`, `migration`, `integration`).
+  - deploy run `22884942491` -> `success`.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -881,6 +886,8 @@
       `18 passed in 0.25s`.
     - `py -m poetry run pytest -q tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` ->
       `13 passed in 1.36s`.
+    - `ci` run `22884942507` (`main`, push `3b3c341`) -> `success` (all jobs green, including `test`, `migration`, and `integration`).
+    - `deploy` run `22884942491` (`main`, push `3b3c341`) -> `success`.
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

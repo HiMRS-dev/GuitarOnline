@@ -682,6 +682,24 @@
 - verification evidence:
   - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_user_provisioning.py tests/test_security_surface.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_admin_user_provisioning.py tests/test_security_surface.py tests/test_identity_registration_security.py` -> `12 passed`.
+- architecture follow-up (2026-03-10): `AR-03` outbox worker commit boundary moved to per-event durable steps.
+- implemented:
+  - `app/modules/notifications/outbox_worker.py`:
+    - added optional async `commit_callback` support,
+    - pending outbox processing now supports per-event claim (`limit=1`) + commit boundary when callback is configured,
+    - retryable failed outbox requeue path now supports per-event claim/commit boundary under the same mode.
+  - `app/workers/outbox_notifications_worker.py`:
+    - worker wiring now passes `commit_callback=session.commit` into `NotificationsOutboxWorker`,
+    - preserves compatibility fallback `session.commit()` after cycle.
+  - regression coverage:
+    - `tests/test_outbox_notifications_worker.py` now verifies commit callback invocation per pending event and for requeue/process boundaries.
+- conflict handling during implementation:
+  - avoids releasing locks for multiple preclaimed events before they are durably marked (`processed/failed`) by switching to one-event claim/commit boundaries in commit-callback mode.
+  - keeps existing batch behavior for unit tests and in-memory fake repositories when no commit callback is provided.
+- verification evidence:
+  - `py -m poetry run ruff check app/modules/notifications/outbox_worker.py app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> `16 passed`.
+  - `py -m poetry run pytest -q tests/test_notifications_delivery_metrics.py` -> `3 passed`.
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -712,7 +730,7 @@
 | --- | --- | --- | --- | --- |
 | `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; added protected admin provisioning flow `POST /api/v1/admin/users/provision` for `teacher/admin` with audit trail `admin.user.provision`. | Run and store elevated-account audit report for already provisioned privileged users; finalize operational runbook for invite/approve handling around the new endpoint. |
 | `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`) after CI integration failure on `20260309_0019`; added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`. | Re-run full CI/integration to confirm green after `0020` + new concurrent confirm regression case. |
-| `AR-03` | HIGH | Partial | Outbox worker now claims pending/retryable events via `FOR UPDATE SKIP LOCKED`; added notification idempotency key derived from outbox event + recipient + template + index. | Move worker transaction boundary to commit per event (or equivalent durable step boundary) to reduce post-send/pre-commit duplication window. |
+| `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Partial | Trusted proxy matching now supports CIDR in identity rate-limit resolver; proxy compose profile now sets trusted proxy CIDR defaults for reverse-proxy mode. | Add explicit production runbook documentation for proxy/rate-limit configuration and validation procedure. |
 | `AR-05` | MEDIUM | Open | N/A | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
 | `AR-06` | MEDIUM | Open | N/A | Reduce exposed ops surface in compose: close internal service ports, remove unsafe default creds fallback, enforce TLS/HSTS path. |
@@ -731,13 +749,12 @@
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
-3. `P0` `AR-03`: switch outbox worker to per-event commit boundary (or equivalent exactly-once-safe handoff contract).
-4. `P1` `AR-02`: partial `2026-03-10` - concurrent confirm integration test for shared package race scenario added; pending green CI confirmation.
-5. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
-6. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
-7. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
-8. `P2` `AR-07`: migrate token handling away from `localStorage`.
-9. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+3. `P1` `AR-02`: partial `2026-03-10` - concurrent confirm integration test for shared package race scenario added; pending green CI confirmation.
+4. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
+5. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
+6. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
+7. `P2` `AR-07`: migrate token handling away from `localStorage`.
+8. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -762,6 +779,13 @@
       `All checks passed!`.
     - `py -m poetry run pytest -q tests/test_admin_user_provisioning.py tests/test_security_surface.py tests/test_identity_registration_security.py` ->
       `12 passed in 2.72s`.
+  - AR-03 outbox durable-boundary validation:
+    - `py -m poetry run ruff check app/modules/notifications/outbox_worker.py app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` ->
+      `16 passed in 0.68s`.
+    - `py -m poetry run pytest -q tests/test_notifications_delivery_metrics.py` ->
+      `3 passed in 0.80s`.
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

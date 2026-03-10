@@ -435,3 +435,71 @@ async def test_worker_skips_delivery_for_already_sent_idempotent_notification() 
     assert stats == {"requeued": 0, "processed": 1, "failed": 0, "dispatched": 0}
     assert event.status == OutboxStatusEnum.PROCESSED
     assert delivery_client.messages == []
+
+
+@pytest.mark.asyncio
+async def test_worker_commit_callback_commits_each_pending_event_boundary() -> None:
+    student_a = uuid4()
+    student_b = uuid4()
+    events = [
+        FakeOutboxEvent(
+            id=uuid4(),
+            event_type="booking.confirmed",
+            payload={"student_id": str(student_a), "booking_id": str(uuid4())},
+        ),
+        FakeOutboxEvent(
+            id=uuid4(),
+            event_type="booking.canceled",
+            payload={"student_id": str(student_b), "booking_id": str(uuid4())},
+        ),
+    ]
+    worker, _, notifications_repo = make_worker(
+        events,
+        now=datetime(2026, 2, 23, 12, 0, tzinfo=UTC),
+    )
+    worker.batch_size = 2
+    commit_calls = 0
+
+    async def _commit_callback() -> None:
+        nonlocal commit_calls
+        commit_calls += 1
+
+    worker.commit_callback = _commit_callback
+    stats = await worker.run_once()
+
+    assert stats == {"requeued": 0, "processed": 2, "failed": 0, "dispatched": 2}
+    assert commit_calls == 2
+    assert len(notifications_repo.notifications) == 2
+
+
+@pytest.mark.asyncio
+async def test_worker_commit_callback_commits_requeue_and_process_boundaries() -> None:
+    student_id = uuid4()
+    now_point = datetime(2026, 2, 23, 12, 0, tzinfo=UTC)
+    event = FakeOutboxEvent(
+        id=uuid4(),
+        event_type="booking.canceled",
+        payload={"student_id": str(student_id), "booking_id": str(uuid4())},
+        status=OutboxStatusEnum.FAILED,
+        retries=1,
+        occurred_at=now_point - timedelta(minutes=10),
+        updated_at=now_point - timedelta(minutes=2),
+    )
+    worker, _, _ = make_worker(
+        [event],
+        now=now_point,
+        base_backoff_seconds=30,
+    )
+    commit_calls = 0
+
+    async def _commit_callback() -> None:
+        nonlocal commit_calls
+        commit_calls += 1
+
+    worker.commit_callback = _commit_callback
+    stats = await worker.run_once()
+
+    assert stats["requeued"] == 1
+    assert stats["processed"] == 1
+    assert stats["failed"] == 0
+    assert commit_calls == 2

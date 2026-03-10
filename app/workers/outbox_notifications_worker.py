@@ -178,6 +178,7 @@ async def run_cycle(config: OutboxNotificationsWorkerConfig | None = None) -> di
             max_retries=worker_config.max_retries,
             base_backoff_seconds=worker_config.base_backoff_seconds,
             max_backoff_seconds=worker_config.max_backoff_seconds,
+            commit_callback=session.commit,
         )
         stats = await worker.run_once()
         await session.commit()

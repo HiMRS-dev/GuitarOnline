@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -48,6 +49,7 @@ class NotificationsOutboxWorker:
         max_backoff_seconds: int = 300,
         delivery_client: DeliveryClient | None = None,
         now_provider=utc_now,
+        commit_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self.audit_repository = audit_repository
         self.notifications_repository = notifications_repository
@@ -58,109 +60,150 @@ class NotificationsOutboxWorker:
         self.max_backoff_seconds = max_backoff_seconds
         self.delivery_client = delivery_client or StubEmailDeliveryClient()
         self.now_provider = now_provider
+        self.commit_callback = commit_callback
 
     async def run_once(self) -> dict[str, int]:
         """Run one processing cycle."""
         stats = {"requeued": 0, "processed": 0, "failed": 0, "dispatched": 0}
         stats["requeued"] = await self._requeue_retryable_failed_events()
 
-        events = await self.audit_repository.claim_pending_outbox(limit=self.batch_size)
-        for event in events:
-            try:
-                messages = await self._build_messages(event)
-                for message_index, message in enumerate(messages):
-                    idempotency_key = self._build_notification_idempotency_key(
-                        event=event,
-                        message_index=message_index,
-                        message=message,
-                    )
-                    notification = await self.notifications_repository.get_by_idempotency_key(
-                        idempotency_key,
-                    )
-                    if notification is None:
-                        notification = await self.notifications_repository.create_notification(
-                            user_id=message.user_id,
-                            channel=message.channel,
-                            template_key=message.template_key,
-                            title=message.title,
-                            body=message.body,
-                            idempotency_key=idempotency_key,
-                        )
+        pending_stats = await self._process_pending_events(limit=self.batch_size)
+        stats["processed"] += pending_stats["processed"]
+        stats["failed"] += pending_stats["failed"]
+        stats["dispatched"] += pending_stats["dispatched"]
+        return stats
 
-                    if notification.status == NotificationStatusEnum.SENT:
-                        continue
+    async def _process_pending_events(self, *, limit: int) -> dict[str, int]:
+        stats = {"processed": 0, "failed": 0, "dispatched": 0}
+        if self.commit_callback is None:
+            events = await self.audit_repository.claim_pending_outbox(limit=limit)
+            for event in events:
+                event_stats = await self._process_event(event)
+                stats["processed"] += event_stats["processed"]
+                stats["failed"] += event_stats["failed"]
+                stats["dispatched"] += event_stats["dispatched"]
+            return stats
 
-                    delivery_message = DeliveryMessage(
-                        notification_id=notification.id,
+        for _ in range(limit):
+            events = await self.audit_repository.claim_pending_outbox(limit=1)
+            if not events:
+                break
+            event_stats = await self._process_event(events[0])
+            stats["processed"] += event_stats["processed"]
+            stats["failed"] += event_stats["failed"]
+            stats["dispatched"] += event_stats["dispatched"]
+            await self.commit_callback()
+        return stats
+
+    async def _process_event(self, event: OutboxEvent) -> dict[str, int]:
+        dispatched = 0
+        try:
+            messages = await self._build_messages(event)
+            for message_index, message in enumerate(messages):
+                idempotency_key = self._build_notification_idempotency_key(
+                    event=event,
+                    message_index=message_index,
+                    message=message,
+                )
+                notification = await self.notifications_repository.get_by_idempotency_key(
+                    idempotency_key,
+                )
+                if notification is None:
+                    notification = await self.notifications_repository.create_notification(
                         user_id=message.user_id,
                         channel=message.channel,
                         template_key=message.template_key,
                         title=message.title,
                         body=message.body,
+                        idempotency_key=idempotency_key,
                     )
-                    try:
-                        delivery_result = await self.delivery_client.send(delivery_message)
-                    except Exception:
-                        await self.notifications_repository.set_status(
-                            notification,
-                            NotificationStatusEnum.FAILED,
-                            None,
-                        )
-                        logger.exception(
-                            "Notification delivery failed: notification_id=%s channel=%s",
-                            notification.id,
-                            message.channel,
-                        )
-                        raise
 
-                    if not delivery_result.success:
-                        error_message = (
-                            delivery_result.error_message or "Notification delivery failed"
-                        )
-                        await self.notifications_repository.set_status(
-                            notification,
-                            NotificationStatusEnum.FAILED,
-                            None,
-                        )
-                        logger.warning(
-                            "Notification delivery failed: notification_id=%s channel=%s "
-                            "error=%s",
-                            notification.id,
-                            message.channel,
-                            error_message,
-                        )
-                        raise RuntimeError(error_message)
+                if notification.status == NotificationStatusEnum.SENT:
+                    continue
 
+                delivery_message = DeliveryMessage(
+                    notification_id=notification.id,
+                    user_id=message.user_id,
+                    channel=message.channel,
+                    template_key=message.template_key,
+                    title=message.title,
+                    body=message.body,
+                )
+                try:
+                    delivery_result = await self.delivery_client.send(delivery_message)
+                except Exception:
                     await self.notifications_repository.set_status(
                         notification,
-                        NotificationStatusEnum.SENT,
-                        self.now_provider(),
+                        NotificationStatusEnum.FAILED,
+                        None,
                     )
-                    logger.info(
-                        "Notification delivery succeeded: notification_id=%s channel=%s",
+                    logger.exception(
+                        "Notification delivery failed: notification_id=%s channel=%s",
                         notification.id,
                         message.channel,
                     )
-                    stats["dispatched"] += 1
+                    raise
 
-                await self.audit_repository.mark_outbox_processed(event, self.now_provider())
-                stats["processed"] += 1
-            except Exception as exc:
-                await self.audit_repository.mark_outbox_failed(event, str(exc))
-                stats["failed"] += 1
-        return stats
+                if not delivery_result.success:
+                    error_message = delivery_result.error_message or "Notification delivery failed"
+                    await self.notifications_repository.set_status(
+                        notification,
+                        NotificationStatusEnum.FAILED,
+                        None,
+                    )
+                    logger.warning(
+                        "Notification delivery failed: notification_id=%s channel=%s "
+                        "error=%s",
+                        notification.id,
+                        message.channel,
+                        error_message,
+                    )
+                    raise RuntimeError(error_message)
+
+                await self.notifications_repository.set_status(
+                    notification,
+                    NotificationStatusEnum.SENT,
+                    self.now_provider(),
+                )
+                logger.info(
+                    "Notification delivery succeeded: notification_id=%s channel=%s",
+                    notification.id,
+                    message.channel,
+                )
+                dispatched += 1
+
+            await self.audit_repository.mark_outbox_processed(event, self.now_provider())
+            return {"processed": 1, "failed": 0, "dispatched": dispatched}
+        except Exception as exc:
+            await self.audit_repository.mark_outbox_failed(event, str(exc))
+            return {"processed": 0, "failed": 1, "dispatched": dispatched}
 
     async def _requeue_retryable_failed_events(self) -> int:
         now = self.now_provider()
-        failed_events = await self.audit_repository.claim_retryable_failed_outbox(
-            limit=self.batch_size,
-            max_retries=self.max_retries,
-        )
         requeued = 0
-        for event in failed_events:
+        if self.commit_callback is None:
+            failed_events = await self.audit_repository.claim_retryable_failed_outbox(
+                limit=self.batch_size,
+                max_retries=self.max_retries,
+            )
+            for event in failed_events:
+                if self._is_backoff_elapsed(event, now):
+                    await self.audit_repository.mark_outbox_pending(event)
+                    requeued += 1
+            return requeued
+
+        for _ in range(self.batch_size):
+            failed_events = await self.audit_repository.claim_retryable_failed_outbox(
+                limit=1,
+                max_retries=self.max_retries,
+            )
+            if not failed_events:
+                break
+            event = failed_events[0]
             if self._is_backoff_elapsed(event, now):
                 await self.audit_repository.mark_outbox_pending(event)
                 requeued += 1
+            await self.commit_callback()
         return requeued
 
     def _is_backoff_elapsed(self, event: OutboxEvent, now: datetime) -> bool:

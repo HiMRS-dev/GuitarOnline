@@ -31,6 +31,18 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
     }
 
     if (method === "GET" && path === "/api/v1/identity/users/me") {
+      const authHeader = request.headers()["authorization"] ?? "";
+      if (authHeader !== "Bearer mock-admin-access-token") {
+        await route.fulfill({
+          status: 401,
+          headers: jsonHeaders(),
+          body: JSON.stringify({
+            detail: "Unauthorized"
+          })
+        });
+        return;
+      }
+
       await route.fulfill({
         status: 200,
         headers: jsonHeaders(),
@@ -45,6 +57,17 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
           },
           created_at: "2026-03-10T00:00:00Z",
           updated_at: "2026-03-10T00:00:00Z"
+        })
+      });
+      return;
+    }
+
+    if (method === "POST" && path === "/api/v1/identity/auth/refresh") {
+      await route.fulfill({
+        status: 401,
+        headers: jsonHeaders(),
+        body: JSON.stringify({
+          detail: "Unauthorized"
         })
       });
       return;

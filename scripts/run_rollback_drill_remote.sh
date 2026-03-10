@@ -185,9 +185,13 @@ fi
 
 restore_report_path="$(
   awk -F= '
-    /^restore_rehearsal_report=/ {
-      value = $0
-      sub(/^[^=]*=/, "", value)
+    {
+      marker = "restore_rehearsal_report="
+      idx = index($0, marker)
+      if (idx <= 0) {
+        next
+      }
+      value = substr($0, idx + length(marker))
       print value
     }
   ' "${rehearsal_log}" | tail -n 1 || true

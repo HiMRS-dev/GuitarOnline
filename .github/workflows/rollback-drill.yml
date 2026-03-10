@@ -122,17 +122,20 @@ jobs:
           log_file=".tmp/rollback-drill.log"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           port="${DEPLOY_PORT:-22}"
+          remote_script="/tmp/guitaronline-run-rollback-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          scp -P "${port}" "scripts/run_rollback_drill_remote.sh" "${remote}:${remote_script}"
 
           remote_cmd="$(printf 'DEPLOY_PATH=%q ROLLBACK_DRILL_TARGET_REF=%q ROLLBACK_DRILL_ALLOW_PRODUCTION=%q ' "${DEPLOY_PATH}" "${TARGET_REF}" "${ALLOW_PRODUCTION}")"
           if [ -n "${BACKUP_FILE_INPUT}" ]; then
             remote_cmd+=$(printf 'ROLLBACK_DRILL_BACKUP_FILE=%q ' "${BACKUP_FILE_INPUT}")
           fi
-          remote_cmd+="bash -s"
+          remote_cmd+=$(printf 'bash %q' "${remote_script}")
 
           set +e
-          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_rollback_drill_remote.sh 2>&1 | tee "${log_file}"
+          ssh -p "${port}" "${remote}" "${remote_cmd}" 2>&1 | tee "${log_file}"
           ssh_exit="${PIPESTATUS[0]}"
           set -e
+          ssh -p "${port}" "${remote}" "$(printf 'rm -f %q' "${remote_script}")" >/dev/null 2>&1 || true
           if [ "${ssh_exit}" -ne 0 ]; then
             echo "::error::Remote rollback drill runner exited with status ${ssh_exit}."
             echo "::group::rollback-drill remote log tail"
@@ -148,9 +151,13 @@ jobs:
 
           report_path="$(
             awk -F= '
-              /^rollback_drill_report=/ {
-                value = $0
-                sub(/^[^=]*=/, "", value)
+              {
+                marker = "rollback_drill_report="
+                idx = index($0, marker)
+                if (idx <= 0) {
+                  next
+                }
+                value = substr($0, idx + length(marker))
                 print value
               }
             ' "${log_file}" | tail -n 1 || true

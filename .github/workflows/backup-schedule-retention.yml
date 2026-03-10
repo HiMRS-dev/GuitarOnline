@@ -160,9 +160,13 @@ jobs:
 
           status_marker="$(
             awk -F= '
-              /^backup_schedule_status=/ {
-                value = $0
-                sub(/^[^=]*=/, "", value)
+              {
+                marker = "backup_schedule_status="
+                idx = index($0, marker)
+                if (idx <= 0) {
+                  next
+                }
+                value = substr($0, idx + length(marker))
                 print value
               }
             ' "${log_file}" | tail -n 1 || true

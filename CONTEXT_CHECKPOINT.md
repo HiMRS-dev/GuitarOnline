@@ -107,6 +107,22 @@
     - total elevated accounts: `13` (`teacher=6`, `admin=7`),
     - provisioned via admin flow: `0`,
     - legacy/unknown provisioning source: `13`.
+- AR-09 frontend smoke-e2e release-gate closure (`2026-03-10`, `push`, `main` @ `588a12064b1265b2f47468507d33eebfa9695c55`):
+  - added frontend smoke e2e assets:
+    - `web-admin/playwright.config.ts`,
+    - `web-admin/e2e/admin-smoke.spec.ts`,
+    - `web-admin/package.json` script `test:smoke:e2e`.
+  - CI gate update:
+    - `.github/workflows/ci.yml` `web-admin` job now runs:
+      - `npx playwright install --with-deps chromium`,
+      - `npm run test:smoke:e2e`.
+  - release gate update:
+    - `.github/workflows/deploy.yml` now executes web-admin build + Playwright smoke e2e gate before remote deploy steps.
+  - stabilization trail:
+    - `ci` runs `22887282657`, `22887318510`, `22887408420` failed during rollout (secret-scan fixture literals and e2e mock/selector strictness),
+    - final fix set (`f5e1011`, `e02273f`, `588a120`) is green:
+      - `ci` run `22887475411` -> `success`,
+      - `deploy` run `22887475446` -> `success`.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -937,6 +953,27 @@
     - `tests/test_identity_refresh_cookie.py`,
     - `tests/test_security_headers.py`.
   - `node -v` -> `CommandNotFoundException` (current shell does not provide Node.js; `web-admin` lint/build cannot be executed locally in this environment).
+- architecture follow-up (2026-03-10): `AR-09` frontend smoke e2e checks in CI/release gate completed.
+- implemented:
+  - added Playwright smoke e2e harness for `web-admin`:
+    - `web-admin/playwright.config.ts`,
+    - `web-admin/e2e/admin-smoke.spec.ts`,
+    - `web-admin/package.json` script `test:smoke:e2e`.
+  - CI web-admin job now includes browser install + smoke e2e execution:
+    - `.github/workflows/ci.yml`.
+  - deploy workflow now includes pre-deploy web-admin smoke gate:
+    - `.github/workflows/deploy.yml` runs `npm install`, `npm run build`, `npx playwright install --with-deps chromium`, `npm run test:smoke:e2e` before remote deploy stages.
+  - regression guardrails added:
+    - `tests/test_web_admin_smoke_gate_assets.py`.
+- conflict handling during implementation:
+  - CI secret-scan initially flagged intentional fixture strings in `tests/test_secret_guard.py`; resolved by explicit inline allow markers.
+  - first e2e revisions failed due auth-mock permissiveness and strict selector ambiguity; resolved by auth-aware mock checks (`401` without access token, explicit refresh `401`) and stable role-based locator assertions.
+- verification evidence:
+  - `py -m poetry run ruff check tests/test_web_admin_smoke_gate_assets.py tests/test_secret_guard.py scripts/secret_guard.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_web_admin_smoke_gate_assets.py tests/test_secret_guard.py tests/test_ci_ops_config_workflow.py` -> `8 passed`.
+  - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/ci.yml','.github/workflows/deploy.yml')]; print('workflow-yaml-parse: ok')"` -> `workflow-yaml-parse: ok`.
+  - `ci` run `22887475411` (`main`, push `588a120`) -> `success` (includes green `web-admin` smoke e2e job).
+  - `deploy` run `22887475446` (`main`, push `588a120`) -> `success` (release gate includes web-admin smoke e2e preflight).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -973,7 +1010,7 @@
 | `AR-06` | MEDIUM | Done | Hardened ingress/ops surface: proxy profile now closes host exposure for app + monitoring ports (`8000`, `9090`, `9093`, `3000`), enforces HTTPS with `80 -> 443` redirect and HSTS in `ops/nginx/default.conf`, and requires mounted TLS assets (`tls.crt`/`tls.key`); removed Grafana `admin/admin` compose fallback by requiring explicit `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`; deploy preflight validates proxy TLS assets and auto-provisions missing legacy Grafana env keys from existing app secret to keep deploy pipeline compatible. | N/A |
 | `AR-07` | MEDIUM | Done | Replaced frontend auth token persistence with cookie-refresh + in-memory access sessions (`portal` and `web-admin`); backend login/refresh now sets/rotates `HttpOnly` refresh cookie and new `POST /identity/auth/logout` revokes/clears refresh token; added baseline security headers and route-aware CSP middleware (docs/openapi excluded). | N/A |
 | `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | N/A |
-| `AR-09` | MEDIUM | Partial | CI now includes dedicated `web-admin` job (`npm install`, `npm run lint`, `npm run build`) and gates backend test/migration jobs on it. | Add frontend smoke e2e checks in CI/release gate. |
+| `AR-09` | MEDIUM | Done | Added Playwright smoke e2e harness for `web-admin` (`playwright.config.ts`, `e2e/admin-smoke.spec.ts`, npm script `test:smoke:e2e`); CI `web-admin` job now runs browser install + smoke e2e gate; deploy workflow now executes web-admin smoke e2e gate before remote deployment starts. | N/A |
 
 ## 15) Remaining Prioritized Queue
 1. `P0` `OPS-01` (Priority #1): end-to-end CI/CD stabilization plan for restore/synthetic/deploy/integration reliability.
@@ -987,7 +1024,6 @@
    - completed `2026-03-10`: reduced secret-scan false positives via context-aware allowlist tuning in `scripts/secret_guard.py` + regression tests (`tests/test_secret_guard.py`).
    - in progress `2026-03-10`: monitor secret-scan signal quality and adjust heuristics only when new false-positive patterns are evidenced.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
-2. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -1071,6 +1107,20 @@
     - `deploy` run `22886142964` (`main`, push `a8c8954`) -> `success`.
     - `ci` run `22886142960` (`main`, push `a8c8954`) -> `success` (all jobs green, including `web-admin`, `test`, `migration`, `integration`).
     - `node -v` -> failed (`CommandNotFoundException`; local `web-admin` lint/build unavailable in this shell).
+  - AR-09 frontend smoke-e2e gate validation:
+    - `py -m poetry run ruff check tests/test_web_admin_smoke_gate_assets.py tests/test_secret_guard.py scripts/secret_guard.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_web_admin_smoke_gate_assets.py tests/test_secret_guard.py tests/test_ci_ops_config_workflow.py` ->
+      `8 passed in 0.07s`.
+    - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/ci.yml','.github/workflows/deploy.yml')]; print('workflow-yaml-parse: ok')"` ->
+      `workflow-yaml-parse: ok`.
+    - staged rollout failure evidence:
+      - `ci` run `22887282657` -> `failure` (`secret-scan` false-positive from intentional fixture literals in `tests/test_secret_guard.py`),
+      - `ci` run `22887318510` -> `failure` (`web-admin` smoke e2e auth-mock mismatch),
+      - `ci` run `22887408420` -> `failure` (`web-admin` smoke e2e strict-selector ambiguity).
+    - closure evidence:
+      - `ci` run `22887475411` (`main`, push `588a120`) -> `success` (green `web-admin` smoke e2e + full pipeline),
+      - `deploy` run `22887475446` (`main`, push `588a120`) -> `success` (web-admin smoke gate passed before remote deploy).
   - OPS-01 CI ops-config parity hardening validation:
     - `py -m poetry run ruff check tests/test_ci_ops_config_workflow.py` ->
       `All checks passed!`.

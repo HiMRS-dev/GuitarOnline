@@ -44,6 +44,11 @@ Use this checklist before promoting a build to a target environment.
 - Verify supply-chain security gate is green in CI (`supply-chain` job):
   - `.github/workflows/ci.yml`
   - expected artifact: `supply-chain-security-artifacts` (`pip_audit.json`, `npm_audit.json`, `backend_sbom_cyclonedx.json`, `summary.json`).
+- Verify frontend smoke e2e gate is green in CI (`web-admin` job):
+  - `.github/workflows/ci.yml`
+  - expected steps:
+    - `Install Playwright browser (Chromium)`,
+    - `Run frontend smoke e2e`.
 - Optional image warmup (unstable network):
   - `powershell -ExecutionPolicy Bypass -File scripts/docker_warmup.ps1`
 - Optional maintenance silence before deploy (warning alerts by default):
@@ -76,6 +81,7 @@ Use this checklist before promoting a build to a target environment.
 - Preferred one-click path (GitHub Actions):
   - run `.github/workflows/deploy.yml` (`workflow_dispatch`, confirm=`DEPLOY`).
   - choose runtime profile (`standard` or `proxy`) and optional backup/smoke toggles.
+  - workflow includes pre-deploy `web-admin` smoke e2e gate before remote SSH/deploy stages.
 - Optional auto-deploy mode:
   - set repository secret `AUTO_DEPLOY_ENABLED=true` to deploy automatically on push to `main`.
   - for manual-only mode, remove this secret or set any value other than `true`.

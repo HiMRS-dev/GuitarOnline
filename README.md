@@ -207,6 +207,8 @@ Production-ready modular monolith backend for an online guitar school.
   - ensures monitoring credentials exist (`GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`) before compose apply,
     and auto-applies a safe fallback from existing app secret when legacy env file lacks these keys,
   - for proxy profile, validates TLS certificate assets (`tls.crt` / `tls.key`) before compose apply,
+  - runs `web-admin` smoke e2e preflight on the runner (`npm run build` + Playwright),
+    and blocks release before any remote SSH/deploy step if frontend gate fails,
   - performs compose deploy and DB migrations,
   - runs post-deploy role-based smoke gate (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, `admin/teacher/student` critical flow),
   - verifies smoke output markers `Role-based release gate passed.` and `Smoke checks passed.`,

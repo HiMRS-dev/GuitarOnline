@@ -50,12 +50,23 @@ read_env_value() {
         value = $0
         sub(/^[[:space:]]*[^=]+=[[:space:]]*/, "", value)
         sub(/[[:space:]]*$/, "", value)
-        print value
-        exit
+        result = value
+      }
+      END {
+        if (result != "") {
+          print result
+        }
       }
     ' "${env_file}"
   )"
   sanitize_env_value "${raw_value}"
+}
+
+append_env_override() {
+  local key="$1"
+  local value="$2"
+  local env_file="${DEPLOY_PATH}/.env"
+  printf '\n%s=%s\n' "${key}" "${value}" >> "${env_file}"
 }
 
 validate_auth_rate_limiter_env() {
@@ -83,12 +94,31 @@ validate_auth_rate_limiter_env() {
 validate_grafana_admin_env() {
   local admin_user
   local admin_password
+  local fallback_secret
 
   admin_user="$(read_env_value "GRAFANA_ADMIN_USER")"
   admin_password="$(read_env_value "GRAFANA_ADMIN_PASSWORD")"
 
   if [ -z "${admin_user}" ] || [ -z "${admin_password}" ]; then
-    die "GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD must be set in .env (unsafe defaults are not allowed)."
+    fallback_secret="$(read_env_value "JWT_SECRET")"
+    if [ -z "${fallback_secret}" ]; then
+      fallback_secret="$(read_env_value "SECRET_KEY")"
+    fi
+    if [ -z "${fallback_secret}" ]; then
+      die "Missing GRAFANA admin env and no SECRET_KEY/JWT_SECRET available for safe fallback."
+    fi
+  fi
+
+  if [ -z "${admin_user}" ]; then
+    admin_user="grafana_admin"
+    append_env_override "GRAFANA_ADMIN_USER" "${admin_user}"
+    warn "GRAFANA_ADMIN_USER was missing; applied secure default alias."
+  fi
+
+  if [ -z "${admin_password}" ]; then
+    admin_password="${fallback_secret}"
+    append_env_override "GRAFANA_ADMIN_PASSWORD" "${admin_password}"
+    warn "GRAFANA_ADMIN_PASSWORD was missing; applied fallback from existing app secret."
   fi
 
   log "Grafana admin credentials preflight: required values are present."

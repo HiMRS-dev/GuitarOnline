@@ -53,6 +53,11 @@
     `[restore-rehearsal][error] Backup directory does not exist: <DEPLOY_PATH>/backups/scheduled/daily`.
   - log evidence also confirms `main` currently executes pre-hardening workflow commands
     (`ssh ... | tee`, `grep ... report_path`) without new stderr-capture/tail diagnostics until current branch changes are merged.
+- OPS-01 verification rerun (`2026-03-10`, `workflow_dispatch`, `main` @ `c7ac8c0f022d25507e632d7af5be6d7caaf9758b`):
+  - `backup-schedule-retention` run `22883983026` -> `success` (`backup_schedule_status=success`, `daily_count=2`, `weekly_count=0`).
+  - `restore-rehearsal` run `22883993503` -> `success` (`rpo_seconds=36`, `rto_seconds=0.517`).
+  - `rollback-drill` run `22884013826` -> `success` (`rollback_drill_report=.../rollback-drill-20260310-021811.json`, nested restore `rpo_seconds=81`, `rto_seconds=0.522`).
+  - rollback report artifact uploaded successfully in run `22884013826`.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -631,6 +636,27 @@
 - verification evidence:
   - static script inspection confirms candidate-probe/fallback path logic and explicit diagnostics are present.
   - runtime verification requires target host or Linux shell runner (local shell lacks native `bash`).
+- ops follow-up (2026-03-10): OPS-01 chain hardening finalized for marker parsing + rollback remote execution.
+- implemented:
+  - workflow marker parsing switched to marker-substring extraction (instead of `^marker=` anchors) in:
+    - `.github/workflows/backup-schedule-retention.yml`,
+    - `.github/workflows/restore-rehearsal.yml`,
+    - `.github/workflows/rollback-drill.yml`.
+  - rollback workflow remote execution now matches backup/restore pattern:
+    - uploads runner via `scp` to `/tmp/guitaronline-run-rollback-<run_id>-<attempt>.sh`,
+    - executes via `bash <remote_script>`,
+    - removes remote temporary script after execution.
+  - nested restore marker parsing in `scripts/run_rollback_drill_remote.sh` now uses non-anchored marker extraction for consistency.
+- conflict handling during implementation:
+  - prior rollback run `22883860729` completed nested restore but failed workflow-side report-path parsing; marker extraction is now resilient to prefixed/escaped log lines.
+  - stdin-based remote script execution path was removed from rollback workflow to avoid runner-side truncation/parsing edge cases and keep behavior aligned across backup/restore/rollback.
+- verification evidence:
+  - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/backup-schedule-retention.yml','.github/workflows/restore-rehearsal.yml','.github/workflows/rollback-drill.yml')]; print('workflow-yaml-parse: ok')"` -> `workflow-yaml-parse: ok`.
+  - `gh workflow run backup-schedule-retention.yml -f ref=main -f daily_keep=7 -f weekly_keep=8 -f weekly_day=1 -f force_weekly=false -f confirm=BACKUP` -> run `22883983026` (`success`).
+  - `gh workflow run restore-rehearsal.yml -f ref=main -f backup_file= -f confirm=RESTORE` -> run `22883993503` (`success`).
+  - `gh workflow run rollback-drill.yml -f ref=main -f target_ref=main -f backup_file= -f allow_production=false -f confirm=ROLLBACK` -> run `22884013826` (`success`).
+- commit trail:
+  - `c7ac8c0` (`Harden workflow marker parsing and rollback remote execution`).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -673,7 +699,8 @@
 1. `P0` `OPS-01` (Priority #1): end-to-end CI/CD stabilization plan for restore/synthetic/deploy/integration reliability.
    - completed `2026-03-10`: harden diagnostics in `.github/workflows/restore-rehearsal.yml` and `.github/workflows/rollback-drill.yml` (capture stdout+stderr, avoid silent `grep` exits, print explicit parse/precheck errors).
    - completed `2026-03-10`: enforce restore/rollback backup preflight consistency with `scripts/run_restore_rehearsal_remote.sh` and `scripts/run_backup_schedule_remote.sh`.
-   - in progress `2026-03-10`: verification chain executed (`22883213068` success -> `22883227703` failure -> `22883250294` failure); root conflict identified (missing daily backup directory on target + stale diagnostics on `main` workflow revision). Pending rerun after current branch hardening is merged/deployed.
+   - completed `2026-03-10`: rerun verification chain on `main` @ `c7ac8c0` is green (`22883983026` success -> `22883993503` success -> `22884013826` success) with rollback report artifact.
+   - in progress `2026-03-10`: continue accumulating scheduled-run streak evidence toward acceptance criterion (7 consecutive days for scheduled synthetic/restore plus >=1 successful rollback drill artifact already achieved).
    - in progress `2026-03-10`: added concurrent regression coverage for booking/package invariant race in `tests/test_booking_billing_integration.py`; pending full CI/integration rerun and evidence capture.
    - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
@@ -690,14 +717,17 @@
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
   - Workflow YAML parse check:
-    - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/restore-rehearsal.yml', '.github/workflows/rollback-drill.yml')]; print('workflow-yaml-parse: ok')"`
+    - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/backup-schedule-retention.yml','.github/workflows/restore-rehearsal.yml','.github/workflows/rollback-drill.yml')]; print('workflow-yaml-parse: ok')"`
       -> `workflow-yaml-parse: ok`.
   - OPS-01 verification chain runs (`workflow_dispatch`, `main`):
-    - `gh workflow run backup-schedule-retention.yml -f ref=main -f daily_keep=7 -f weekly_keep=8 -f weekly_day=1 -f force_weekly=false -f confirm=BACKUP` -> run `22883213068` (`success`).
-    - `gh workflow run restore-rehearsal.yml -f ref=main -f backup_file= -f confirm=RESTORE` -> run `22883227703` (`failure`, step `Run restore rehearsal on target host`).
-    - `gh workflow run rollback-drill.yml -f ref=main -f target_ref=main -f backup_file= -f allow_production=false -f confirm=ROLLBACK` -> run `22883250294` (`failure`).
-    - `gh run view 22883250294 --job 66390459770 --log` shows:
-      `[restore-rehearsal][error] Backup directory does not exist: <DEPLOY_PATH>/backups/scheduled/daily`.
+    - historical failed chain (before final hardening):
+      - `backup-schedule-retention` run `22883213068` (`success`),
+      - `restore-rehearsal` run `22883227703` (`failure`),
+      - `rollback-drill` run `22883250294` (`failure`, nested restore backup-dir error).
+    - current chain after hardening on `main` @ `c7ac8c0`:
+      - `gh workflow run backup-schedule-retention.yml -f ref=main -f daily_keep=7 -f weekly_keep=8 -f weekly_day=1 -f force_weekly=false -f confirm=BACKUP` -> run `22883983026` (`success`, `backup_schedule_status=success`).
+      - `gh workflow run restore-rehearsal.yml -f ref=main -f backup_file= -f confirm=RESTORE` -> run `22883993503` (`success`, `rpo_seconds=36`, `rto_seconds=0.517`).
+      - `gh workflow run rollback-drill.yml -f ref=main -f target_ref=main -f backup_file= -f allow_production=false -f confirm=ROLLBACK` -> run `22884013826` (`success`, `rollback_drill_report` marker present, nested restore `rpo_seconds=81`, `rto_seconds=0.522`).
   - Booking/package invariant regression coverage:
     - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed!`.
     - `py -m poetry run pytest -q tests/test_booking_billing_integration.py -k concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success` ->

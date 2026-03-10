@@ -66,6 +66,12 @@
     - updating route allowlist in `tests/test_pii_field_visibility.py`,
     - forcing fresh locked package state in `app/modules/billing/repository.py` via `execution_options(populate_existing=True)` for `get_package_by_id_for_update`.
   - verification run `22884453747` -> `success` (all jobs green, including `test` and `integration`).
+- AR-04 documentation/config validation rerun (`2026-03-10`, `push`, `main` @ `ceb26ed2d6a4b5ea13ec3f20f6e04104a8a90fb8`):
+  - added production proxy/rate-limit runbook:
+    - `ops/auth_rate_limit_proxy_runbook.md`.
+  - hardened proxy header policy:
+    - `ops/nginx/default.conf` now overwrites `X-Forwarded-For` with `$remote_addr` (no pass-through chain).
+  - CI run `22884632609` -> `success` (all jobs green, including `test` and `integration`).
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -724,6 +730,28 @@
   - `gh run view 22884305338 --job 66393693756 --log` -> prior `test` failure evidence captured.
   - `gh run view 22884305338 --job 66393745979 --log` -> prior `integration` failure evidence captured.
   - `ci` run `22884453747` (`main`, push `2889c1a`) -> `success` (including `test` + `integration`).
+- architecture follow-up (2026-03-10): `AR-04` production proxy/rate-limit guide and validation checklist completed.
+- implemented:
+  - new runbook:
+    - `ops/auth_rate_limit_proxy_runbook.md`,
+    - includes trust-boundary model, required env matrix, pre-deploy checks, runtime validation checklist, and remediation map.
+  - runbook links integrated into operational entry points:
+    - `README.md`,
+    - `ops/release_checklist.md`,
+    - `ops/production_hardening_checklist.md`.
+  - proxy hardening aligned with rate-limit trust model:
+    - `ops/nginx/default.conf` uses
+      `proxy_set_header X-Forwarded-For $remote_addr;`
+      to prevent user-supplied `X-Forwarded-For` spoof chains.
+  - regression coverage:
+    - `tests/test_proxy_rate_limit_config.py` validates nginx forwarded-header policy.
+- conflict handling during implementation:
+  - identified mismatch between trusted-proxy IP logic and proxy header pass-through mode (`$proxy_add_x_forwarded_for`), which could allow spoofed limiter identities.
+  - resolved by enforcing overwrite semantics in proxy config and documenting validation steps for trusted proxy CIDR management.
+- verification evidence:
+  - `py -m poetry run ruff check tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py` -> `10 passed`.
+  - `ci` run `22884632609` (`main`, push `ceb26ed`) -> `success` (all jobs green).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -755,7 +783,7 @@
 | `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; added protected admin provisioning flow `POST /api/v1/admin/users/provision` for `teacher/admin` with audit trail `admin.user.provision`. | Run and store elevated-account audit report for already provisioned privileged users; finalize operational runbook for invite/approve handling around the new endpoint. |
 | `AR-02` | HIGH | Done | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`); added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`; hardened locked package read with `populate_existing=True` to prevent stale identity-map race. | N/A |
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
-| `AR-04` | HIGH | Partial | Trusted proxy matching now supports CIDR in identity rate-limit resolver; proxy compose profile now sets trusted proxy CIDR defaults for reverse-proxy mode. | Add explicit production runbook documentation for proxy/rate-limit configuration and validation procedure. |
+| `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |
 | `AR-05` | MEDIUM | Open | N/A | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
 | `AR-06` | MEDIUM | Open | N/A | Reduce exposed ops surface in compose: close internal service ports, remove unsafe default creds fallback, enforce TLS/HSTS path. |
 | `AR-07` | MEDIUM | Open | N/A | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
@@ -773,11 +801,10 @@
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
-3. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
-4. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
-5. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
-6. `P2` `AR-07`: migrate token handling away from `localStorage`.
-7. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+3. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
+4. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
+5. `P2` `AR-07`: migrate token handling away from `localStorage`.
+6. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -817,6 +844,12 @@
     - `py -m poetry run pytest -q tests/test_pii_field_visibility.py` ->
       `3 passed in 1.13s`.
     - `ci` run `22884453747` (`main`, push `2889c1a`) -> `success` (all jobs green, including `test` and `integration`).
+  - AR-04 proxy/rate-limit runbook validation:
+    - `py -m poetry run ruff check tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py` ->
+      `10 passed in 1.24s`.
+    - `ci` run `22884632609` (`main`, push `ceb26ed`) -> `success` (all jobs green, including `test` and `integration`).
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

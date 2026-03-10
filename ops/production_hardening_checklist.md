@@ -32,6 +32,8 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 - Confirm Prometheus target for `app` is `UP` in UI (`:9090`).
 - Confirm Alertmanager route tree is loaded and has no config errors (`:9093`).
 - Confirm Grafana dashboard loads and tracks request/error/latency panels (`:3000`).
+- Validate proxy + auth rate-limit trust boundary:
+  - `ops/auth_rate_limit_proxy_runbook.md`.
 - Fire synthetic alert and confirm delivery in at least one real channel:
   - `powershell -ExecutionPolicy Bypass -File scripts/alertmanager_fire_and_verify.ps1`
   - strict routing verification:

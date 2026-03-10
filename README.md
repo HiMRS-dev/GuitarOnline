@@ -276,6 +276,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `AUTH_RATE_LIMIT_REFRESH_REQUESTS`
   - `AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS` (comma-separated proxy IPs allowed to supply `X-Forwarded-For`)
   - `AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION` (required only when `AUTH_RATE_LIMIT_BACKEND=memory` in production)
+- Production proxy/rate-limit validation runbook:
+  - `ops/auth_rate_limit_proxy_runbook.md`
 - CORS env:
   - `FRONTEND_ADMIN_ORIGIN` (comma-separated allowed origins for admin frontend)
 - Security gate regression checks:

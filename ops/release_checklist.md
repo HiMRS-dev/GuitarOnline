@@ -9,6 +9,8 @@ Use this checklist before promoting a build to a target environment.
 - Verify runtime env + CI/CD secrets against `README.md` section `Production Config Matrix`.
 - Confirm auth rate-limiter prod policy in `.env`:
   - `AUTH_RATE_LIMIT_BACKEND=redis` (deploy preflight rejects non-redis values).
+  - validate trusted proxy/IP resolution and runtime checklist:
+    - `ops/auth_rate_limit_proxy_runbook.md`.
 - If `.env` changed, refresh GitHub secret:
   - preferred one-command sync:
     - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1`

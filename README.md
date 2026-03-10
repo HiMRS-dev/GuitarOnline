@@ -561,6 +561,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `ops/release_checklist.md`
 - Reliability hardening runbook (health checks, log retention, monitoring, rollback drills):
   - `ops/production_hardening_checklist.md`
+- Elevated-role invite/approve + audit runbook:
+  - `ops/admin_elevated_access_runbook.md`
 - Latest release notes:
   - `docs/releases/v1.1.0.md`
 

@@ -29,6 +29,12 @@ Use this checklist before promoting a build to a target environment.
     - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
   - follow canonical rotation playbook:
     - `ops/secret_rotation_playbook.md`.
+- Review elevated-role invite/approve and account audit controls:
+  - runbook: `ops/admin_elevated_access_runbook.md`
+  - local report command:
+    - `docker compose -f docker-compose.prod.yml exec -T app python scripts/elevated_account_audit.py --output-dir ops/reports/elevated-account-audit`
+  - remote artifact path (recommended):
+    - run `.github/workflows/elevated-account-audit.yml` (`confirm=AUDIT`).
 - If real on-call channels are required, render on-call Alertmanager config from env secrets:
   - `powershell -ExecutionPolicy Bypass -File scripts/render_alertmanager_oncall_config.ps1`
 - Validate ops configuration:

@@ -1,0 +1,191 @@
+name: elevated-account-audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to use for remote elevated-account audit runner script"
+        required: true
+        default: "main"
+      confirm:
+        description: "Type AUDIT to confirm"
+        required: true
+  schedule:
+    - cron: "35 4 2 * *"
+
+jobs:
+  audit:
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'AUDIT' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF_NAME }}
+
+      - name: Print audit context
+        run: |
+          set -euo pipefail
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Ref for runner script: ${REF_NAME}"
+
+      - name: Validate required secrets and inputs
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Run elevated-account audit on target host
+        id: run_audit
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp
+          log_file=".tmp/elevated-account-audit.log"
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          remote_script="/tmp/guitaronline-run-elevated-audit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          scp -P "${port}" "scripts/run_elevated_account_audit_remote.sh" "${remote}:${remote_script}"
+
+          remote_cmd="$(printf 'DEPLOY_PATH=%q REF_NAME=%q bash %q' "${DEPLOY_PATH}" "${REF_NAME}" "${remote_script}")"
+
+          set +e
+          ssh -p "${port}" "${remote}" "${remote_cmd}" 2>&1 | tee "${log_file}"
+          ssh_exit="${PIPESTATUS[0]}"
+          set -e
+          ssh -p "${port}" "${remote}" "$(printf 'rm -f %q' "${remote_script}")" >/dev/null 2>&1 || true
+          if [ "${ssh_exit}" -ne 0 ]; then
+            echo "::error::Remote elevated-account audit runner exited with status ${ssh_exit}."
+            echo "::group::elevated-account-audit remote log tail"
+            tail -n 120 "${log_file}" || true
+            echo "::endgroup::"
+            exit "${ssh_exit}"
+          fi
+
+          if [ ! -s "${log_file}" ]; then
+            echo "::error::Remote elevated-account audit runner produced no output."
+            exit 1
+          fi
+
+          host_json_path="$(
+            awk -F= '
+              {
+                marker = "elevated_account_audit_host_json="
+                idx = index($0, marker)
+                if (idx <= 0) {
+                  next
+                }
+                value = substr($0, idx + length(marker))
+                print value
+              }
+            ' "${log_file}" | tail -n 1 || true
+          )"
+          host_json_path="$(printf '%s' "${host_json_path}" | tr -d '\r')"
+          if [ -z "${host_json_path}" ]; then
+            echo "::error::Failed to parse JSON report path from remote output."
+            exit 1
+          fi
+
+          host_md_path="$(
+            awk -F= '
+              {
+                marker = "elevated_account_audit_host_markdown="
+                idx = index($0, marker)
+                if (idx <= 0) {
+                  next
+                }
+                value = substr($0, idx + length(marker))
+                print value
+              }
+            ' "${log_file}" | tail -n 1 || true
+          )"
+          host_md_path="$(printf '%s' "${host_md_path}" | tr -d '\r')"
+          if [ -z "${host_md_path}" ]; then
+            echo "::error::Failed to parse Markdown report path from remote output."
+            exit 1
+          fi
+
+          echo "host_json_path=${host_json_path}" >> "$GITHUB_OUTPUT"
+          echo "host_md_path=${host_md_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Download elevated-account audit report
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          report_json="${{ steps.run_audit.outputs.host_json_path }}"
+          report_md="${{ steps.run_audit.outputs.host_md_path }}"
+          scp -P "${port}" "${remote}:${report_json}" ".tmp/elevated-account-audit-report.json"
+          scp -P "${port}" "${remote}:${report_md}" ".tmp/elevated-account-audit-report.md"
+
+      - name: Print elevated-account audit summary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path(".tmp/elevated-account-audit-report.json").read_text(encoding="utf-8"))
+          summary = report["summary"]
+          print(f"Generated at: {report['generated_at_utc']}")
+          print(f"App env: {report['app_env']}")
+          print(f"Total elevated accounts: {summary['total_elevated_accounts']}")
+          print(f"Teachers/Admins: {summary['teachers_total']} / {summary['admins_total']}")
+          print(f"Provisioned via admin flow: {summary['provisioned_via_admin_flow']}")
+          print(f"Legacy or unknown source: {summary['legacy_or_unknown_source']}")
+          PY
+
+      - name: Upload elevated-account audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: elevated-account-audit-report-${{ github.run_id }}
+          path: |
+            .tmp/elevated-account-audit-report.json
+            .tmp/elevated-account-audit-report.md
+            .tmp/elevated-account-audit.log
+          if-no-files-found: error
+

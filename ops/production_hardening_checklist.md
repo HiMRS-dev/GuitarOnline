@@ -88,3 +88,7 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 - Monthly: run secret-rotation dry-run and archive report:
   - `py -m poetry run python scripts/secret_rotation_dry_run.py --env-file .env --rotation-target auto`
   - runbook: `ops/secret_rotation_playbook.md`.
+- Monthly: run elevated-account audit report and review invite/approve trail:
+  - `docker compose -f docker-compose.prod.yml exec -T app python scripts/elevated_account_audit.py --output-dir ops/reports/elevated-account-audit`
+  - or run remote workflow `.github/workflows/elevated-account-audit.yml` (`confirm=AUDIT`).
+  - runbook: `ops/admin_elevated_access_runbook.md`.

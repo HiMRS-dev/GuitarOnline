@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.database import SessionLocal, close_engine
-from app.core.enums import PackageStatusEnum, RoleEnum, TeacherStatusEnum
+from app.core.enums import AppEnvEnum, PackageStatusEnum, RoleEnum, TeacherStatusEnum
 from app.core.security import hash_password, verify_password
 from app.modules.audit.repository import AuditRepository
 from app.modules.billing.models import LessonPackage
@@ -242,8 +242,7 @@ async def _ensure_student_package(
 
 async def _run_seed(*, allow_production: bool) -> SeedStats:
     settings = get_settings()
-    app_env = settings.app_env.strip().lower()
-    if app_env in {"production", "prod"} and not allow_production:
+    if settings.app_env is AppEnvEnum.PRODUCTION and not allow_production:
         raise RuntimeError(
             "Refusing to seed demo data in production. "
             "Re-run with --allow-production only if you are absolutely sure.",
@@ -345,7 +344,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allow-production",
         action="store_true",
-        help="Allow seeding even when APP_ENV is production/prod.",
+        help="Allow seeding even when APP_ENV is production.",
     )
     return parser
 

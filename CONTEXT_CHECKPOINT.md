@@ -752,6 +752,31 @@
   - `py -m poetry run ruff check tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py` -> `10 passed`.
   - `ci` run `22884632609` (`main`, push `ceb26ed`) -> `success` (all jobs green).
+- architecture follow-up (2026-03-10): `AR-05` strict `APP_ENV` enum and fail-fast startup rules completed.
+- implemented:
+  - added runtime environment enum `AppEnvEnum` in `app/core/enums.py` with canonical values:
+    - `development`,
+    - `test`,
+    - `staging`,
+    - `production`.
+  - `app/core/config.py` now requires `APP_ENV` via `Settings.app_env: AppEnvEnum = Field(...)`:
+    - startup fails fast on missing or invalid environment selection,
+    - legacy aliases are normalized to canonical enum values:
+      - `dev -> development`,
+      - `testing -> test`,
+      - `stage -> staging`,
+      - `prod -> production`.
+  - production security checks now evaluate enum identity (`AppEnvEnum.PRODUCTION`) instead of loose string matching.
+  - `scripts/seed_demo_data.py` production guard now uses `AppEnvEnum.PRODUCTION`.
+  - CI hardening for required `APP_ENV`:
+    - `.github/workflows/ci.yml` sets `APP_ENV=development` in `test`, `migration`, and `integration` runtime steps.
+- conflict handling during implementation:
+  - making `APP_ENV` required can break CI/service startup when `.env` is absent; resolved by explicit `APP_ENV` wiring in CI runtime steps.
+  - legacy operational envs with `APP_ENV=prod` remain compatible through controlled alias normalization to canonical `production`.
+- verification evidence:
+  - `py -m poetry run ruff check app/core/config.py app/core/enums.py scripts/seed_demo_data.py tests/test_config_security.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_config_security.py` -> `18 passed`.
+  - `py -m poetry run pytest -q tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` -> `13 passed`.
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -777,14 +802,14 @@
 - Rollback drill workflow:
   - `.github/workflows/rollback-drill.yml`
 
-## 14) Architecture Remediation Status (Update 2026-03-09)
+## 14) Architecture Remediation Status (Update 2026-03-10)
 | ID | Priority | Status | Implemented | Remaining |
 | --- | --- | --- | --- | --- |
 | `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; added protected admin provisioning flow `POST /api/v1/admin/users/provision` for `teacher/admin` with audit trail `admin.user.provision`. | Run and store elevated-account audit report for already provisioned privileged users; finalize operational runbook for invite/approve handling around the new endpoint. |
 | `AR-02` | HIGH | Done | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`); added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`; hardened locked package read with `populate_existing=True` to prevent stale identity-map race. | N/A |
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |
-| `AR-05` | MEDIUM | Open | N/A | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
+| `AR-05` | MEDIUM | Done | Added strict `AppEnvEnum` (`development`, `test`, `staging`, `production`) and made `Settings.app_env` required (`Field(...)`) so startup fails fast when `APP_ENV` is missing/invalid; normalized legacy aliases (`dev/testing/stage/prod`) to canonical values to prevent deploy drift; security gating now compares enum and production controls trigger only for canonical `production`; CI test/migration/integration steps now set explicit `APP_ENV=development`. | N/A |
 | `AR-06` | MEDIUM | Open | N/A | Reduce exposed ops surface in compose: close internal service ports, remove unsafe default creds fallback, enforce TLS/HSTS path. |
 | `AR-07` | MEDIUM | Open | N/A | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
 | `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | N/A |
@@ -801,10 +826,9 @@
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
-3. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
-4. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
-5. `P2` `AR-07`: migrate token handling away from `localStorage`.
-6. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+3. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
+4. `P2` `AR-07`: migrate token handling away from `localStorage`.
+5. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -850,6 +874,13 @@
     - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py` ->
       `10 passed in 1.24s`.
     - `ci` run `22884632609` (`main`, push `ceb26ed`) -> `success` (all jobs green, including `test` and `integration`).
+  - AR-05 strict APP_ENV validation:
+    - `py -m poetry run ruff check app/core/config.py app/core/enums.py scripts/seed_demo_data.py tests/test_config_security.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_config_security.py` ->
+      `18 passed in 0.25s`.
+    - `py -m poetry run pytest -q tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` ->
+      `13 passed in 1.36s`.
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

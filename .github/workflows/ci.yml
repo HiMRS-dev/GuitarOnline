@@ -157,6 +157,8 @@ jobs:
         run: poetry install --no-interaction --with dev
 
       - name: Run tests
+        env:
+          APP_ENV: development
         run: poetry run pytest -q
 
   migration:
@@ -193,6 +195,7 @@ jobs:
 
       - name: Run migrations
         env:
+          APP_ENV: development
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline
         run: poetry run alembic upgrade head
 
@@ -230,11 +233,13 @@ jobs:
 
       - name: Apply migrations
         env:
+          APP_ENV: development
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline
         run: poetry run alembic upgrade head
 
       - name: Start API server
         env:
+          APP_ENV: development
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline
           AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS: 127.0.0.1,::1
           AUTH_REGISTER_ALLOWED_ROLES: student,teacher,admin

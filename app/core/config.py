@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-from app.core.enums import RoleEnum
+from app.core.enums import AppEnvEnum, RoleEnum
 
 
 class Settings(BaseSettings):
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "GuitarOnline"
-    app_env: str = "development"
+    app_env: AppEnvEnum = Field(...)
     debug: bool = False
     api_prefix: str = "/api/v1"
     log_level: str = "INFO"
@@ -68,6 +68,26 @@ class Settings(BaseSettings):
             if normalized in {"debug", "dev", "development"}:
                 return True
         return value
+
+    @field_validator("app_env", mode="before")
+    @classmethod
+    def normalize_app_env(cls, value: object) -> object:
+        """Normalize legacy aliases into strict runtime environment enum values."""
+        if not isinstance(value, str):
+            return value
+
+        normalized = value.strip().lower()
+        aliases = {
+            "dev": "development",
+            "development": "development",
+            "test": "test",
+            "testing": "test",
+            "stage": "staging",
+            "staging": "staging",
+            "prod": "production",
+            "production": "production",
+        }
+        return aliases.get(normalized, normalized)
 
     @field_validator("auth_rate_limit_backend", mode="before")
     @classmethod
@@ -163,12 +183,10 @@ class Settings(BaseSettings):
         if self.jwt_secret and self.jwt_secret.strip():
             self.secret_key = self.jwt_secret.strip()
 
-        env_name = self.app_env.strip().lower()
-
         if self.auth_rate_limit_backend == "redis" and not self.redis_url:
             raise ValueError("REDIS_URL must be set when AUTH_RATE_LIMIT_BACKEND=redis")
 
-        if env_name not in {"production", "prod"}:
+        if self.app_env is not AppEnvEnum.PRODUCTION:
             return self
 
         secret_value = self.secret_key.strip().lower()

@@ -11,6 +11,15 @@ class RoleEnum(StrEnum):
     ADMIN = "admin"
 
 
+class AppEnvEnum(StrEnum):
+    """Runtime environment profile."""
+
+    DEVELOPMENT = "development"
+    TEST = "test"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+
 class SlotStatusEnum(StrEnum):
     """Availability slot status."""
 

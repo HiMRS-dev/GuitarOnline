@@ -77,6 +77,14 @@
   - CI workflow runtime steps now explicitly provide `APP_ENV=development` for `test`/`migration`/`integration`.
   - CI run `22884942507` -> `success` (all jobs green, including `test`, `migration`, `integration`).
   - deploy run `22884942491` -> `success`.
+- AR-06 ingress/ops-surface hardening rerun (`2026-03-10`, `push`, `main`):
+  - initial hardening push `59036bf`:
+    - `ci` run `22885307985` -> `success`,
+    - `deploy` run `22885307977` -> `failure` due legacy production `.env` missing `GRAFANA_ADMIN_*`.
+  - compatibility follow-up push `750b7fe`:
+    - `scripts/deploy_remote.sh` now auto-provisions missing `GRAFANA_ADMIN_*` from existing app secret (no `admin/admin` fallback),
+    - `deploy` run `22885444883` -> `success`,
+    - `ci` run `22885444892` -> `success` (all jobs green, including `test`, `migration`, `integration`).
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -801,8 +809,9 @@
     - `docker-compose.proxy.yml` mounts `${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}` into `/etc/nginx/certs`,
     - `ops/nginx/certs/README.md` added with local self-signed generation example.
   - deploy preflight hardening in `scripts/deploy_remote.sh`:
-    - requires Grafana admin env values,
-    - validates proxy TLS files (`tls.crt`, `tls.key`) when `PROFILE=proxy`.
+    - validates proxy TLS files (`tls.crt`, `tls.key`) when `PROFILE=proxy`,
+    - auto-provisions missing legacy `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` using
+      non-`admin/admin` fallback sourced from existing app secret material.
   - CI/validation parity updates:
     - `.github/workflows/ci.yml` (`ops-config`) injects explicit Grafana env for compose validation,
     - `scripts/validate_ops_configs.ps1` sets non-secret validation defaults for Grafana env.
@@ -811,11 +820,16 @@
 - conflict handling during implementation:
   - full closure of ops ports in base profile would break local observability workflows; resolved by enforcing closure in proxy profile (production ingress path) while retaining standard profile for local diagnostics.
   - strict Grafana env requirement would break CI compose checks without `.env`; resolved by explicit CI validation env injection.
+  - first deploy after AR-06 hard fail (`deploy` run `22885307977`) due legacy production `.env` missing `GRAFANA_ADMIN_*`; resolved by deploy preflight compatibility migration in commit `750b7fe` (auto-provision missing keys from existing app secret, without restoring `admin/admin` fallback).
 - verification evidence:
   - `py -m poetry run ruff check tests/test_proxy_rate_limit_config.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py` -> `13 passed`.
   - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/ci.yml','docker-compose.prod.yml','docker-compose.proxy.yml')]; print('yaml-parse: ok')"` -> `yaml-parse: ok`.
   - `$env:GRAFANA_ADMIN_USER='ci-grafana-admin'; $env:GRAFANA_ADMIN_PASSWORD='ci-grafana-admin-password'; docker compose -f docker-compose.prod.yml config -q; docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config -q` -> success.
+  - `ci` run `22885307985` (`main`, push `59036bf`) -> `success` (all jobs green).
+  - `deploy` run `22885307977` (`main`, push `59036bf`) -> `failure` (missing `GRAFANA_ADMIN_*` in legacy `.env`).
+  - `deploy` run `22885444883` (`main`, push `750b7fe`) -> `success`.
+  - `ci` run `22885444892` (`main`, push `750b7fe`) -> `success` (all jobs green, including `test`, `migration`, and `integration`).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -849,7 +863,7 @@
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |
 | `AR-05` | MEDIUM | Done | Added strict `AppEnvEnum` (`development`, `test`, `staging`, `production`) and made `Settings.app_env` required (`Field(...)`) so startup fails fast when `APP_ENV` is missing/invalid; normalized legacy aliases (`dev/testing/stage/prod`) to canonical values to prevent deploy drift; security gating now compares enum and production controls trigger only for canonical `production`; CI test/migration/integration steps now set explicit `APP_ENV=development`. | N/A |
-| `AR-06` | MEDIUM | Done | Hardened ingress/ops surface: proxy profile now closes host exposure for app + monitoring ports (`8000`, `9090`, `9093`, `3000`), enforces HTTPS with `80 -> 443` redirect and HSTS in `ops/nginx/default.conf`, and requires mounted TLS assets (`tls.crt`/`tls.key`); removed Grafana `admin/admin` compose fallback by requiring explicit `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`; deploy preflight now validates Grafana env presence and proxy TLS asset existence. | N/A |
+| `AR-06` | MEDIUM | Done | Hardened ingress/ops surface: proxy profile now closes host exposure for app + monitoring ports (`8000`, `9090`, `9093`, `3000`), enforces HTTPS with `80 -> 443` redirect and HSTS in `ops/nginx/default.conf`, and requires mounted TLS assets (`tls.crt`/`tls.key`); removed Grafana `admin/admin` compose fallback by requiring explicit `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`; deploy preflight validates proxy TLS assets and auto-provisions missing legacy Grafana env keys from existing app secret to keep deploy pipeline compatible. | N/A |
 | `AR-07` | MEDIUM | Open | N/A | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
 | `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | N/A |
 | `AR-09` | MEDIUM | Partial | CI now includes dedicated `web-admin` job (`npm install`, `npm run lint`, `npm run build`) and gates backend test/migration jobs on it. | Add frontend smoke e2e checks in CI/release gate. |
@@ -930,6 +944,9 @@
       `yaml-parse: ok`.
     - `$env:GRAFANA_ADMIN_USER='ci-grafana-admin'; $env:GRAFANA_ADMIN_PASSWORD='ci-grafana-admin-password'; docker compose -f docker-compose.prod.yml config -q; docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config -q` ->
       `success`.
+    - `deploy` run `22885307977` (`main`, push `59036bf`) -> `failure` (`GRAFANA_ADMIN_*` missing in legacy `.env`).
+    - `deploy` run `22885444883` (`main`, push `750b7fe`) -> `success` (compatibility fallback applied).
+    - `ci` run `22885444892` (`main`, push `750b7fe`) -> `success` (all jobs green, including `test`, `migration`, `integration`).
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

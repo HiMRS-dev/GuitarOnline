@@ -101,17 +101,20 @@ jobs:
           log_file=".tmp/restore-rehearsal.log"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           port="${DEPLOY_PORT:-22}"
+          remote_script="/tmp/guitaronline-run-restore-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          scp -P "${port}" "scripts/run_restore_rehearsal_remote.sh" "${remote}:${remote_script}"
 
           remote_cmd="$(printf 'DEPLOY_PATH=%q ' "${DEPLOY_PATH}")"
           if [ -n "${BACKUP_FILE_INPUT}" ]; then
             remote_cmd+=$(printf 'RESTORE_REHEARSAL_BACKUP_FILE=%q ' "${BACKUP_FILE_INPUT}")
           fi
-          remote_cmd+="bash -s"
+          remote_cmd+=$(printf 'bash %q' "${remote_script}")
 
           set +e
-          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_restore_rehearsal_remote.sh 2>&1 | tee "${log_file}"
+          ssh -p "${port}" "${remote}" "${remote_cmd}" 2>&1 | tee "${log_file}"
           ssh_exit="${PIPESTATUS[0]}"
           set -e
+          ssh -p "${port}" "${remote}" "$(printf 'rm -f %q' "${remote_script}")" >/dev/null 2>&1 || true
           if [ "${ssh_exit}" -ne 0 ]; then
             echo "::error::Remote restore runner exited with status ${ssh_exit}."
             echo "::group::restore-rehearsal remote log tail"

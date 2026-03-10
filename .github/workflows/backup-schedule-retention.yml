@@ -136,12 +136,15 @@ jobs:
           log_file=".tmp/backup-schedule.log"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           port="${DEPLOY_PORT:-22}"
-          remote_cmd="$(printf 'DEPLOY_PATH=%q BACKUP_DAILY_KEEP=%q BACKUP_WEEKLY_KEEP=%q BACKUP_WEEKLY_DAY=%q BACKUP_FORCE_WEEKLY=%q bash -s' "${DEPLOY_PATH}" "${BACKUP_DAILY_KEEP}" "${BACKUP_WEEKLY_KEEP}" "${BACKUP_WEEKLY_DAY}" "${BACKUP_FORCE_WEEKLY}")"
+          remote_script="/tmp/guitaronline-run-backup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          scp -P "${port}" "scripts/run_backup_schedule_remote.sh" "${remote}:${remote_script}"
+          remote_cmd="$(printf 'DEPLOY_PATH=%q BACKUP_DAILY_KEEP=%q BACKUP_WEEKLY_KEEP=%q BACKUP_WEEKLY_DAY=%q BACKUP_FORCE_WEEKLY=%q bash %q' "${DEPLOY_PATH}" "${BACKUP_DAILY_KEEP}" "${BACKUP_WEEKLY_KEEP}" "${BACKUP_WEEKLY_DAY}" "${BACKUP_FORCE_WEEKLY}" "${remote_script}")"
 
           set +e
-          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_backup_schedule_remote.sh 2>&1 | tee "${log_file}"
+          ssh -p "${port}" "${remote}" "${remote_cmd}" 2>&1 | tee "${log_file}"
           ssh_exit="${PIPESTATUS[0]}"
           set -e
+          ssh -p "${port}" "${remote}" "$(printf 'rm -f %q' "${remote_script}")" >/dev/null 2>&1 || true
           if [ "${ssh_exit}" -ne 0 ]; then
             echo "::error::Remote backup runner exited with status ${ssh_exit}."
             echo "::group::backup-schedule remote log tail"

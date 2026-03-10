@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     auth_rate_limit_refresh_requests: int = 20
     auth_rate_limit_backend: Literal["memory", "redis"] = "memory"
     auth_rate_limit_redis_namespace: str = "auth_rate_limit"
+    auth_refresh_cookie_name: str = "go_refresh_token"
+    auth_refresh_cookie_secure: bool = False
+    auth_refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    auth_refresh_cookie_domain: str | None = None
+    auth_refresh_cookie_path: str = "/api/v1/identity/auth"
     auth_register_allowed_roles: Annotated[tuple[RoleEnum, ...], NoDecode] = (RoleEnum.STUDENT,)
     auth_rate_limit_trusted_proxy_ips: Annotated[tuple[str, ...], NoDecode] = (
         "127.0.0.1",
@@ -93,6 +98,14 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_rate_limit_backend(cls, value: object) -> object:
         """Normalize backend token for case-insensitive env parsing."""
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+    @field_validator("auth_refresh_cookie_samesite", mode="before")
+    @classmethod
+    def normalize_refresh_cookie_samesite(cls, value: object) -> object:
+        """Normalize refresh-cookie SameSite value for env parsing."""
         if isinstance(value, str):
             return value.strip().lower()
         return value
@@ -186,6 +199,11 @@ class Settings(BaseSettings):
         if self.auth_rate_limit_backend == "redis" and not self.redis_url:
             raise ValueError("REDIS_URL must be set when AUTH_RATE_LIMIT_BACKEND=redis")
 
+        if self.auth_refresh_cookie_samesite == "none" and not self.auth_refresh_cookie_secure:
+            raise ValueError(
+                "AUTH_REFRESH_COOKIE_SECURE must be true when AUTH_REFRESH_COOKIE_SAMESITE=none",
+            )
+
         if self.app_env is not AppEnvEnum.PRODUCTION:
             return self
 
@@ -203,6 +221,8 @@ class Settings(BaseSettings):
                 "AUTH_RATE_LIMIT_ALLOW_IN_MEMORY_IN_PRODUCTION must be true in production "
                 "when using in-memory auth rate limiting",
             )
+        if not self.auth_refresh_cookie_secure:
+            raise ValueError("AUTH_REFRESH_COOKIE_SECURE must be true in production environment")
         return self
 
 

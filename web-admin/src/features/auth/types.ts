@@ -9,6 +9,11 @@ export type TokenPair = {
   token_type: string;
 };
 
+export type AccessSession = {
+  access_token: string;
+  token_type: string;
+};
+
 export type Role = {
   id: string;
   name: string;

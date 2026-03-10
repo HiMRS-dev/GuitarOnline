@@ -1,5 +1,9 @@
 import { API_BASE_URL } from "../../config";
-import { clearTokenPair, loadTokenPair, saveTokenPair } from "../../features/auth/storage";
+import {
+  clearAccessSession,
+  loadAccessSession,
+  saveTokenPair
+} from "../../features/auth/storage";
 import type { TokenPair } from "../../features/auth/types";
 
 type ApiRequestOptions = {
@@ -78,9 +82,9 @@ export class ApiClient {
     }
 
     if (shouldUseAuth) {
-      const tokens = loadTokenPair();
-      if (tokens) {
-        headers.Authorization = `Bearer ${tokens.access_token}`;
+      const session = loadAccessSession();
+      if (session) {
+        headers.Authorization = `Bearer ${session.access_token}`;
       }
     }
 
@@ -88,7 +92,8 @@ export class ApiClient {
       method: options.method ?? "GET",
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal
+      signal: options.signal,
+      credentials: "include"
     });
 
     if (response.status === 401 && shouldUseAuth && retryOnUnauthorized) {
@@ -99,7 +104,7 @@ export class ApiClient {
           retryOnUnauthorized: false
         });
       }
-      clearTokenPair();
+      clearAccessSession();
     }
 
     if (!response.ok) {
@@ -107,28 +112,23 @@ export class ApiClient {
       throw normalizeBackendError(response.status, payload);
     }
 
+    if (response.status === 204) {
+      return undefined as T;
+    }
     return (await response.json()) as T;
   }
 
   private async refreshAccessToken(): Promise<boolean> {
-    const tokens = loadTokenPair();
-    if (!tokens?.refresh_token) {
-      return false;
-    }
-
     const response = await fetch(`${API_BASE_URL}/identity/auth/refresh`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ refresh_token: tokens.refresh_token })
+      credentials: "include"
     });
     if (!response.ok) {
       return false;
     }
 
     const refreshed = (await response.json()) as TokenPair;
-    if (!refreshed.access_token || !refreshed.refresh_token) {
+    if (!refreshed.access_token || !refreshed.token_type) {
       return false;
     }
     saveTokenPair(refreshed);

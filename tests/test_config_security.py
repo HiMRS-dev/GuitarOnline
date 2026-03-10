@@ -27,6 +27,7 @@ def test_legacy_prod_alias_normalized_to_production() -> None:
         app_env="prod",
         secret_key="super-secure-value",
         auth_rate_limit_allow_in_memory_in_production=True,
+        auth_refresh_cookie_secure=True,
     )
     assert str(settings.app_env) == "production"
 
@@ -62,6 +63,7 @@ def test_custom_secret_key_allowed_in_production_with_explicit_ack() -> None:
         app_env="production",
         secret_key="super-secure-value",
         auth_rate_limit_allow_in_memory_in_production=True,
+        auth_refresh_cookie_secure=True,
     )
     assert settings.secret_key == "super-secure-value"
 
@@ -84,8 +86,28 @@ def test_redis_backend_allows_production_without_in_memory_ack() -> None:
         secret_key="super-secure-value",
         auth_rate_limit_backend="redis",
         redis_url="redis://redis:6379/0",
+        auth_refresh_cookie_secure=True,
     )
     assert settings.auth_rate_limit_backend == "redis"
+
+
+def test_production_requires_secure_refresh_cookie() -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            app_env="production",
+            secret_key="super-secure-value",
+            auth_rate_limit_allow_in_memory_in_production=True,
+            auth_refresh_cookie_secure=False,
+        )
+
+
+def test_samesite_none_requires_secure_refresh_cookie() -> None:
+    with pytest.raises(ValidationError):
+        _build_settings(
+            auth_refresh_cookie_samesite="none",
+            auth_refresh_cookie_secure=False,
+        )
 
 
 def test_jwt_secret_alias_overrides_secret_key() -> None:

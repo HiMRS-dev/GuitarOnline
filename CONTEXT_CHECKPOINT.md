@@ -85,6 +85,13 @@
     - `scripts/deploy_remote.sh` now auto-provisions missing `GRAFANA_ADMIN_*` from existing app secret (no `admin/admin` fallback),
     - `deploy` run `22885444883` -> `success`,
     - `ci` run `22885444892` -> `success` (all jobs green, including `test`, `migration`, `integration`).
+- AR-07 token/session model hardening (`2026-03-10`, local validation before push):
+  - backend now sets/rotates `HttpOnly` refresh cookie on login/refresh and revokes+clears it on `POST /api/v1/identity/auth/logout`,
+  - frontend auth flows (`portal` + `web-admin`) now use cookie-based refresh + in-memory access token (no auth token persistence in `localStorage`),
+  - security headers middleware added (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, route-aware CSP with `/docs`/`/redoc`/`/openapi*` exception).
+  - `py -m poetry run ruff check app/core/config.py app/main.py app/modules/identity/router.py app/modules/identity/service.py tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py tests/test_security_surface.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py tests/test_portal_page.py` -> `42 passed`.
+  - `node -v` -> `CommandNotFoundException` in current shell (cannot run local `web-admin` lint/build here).
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -830,6 +837,41 @@
   - `deploy` run `22885307977` (`main`, push `59036bf`) -> `failure` (missing `GRAFANA_ADMIN_*` in legacy `.env`).
   - `deploy` run `22885444883` (`main`, push `750b7fe`) -> `success`.
   - `ci` run `22885444892` (`main`, push `750b7fe`) -> `success` (all jobs green, including `test`, `migration`, and `integration`).
+- architecture follow-up (2026-03-10): `AR-07` token/session + browser security-surface hardening completed.
+- implemented:
+  - backend refresh-cookie config surface added in `Settings`:
+    - `AUTH_REFRESH_COOKIE_NAME`,
+    - `AUTH_REFRESH_COOKIE_SECURE`,
+    - `AUTH_REFRESH_COOKIE_SAMESITE`,
+    - `AUTH_REFRESH_COOKIE_DOMAIN`,
+    - `AUTH_REFRESH_COOKIE_PATH`.
+  - security validation tightened in `app/core/config.py`:
+    - `SameSite=none` requires secure cookie,
+    - production requires `AUTH_REFRESH_COOKIE_SECURE=true`.
+  - auth router hardening:
+    - login now sets `HttpOnly` refresh cookie,
+    - refresh supports cookie fallback and rotates cookie,
+    - new `POST /api/v1/identity/auth/logout` revokes refresh token (best-effort) and clears cookie.
+  - frontend token persistence model migrated off `localStorage`:
+    - `web-admin` now uses in-memory access session (`storage.ts`) + cookie refresh with `credentials: include`,
+    - `portal` static frontend now refreshes session from cookie and performs backend logout to clear cookie.
+  - baseline response security headers added in `app/main.py` middleware:
+    - `X-Content-Type-Options`,
+    - `X-Frame-Options`,
+    - `Referrer-Policy`,
+    - `Permissions-Policy`,
+    - CSP for non-doc routes (`/docs`, `/redoc`, `/openapi*` excluded to keep Swagger assets operational).
+- conflict handling during implementation:
+  - removing token persistence risked breaking existing refresh-body clients; resolved by keeping backward compatibility in refresh endpoint (request body still accepted, cookie fallback added).
+  - strict CSP can break Swagger UI; resolved by route-aware CSP skip for docs/openapi endpoints.
+  - browser logout semantics could leave cookie session active; resolved by adding explicit logout API call in both frontends before local session clear.
+- verification evidence:
+  - `py -m poetry run ruff check app/core/config.py app/main.py app/modules/identity/router.py app/modules/identity/service.py tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py tests/test_security_surface.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py tests/test_portal_page.py` -> `42 passed`.
+  - added regression tests:
+    - `tests/test_identity_refresh_cookie.py`,
+    - `tests/test_security_headers.py`.
+  - `node -v` -> `CommandNotFoundException` (current shell does not provide Node.js; `web-admin` lint/build cannot be executed locally in this environment).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -864,7 +906,7 @@
 | `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |
 | `AR-05` | MEDIUM | Done | Added strict `AppEnvEnum` (`development`, `test`, `staging`, `production`) and made `Settings.app_env` required (`Field(...)`) so startup fails fast when `APP_ENV` is missing/invalid; normalized legacy aliases (`dev/testing/stage/prod`) to canonical values to prevent deploy drift; security gating now compares enum and production controls trigger only for canonical `production`; CI test/migration/integration steps now set explicit `APP_ENV=development`. | N/A |
 | `AR-06` | MEDIUM | Done | Hardened ingress/ops surface: proxy profile now closes host exposure for app + monitoring ports (`8000`, `9090`, `9093`, `3000`), enforces HTTPS with `80 -> 443` redirect and HSTS in `ops/nginx/default.conf`, and requires mounted TLS assets (`tls.crt`/`tls.key`); removed Grafana `admin/admin` compose fallback by requiring explicit `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`; deploy preflight validates proxy TLS assets and auto-provisions missing legacy Grafana env keys from existing app secret to keep deploy pipeline compatible. | N/A |
-| `AR-07` | MEDIUM | Open | N/A | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
+| `AR-07` | MEDIUM | Done | Replaced frontend auth token persistence with cookie-refresh + in-memory access sessions (`portal` and `web-admin`); backend login/refresh now sets/rotates `HttpOnly` refresh cookie and new `POST /identity/auth/logout` revokes/clears refresh token; added baseline security headers and route-aware CSP middleware (docs/openapi excluded). | N/A |
 | `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | N/A |
 | `AR-09` | MEDIUM | Partial | CI now includes dedicated `web-admin` job (`npm install`, `npm run lint`, `npm run build`) and gates backend test/migration jobs on it. | Add frontend smoke e2e checks in CI/release gate. |
 
@@ -879,8 +921,7 @@
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
-3. `P2` `AR-07`: migrate token handling away from `localStorage`.
-4. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+3. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -947,6 +988,12 @@
     - `deploy` run `22885307977` (`main`, push `59036bf`) -> `failure` (`GRAFANA_ADMIN_*` missing in legacy `.env`).
     - `deploy` run `22885444883` (`main`, push `750b7fe`) -> `success` (compatibility fallback applied).
     - `ci` run `22885444892` (`main`, push `750b7fe`) -> `success` (all jobs green, including `test`, `migration`, `integration`).
+  - AR-07 token/session + security-header hardening validation:
+    - `py -m poetry run ruff check app/core/config.py app/main.py app/modules/identity/router.py app/modules/identity/service.py tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_config_security.py tests/test_identity_refresh_cookie.py tests/test_security_headers.py tests/test_security_surface.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py tests/test_portal_page.py` ->
+      `42 passed in 1.61s`.
+    - `node -v` -> failed (`CommandNotFoundException`; local `web-admin` lint/build unavailable in this shell).
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

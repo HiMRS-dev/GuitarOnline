@@ -48,6 +48,24 @@ _OPENAPI_TAGS = [
 ]
 
 
+def _build_csp_header(path: str) -> str | None:
+    """Return CSP policy for selected routes."""
+    if path.startswith("/docs") or path.startswith("/redoc") or path.startswith("/openapi"):
+        return None
+    return (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self'"
+    )
+
+
 def _landing_page_html() -> str:
     """Build minimal landing page for root path."""
     return f"""
@@ -176,6 +194,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.middleware("http")(instrument_http_request)
+
+
+@app.middleware("http")
+async def apply_security_headers(request: Request, call_next):
+    """Attach baseline security headers to HTTP responses."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+
+    csp_header = _build_csp_header(request.url.path)
+    if csp_header:
+        response.headers.setdefault("Content-Security-Policy", csp_header)
+    return response
+
+
 app.mount("/portal/static", StaticFiles(directory=_FRONTEND_STATIC_DIR), name="portal-static")
 
 register_exception_handlers(app)

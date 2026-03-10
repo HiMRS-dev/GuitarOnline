@@ -13,3 +13,11 @@ export async function login(payload: LoginPayload): Promise<TokenPair> {
 export async function getCurrentUser(): Promise<CurrentUser> {
   return apiClient.request<CurrentUser>("/identity/users/me");
 }
+
+export async function logout(): Promise<void> {
+  await apiClient.request<void>("/identity/auth/logout", {
+    method: "POST",
+    auth: false,
+    retryOnUnauthorized: false
+  });
+}

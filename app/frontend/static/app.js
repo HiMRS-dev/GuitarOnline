@@ -1,10 +1,7 @@
 const API_PREFIX = "/api/v1";
-const ACCESS_TOKEN_KEY = "guitaronline_access_token";
-const REFRESH_TOKEN_KEY = "guitaronline_refresh_token";
 
 const state = {
   accessToken: null,
-  refreshToken: null,
   currentUser: null,
   slots: [],
   bookings: [],
@@ -56,7 +53,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   showAuthMode();
   setGlobalStatus("Ожидание авторизации. Войдите или зарегистрируйтесь.", "muted");
+  bootstrapSessionFromCookie().catch((error) => {
+    clearSession();
+    showAuthMode();
+    setGlobalStatus(`Session expired: ${error.message}`, "error");
+  });
 });
+
+async function bootstrapSessionFromCookie() {
+  const refreshed = await refreshSession();
+  if (!refreshed) {
+    return false;
+  }
+  await bootstrapAuthenticatedSession();
+  return true;
+}
 
 function bindEvents() {
   elements.registerForm?.addEventListener("submit", handleRegister);
@@ -83,20 +94,15 @@ function bindEvents() {
 }
 
 function hydrateTokens() {
-  state.accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
-  state.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  state.accessToken = null;
 }
 
 function persistTokens(tokenPair) {
   state.accessToken = tokenPair.access_token;
-  state.refreshToken = tokenPair.refresh_token;
-  localStorage.setItem(ACCESS_TOKEN_KEY, state.accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, state.refreshToken);
 }
 
 function clearSession() {
   state.accessToken = null;
-  state.refreshToken = null;
   state.currentUser = null;
   state.slots = [];
   state.bookings = [];
@@ -105,8 +111,6 @@ function clearSession() {
   state.adminOperations.lastExpiredHolds = null;
   state.adminOperations.lastExpiredPackages = null;
   state.adminOperations.updatedAt = null;
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
 
   if (elements.slotPackageSelect) {
     elements.slotPackageSelect.innerHTML = "";
@@ -275,6 +279,15 @@ async function handleLogin(event) {
 }
 
 async function handleLogout() {
+  try {
+    await apiRequest("/identity/auth/logout", {
+      method: "POST",
+      auth: false,
+      retryOnUnauthorized: false,
+    });
+  } catch (_) {
+    // Continue local logout even if backend revocation request fails.
+  }
   clearSession();
   showAuthMode();
   setGlobalStatus("Вы вышли из системы.", "muted");
@@ -1023,14 +1036,9 @@ function extractErrorMessage(payload, statusCode) {
 }
 
 async function refreshSession() {
-  if (!state.refreshToken) {
-    return false;
-  }
-
   try {
     const tokenPair = await apiRequest("/identity/auth/refresh", {
       method: "POST",
-      body: { refresh_token: state.refreshToken },
       auth: false,
       retryOnUnauthorized: false,
     });
@@ -1064,6 +1072,7 @@ async function apiRequest(
     method,
     headers,
     body: body !== null ? JSON.stringify(body) : undefined,
+    credentials: "include",
   });
 
   const contentType = response.headers.get("content-type") ?? "";
@@ -1080,8 +1089,7 @@ async function apiRequest(
   if (
     response.status === 401 &&
     auth &&
-    retryOnUnauthorized &&
-    state.refreshToken
+    retryOnUnauthorized
   ) {
     const refreshed = await refreshSession();
     if (refreshed) {

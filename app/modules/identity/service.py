@@ -119,6 +119,20 @@ class IdentityService:
 
         return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
+    async def revoke_refresh_token(self, refresh_token_value: str) -> None:
+        """Best-effort refresh token revocation for logout flow."""
+        try:
+            payload = decode_token(refresh_token_value)
+        except HTTPException:
+            return
+        if payload.get("type") != "refresh":
+            return
+
+        token_id = payload.get("jti")
+        if not token_id:
+            return
+        await self.repository.revoke_refresh_token(token_id, utc_now())
+
     async def get_user_from_access_token(self, token: str) -> User:
         """Resolve user from access token."""
         payload = decode_token(token)

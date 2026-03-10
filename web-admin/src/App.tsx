@@ -7,9 +7,14 @@ import { KpiPage } from "./admin/pages/KpiPage";
 import { PackagesPage } from "./admin/pages/PackagesPage";
 import { StudentsPage } from "./admin/pages/StudentsPage";
 import { TeachersPage } from "./admin/pages/TeachersPage";
-import { getCurrentUser, login } from "./features/auth/api";
-import { clearTokenPair, loadTokenPair, saveTokenPair } from "./features/auth/storage";
-import type { TokenPair } from "./features/auth/types";
+import { getCurrentUser, login, logout } from "./features/auth/api";
+import {
+  clearAccessSession,
+  loadAccessSession,
+  saveTokenPair,
+  subscribeAccessSession
+} from "./features/auth/storage";
+import type { AccessSession, TokenPair } from "./features/auth/types";
 
 function maskToken(token: string): string {
   if (token.length <= 12) {
@@ -19,16 +24,21 @@ function maskToken(token: string): string {
 }
 
 export function App() {
-  const [tokens, setTokens] = useState<TokenPair | null>(() => loadTokenPair());
+  const [tokens, setTokens] = useState<AccessSession | null>(() => loadAccessSession());
+
+  useEffect(() => {
+    return subscribeAccessSession((session) => {
+      setTokens(session);
+    });
+  }, []);
 
   function handleSignedIn(tokenPair: TokenPair) {
     saveTokenPair(tokenPair);
-    setTokens(tokenPair);
   }
 
   function handleSignOut() {
-    clearTokenPair();
-    setTokens(null);
+    void logout().catch(() => undefined);
+    clearAccessSession();
   }
 
   return (
@@ -60,7 +70,7 @@ export function App() {
 }
 
 type LoginPageProps = {
-  tokens: TokenPair | null;
+  tokens: AccessSession | null;
   onSignedIn: (tokenPair: TokenPair) => void;
   onSignOut: () => void;
 };
@@ -141,9 +151,6 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
               <strong>access_token:</strong> <code>{maskToken(tokens.access_token)}</code>
             </p>
             <p>
-              <strong>refresh_token:</strong> <code>{maskToken(tokens.refresh_token)}</code>
-            </p>
-            <p>
               <strong>token_type:</strong> <code>{tokens.token_type}</code>
             </p>
             <button type="button" onClick={handleLogout}>
@@ -160,7 +167,7 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
 }
 
 type ProtectedAdminRouteProps = {
-  tokens: TokenPair | null;
+  tokens: AccessSession | null;
   onInvalidSession: () => void;
   children: ReactNode;
 };
@@ -169,11 +176,6 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
   const [state, setState] = useState<"pending" | "granted" | "denied">("pending");
 
   useEffect(() => {
-    if (!tokens) {
-      setState("denied");
-      return;
-    }
-
     let active = true;
     setState("pending");
     getCurrentUser()
@@ -199,9 +201,9 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
     return () => {
       active = false;
     };
-  }, [onInvalidSession, tokens]);
+  }, [onInvalidSession, tokens?.access_token]);
 
-  if (!tokens || state === "denied") {
+  if (state === "denied") {
     return <Navigate to="/login" replace />;
   }
   if (state === "pending") {

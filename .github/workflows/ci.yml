@@ -108,6 +108,12 @@ jobs:
       - name: Run frontend build
         run: npm run build
 
+      - name: Install Playwright browser (Chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run frontend smoke e2e
+        run: npm run test:smoke:e2e
+
   ops-config:
     runs-on: ubuntu-latest
     needs: [lint]

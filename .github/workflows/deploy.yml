@@ -89,6 +89,32 @@ jobs:
           echo "Run smoke: ${RUN_SMOKE}"
           echo "Bootstrap mode: auto (repo initialized if ${DEPLOY_PATH} has no .git)"
 
+      - name: Setup Node.js for web-admin smoke gate
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install web-admin dependencies
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
+        working-directory: web-admin
+        run: npm install
+
+      - name: Build web-admin bundle
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
+        working-directory: web-admin
+        run: npm run build
+
+      - name: Install Playwright browser (Chromium)
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
+        working-directory: web-admin
+        run: npx playwright install --with-deps chromium
+
+      - name: Run web-admin smoke e2e gate
+        if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
+        working-directory: web-admin
+        run: npm run test:smoke:e2e
+
       - name: Validate required secrets
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         run: |

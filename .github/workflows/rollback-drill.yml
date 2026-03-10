@@ -129,7 +129,22 @@ jobs:
           fi
           remote_cmd+="bash -s"
 
+          set +e
           ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_rollback_drill_remote.sh 2>&1 | tee "${log_file}"
+          ssh_exit="${PIPESTATUS[0]}"
+          set -e
+          if [ "${ssh_exit}" -ne 0 ]; then
+            echo "::error::Remote rollback drill runner exited with status ${ssh_exit}."
+            echo "::group::rollback-drill remote log tail"
+            tail -n 120 "${log_file}" || true
+            echo "::endgroup::"
+            exit "${ssh_exit}"
+          fi
+
+          if [ ! -s "${log_file}" ]; then
+            echo "::error::Remote rollback drill runner produced no output."
+            exit 1
+          fi
 
           report_path="$(
             awk -F= '

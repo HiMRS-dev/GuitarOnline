@@ -142,3 +142,6 @@ prune_backups "${weekly_dir}" "guitaronline-weekly-*.sql" "${weekly_keep}" "week
 daily_count="$(count_backups "${daily_dir}" "guitaronline-daily-*.sql")"
 weekly_count="$(count_backups "${weekly_dir}" "guitaronline-weekly-*.sql")"
 log "Backup schedule run completed (daily_count=${daily_count}, weekly_count=${weekly_count})."
+echo "backup_schedule_daily_count=${daily_count}"
+echo "backup_schedule_weekly_count=${weekly_count}"
+echo "backup_schedule_status=success"

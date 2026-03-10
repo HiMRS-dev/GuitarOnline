@@ -24,7 +24,7 @@
 - Admin UI (`web-admin`) is integrated, including optional production profile (`admin-ui`).
 - v1.2 hardening plan (`V2-01`..`V2-10`) is fully implemented.
 
-## 4) Current Verified State (2026-03-09)
+## 4) Current Verified State (2026-03-10)
 - Branch:
   - `main`.
 - Latest CI status:
@@ -123,6 +123,16 @@
     - final fix set (`f5e1011`, `e02273f`, `588a120`) is green:
       - `ci` run `22887475411` -> `success`,
       - `deploy` run `22887475446` -> `success`.
+- OPS-01 cadence-alignment push (`2026-03-10`, `push`, `main` @ `790670e1eb5dc769a705fe1dcfe42c42e86795e1`):
+  - resolved acceptance-criteria conflict by switching `restore-rehearsal` schedule to daily (`20 3 * * *`) and syncing docs:
+    - `.github/workflows/restore-rehearsal.yml`,
+    - `README.md`,
+    - `ops/production_hardening_checklist.md`.
+  - guardrail tests added:
+    - `tests/test_ops_schedule_cadence.py` (restore=daily, synthetic-retention=daily, synthetic-check=hourly).
+  - push validation:
+    - `ci` run `22888017431` -> `success` (all jobs green, including `web-admin`, `test`, `migration`, `integration`),
+    - `deploy` run `22888017433` -> `success`.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).

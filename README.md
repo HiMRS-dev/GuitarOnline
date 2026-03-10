@@ -133,7 +133,7 @@ Production-ready modular monolith backend for an online guitar school.
 | `SYNTHETIC_RETENTION_DRY_RUN` | No | ops scripts | Default dry-run mode for synthetic retention script (`true`/`false`, default: `false`). |
 | `ADMIN_UI_API_BASE_URL` | No | admin-ui profile | Build-time API base for `web-admin` Docker profile. |
 | `ADMIN_UI_BASE_PATH` | No | admin-ui profile | Build-time base path for `web-admin` (`/admin/` by default). |
-| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | No | monitoring | Defaults exist, but set explicit secure values in production. |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Yes | monitoring | Required by production compose; unsafe `admin/admin` fallback is removed. |
 
 ### CI/CD secrets
 
@@ -204,6 +204,8 @@ Production-ready modular monolith backend for an online guitar school.
   - bootstraps repository metadata on target host when `${DEPLOY_PATH}` has no `.git` (no manual pre-clone required),
   - uploads `.env` from `PROD_ENV_FILE_B64` to `${DEPLOY_PATH}/.env`,
   - runs preflight validation for auth rate-limiter config (`AUTH_RATE_LIMIT_BACKEND` must resolve to `redis`),
+  - validates required monitoring credentials (`GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`) before compose apply,
+  - for proxy profile, validates TLS certificate assets (`tls.crt` / `tls.key`) before compose apply,
   - performs compose deploy and DB migrations,
   - runs post-deploy role-based smoke gate (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, `admin/teacher/student` critical flow),
   - verifies smoke output markers `Role-based release gate passed.` and `Smoke checks passed.`,
@@ -219,23 +221,29 @@ Production-ready modular monolith backend for an online guitar school.
 
 - Compose bundle:
   - `docker-compose.prod.yml` + `docker-compose.proxy.yml`
-- Public entrypoint:
-  - `http://localhost:${PROXY_PUBLIC_PORT:-8080}`
+- Public entrypoints:
+  - HTTP redirect entrypoint: `http://localhost:${PROXY_PUBLIC_PORT:-8080}`
+  - HTTPS entrypoint: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}`
 - Canonical URLs behind proxy:
-  - root: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/`
-  - portal: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/portal`
-  - admin UI (when `--profile admin-ui` is enabled): `http://localhost:${PROXY_PUBLIC_PORT:-8080}/admin/`
-  - API: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/api/v1`
-  - docs: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/docs`
-  - health: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/health`
-  - readiness: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/ready`
-  - metrics: `http://localhost:${PROXY_PUBLIC_PORT:-8080}/metrics`
+  - root: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/`
+  - portal: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/portal`
+  - admin UI (when `--profile admin-ui` is enabled): `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/admin/`
+  - API: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/api/v1`
+  - docs: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/docs`
+  - health: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/health`
+  - readiness: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/ready`
+  - metrics: `https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/metrics`
 - Health checks:
-  - proxy container probes `/health` through upstream app.
+  - proxy container probes `/health` through TLS endpoint.
   - app service remains healthchecked on `http://localhost:8000/health` inside container.
 - Note:
   - in proxy profile, host binding for `app:8000` is removed (`ports: []` override),
+    and monitoring service ports (`prometheus`, `alertmanager`, `grafana`) are not exposed to host,
     so external traffic should use proxy URL only.
+  - TLS certificate assets are required in proxy profile:
+    - default path: `ops/nginx/certs/tls.crt` and `ops/nginx/certs/tls.key`,
+    - override path: `PROXY_TLS_CERTS_PATH` in `.env`,
+    - local self-signed generation example: `ops/nginx/certs/README.md`.
   - for admin UI deployment, set:
     - `ADMIN_UI_API_BASE_URL` (default `/api/v1`),
     - `ADMIN_UI_BASE_PATH` (default `/admin/`).
@@ -400,7 +408,7 @@ Production-ready modular monolith backend for an online guitar school.
 - Open UIs:
   - `http://localhost:9090`
   - `http://localhost:9093`
-  - `http://localhost:3000` (default credentials from `.env`: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`)
+  - `http://localhost:3000` (configured credentials from `.env`: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`)
 - Prometheus alert rules baseline:
   - API down for 2m,
   - 5xx ratio > 5% for 5m,

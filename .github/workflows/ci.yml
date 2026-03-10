@@ -111,6 +111,9 @@ jobs:
   ops-config:
     runs-on: ubuntu-latest
     needs: [lint]
+    env:
+      GRAFANA_ADMIN_USER: ci-grafana-admin
+      GRAFANA_ADMIN_PASSWORD: ci-grafana-admin-password
     steps:
       - name: Checkout
         uses: actions/checkout@v4

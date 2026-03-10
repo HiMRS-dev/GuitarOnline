@@ -13,6 +13,9 @@ Use this checklist to move from "working deploy" to repeatable reliability.
 - Confirm portal assets are served:
   - `curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/portal`
   - `curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8000/portal/static/app.js`
+- If proxy profile is enabled, confirm HTTPS ingress + HSTS:
+  - `curl -k -I https://127.0.0.1:${PROXY_TLS_PUBLIC_PORT:-8443}/health | grep -i strict-transport-security`
+  - `curl -I http://127.0.0.1:${PROXY_PUBLIC_PORT:-8080}/health | grep -E "308|301"`
 - Keep `run_smoke=true` in deploy workflow for production releases.
 - Confirm deploy smoke logs include role gate marker:
   - `Role-based release gate passed.`

@@ -9,5 +9,7 @@ __pycache__/
 .coverage
 htmlcov/
 ops/alertmanager/alertmanager.oncall.generated.yml
+ops/nginx/certs/*
+!ops/nginx/certs/README.md
 backups/
 .tmp/

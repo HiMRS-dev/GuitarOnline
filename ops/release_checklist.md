@@ -11,6 +11,9 @@ Use this checklist before promoting a build to a target environment.
   - `AUTH_RATE_LIMIT_BACKEND=redis` (deploy preflight rejects non-redis values).
   - validate trusted proxy/IP resolution and runtime checklist:
     - `ops/auth_rate_limit_proxy_runbook.md`.
+- If deploying with proxy profile, confirm TLS assets exist on target host:
+  - `${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}/tls.crt`
+  - `${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}/tls.key`
 - If `.env` changed, refresh GitHub secret:
   - preferred one-command sync:
     - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1`
@@ -74,6 +77,7 @@ Use this checklist before promoting a build to a target environment.
   - `docker compose -f docker-compose.prod.yml up --build -d`
 - Single-site proxy profile:
   - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml up --build -d`
+  - note: profile requires TLS cert files (`tls.crt`, `tls.key`) and enforces HTTPS/HSTS ingress.
 - On-call routing profile:
   - `docker compose -f docker-compose.prod.yml -f docker-compose.alerting.yml up --build -d`
 - Single-site + on-call routing profile:

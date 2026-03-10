@@ -782,6 +782,40 @@
   - `py -m poetry run ruff check app/core/config.py app/core/enums.py scripts/seed_demo_data.py tests/test_config_security.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_config_security.py` -> `18 passed`.
   - `py -m poetry run pytest -q tests/test_identity_rate_limit.py tests/test_security_surface.py tests/test_pii_field_visibility.py` -> `13 passed`.
+- architecture follow-up (2026-03-10): `AR-06` ingress and ops-surface hardening completed.
+- implemented:
+  - removed unsafe Grafana credential fallback in production compose:
+    - `docker-compose.prod.yml` now requires explicit
+      `GRAFANA_ADMIN_USER` + `GRAFANA_ADMIN_PASSWORD` (`:?` guard).
+  - reduced externally exposed surface in proxy profile:
+    - `docker-compose.proxy.yml` now enforces `ports: []` for:
+      - `app`,
+      - `prometheus`,
+      - `alertmanager`,
+      - `grafana`.
+  - enforced TLS/HSTS ingress path in reverse proxy:
+    - `ops/nginx/default.conf` now redirects `80 -> 443`,
+    - terminates TLS on `443`,
+    - sends `Strict-Transport-Security` header on HTTPS responses.
+  - proxy runtime now expects mounted TLS assets:
+    - `docker-compose.proxy.yml` mounts `${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}` into `/etc/nginx/certs`,
+    - `ops/nginx/certs/README.md` added with local self-signed generation example.
+  - deploy preflight hardening in `scripts/deploy_remote.sh`:
+    - requires Grafana admin env values,
+    - validates proxy TLS files (`tls.crt`, `tls.key`) when `PROFILE=proxy`.
+  - CI/validation parity updates:
+    - `.github/workflows/ci.yml` (`ops-config`) injects explicit Grafana env for compose validation,
+    - `scripts/validate_ops_configs.ps1` sets non-secret validation defaults for Grafana env.
+  - regression tests expanded:
+    - `tests/test_proxy_rate_limit_config.py` now validates HTTPS redirect/HSTS, proxy port exposure constraints, and Grafana credential requirement markers.
+- conflict handling during implementation:
+  - full closure of ops ports in base profile would break local observability workflows; resolved by enforcing closure in proxy profile (production ingress path) while retaining standard profile for local diagnostics.
+  - strict Grafana env requirement would break CI compose checks without `.env`; resolved by explicit CI validation env injection.
+- verification evidence:
+  - `py -m poetry run ruff check tests/test_proxy_rate_limit_config.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py` -> `13 passed`.
+  - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/ci.yml','docker-compose.prod.yml','docker-compose.proxy.yml')]; print('yaml-parse: ok')"` -> `yaml-parse: ok`.
+  - `$env:GRAFANA_ADMIN_USER='ci-grafana-admin'; $env:GRAFANA_ADMIN_PASSWORD='ci-grafana-admin-password'; docker compose -f docker-compose.prod.yml config -q; docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config -q` -> success.
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -815,7 +849,7 @@
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |
 | `AR-05` | MEDIUM | Done | Added strict `AppEnvEnum` (`development`, `test`, `staging`, `production`) and made `Settings.app_env` required (`Field(...)`) so startup fails fast when `APP_ENV` is missing/invalid; normalized legacy aliases (`dev/testing/stage/prod`) to canonical values to prevent deploy drift; security gating now compares enum and production controls trigger only for canonical `production`; CI test/migration/integration steps now set explicit `APP_ENV=development`. | N/A |
-| `AR-06` | MEDIUM | Open | N/A | Reduce exposed ops surface in compose: close internal service ports, remove unsafe default creds fallback, enforce TLS/HSTS path. |
+| `AR-06` | MEDIUM | Done | Hardened ingress/ops surface: proxy profile now closes host exposure for app + monitoring ports (`8000`, `9090`, `9093`, `3000`), enforces HTTPS with `80 -> 443` redirect and HSTS in `ops/nginx/default.conf`, and requires mounted TLS assets (`tls.crt`/`tls.key`); removed Grafana `admin/admin` compose fallback by requiring explicit `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`; deploy preflight now validates Grafana env presence and proxy TLS asset existence. | N/A |
 | `AR-07` | MEDIUM | Open | N/A | Replace token storage model (`localStorage`) with `HttpOnly` refresh cookie + in-memory access token; harden CSP/security headers. |
 | `AR-08` | MEDIUM | Done | Admin UI API client now parses backend unified error shape (`error.message/error.details`) and preserves precise backend reasons. | N/A |
 | `AR-09` | MEDIUM | Partial | CI now includes dedicated `web-admin` job (`npm install`, `npm run lint`, `npm run build`) and gates backend test/migration jobs on it. | Add frontend smoke e2e checks in CI/release gate. |
@@ -831,9 +865,8 @@
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
-3. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
-4. `P2` `AR-07`: migrate token handling away from `localStorage`.
-5. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+3. `P2` `AR-07`: migrate token handling away from `localStorage`.
+4. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -888,6 +921,15 @@
       `13 passed in 1.36s`.
     - `ci` run `22884942507` (`main`, push `3b3c341`) -> `success` (all jobs green, including `test`, `migration`, and `integration`).
     - `deploy` run `22884942491` (`main`, push `3b3c341`) -> `success`.
+  - AR-06 ingress/ops-surface hardening validation:
+    - `py -m poetry run ruff check tests/test_proxy_rate_limit_config.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py tests/test_identity_rate_limit.py tests/test_pii_field_visibility.py` ->
+      `13 passed in 1.25s`.
+    - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/ci.yml','docker-compose.prod.yml','docker-compose.proxy.yml')]; print('yaml-parse: ok')"` ->
+      `yaml-parse: ok`.
+    - `$env:GRAFANA_ADMIN_USER='ci-grafana-admin'; $env:GRAFANA_ADMIN_PASSWORD='ci-grafana-admin-password'; docker compose -f docker-compose.prod.yml config -q; docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config -q` ->
+      `success`.
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

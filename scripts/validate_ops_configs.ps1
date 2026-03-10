@@ -4,6 +4,13 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..")).Path
 
+if (-not $env:GRAFANA_ADMIN_USER) {
+    $env:GRAFANA_ADMIN_USER = "validate-grafana-admin"
+}
+if (-not $env:GRAFANA_ADMIN_PASSWORD) {
+    $env:GRAFANA_ADMIN_PASSWORD = "validate-grafana-admin-password"
+}
+
 Push-Location $repoRoot
 try {
     docker compose -f docker-compose.prod.yml config -q

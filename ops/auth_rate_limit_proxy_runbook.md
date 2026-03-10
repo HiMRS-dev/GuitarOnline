@@ -28,16 +28,28 @@ when GuitarOnline runs behind reverse proxy profile (`docker-compose.proxy.yml`)
 3. Proxy header hygiene:
    - Nginx must overwrite `X-Forwarded-For` with immediate remote client IP
      (no pass-through of user-supplied header chain).
-4. Exposure constraint:
-   - in proxy profile, app service must not publish `8000` externally (`ports: []` override).
+4. Ingress TLS/HSTS policy:
+   - reverse proxy must terminate TLS on `443`,
+   - HTTP `80` must only redirect to HTTPS,
+   - HSTS header must be enabled on TLS responses.
+5. Exposure constraint:
+   - in proxy profile, app service must not publish `8000` externally (`ports: []` override),
+   - monitoring ports (`9090`, `9093`, `3000`) must stay internal-only.
+6. Proxy TLS assets:
+   - default cert path: `ops/nginx/certs/tls.crt` and `ops/nginx/certs/tls.key`,
+   - override via `.env`: `PROXY_TLS_CERTS_PATH`,
+   - production deploy preflight blocks proxy deploy when files are missing.
 
 ## 3) Pre-Deploy Checks
 
 1. Verify compose-merged env:
    - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config | grep -E "AUTH_RATE_LIMIT_(BACKEND|TRUSTED_PROXY_IPS)|REDIS_URL"`
-2. Verify proxy profile removes direct app host port:
+2. Verify proxy profile removes direct app/monitoring host ports:
    - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml config | grep -n "ports:" -A 4`
-3. Verify Redis is reachable:
+3. Verify TLS cert assets are present on target host:
+   - `${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}/tls.crt`
+   - `${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}/tls.key`
+4. Verify Redis is reachable:
    - `docker compose -f docker-compose.prod.yml exec -T redis redis-cli ping`
    - expected: `PONG`
 
@@ -49,7 +61,7 @@ window:
 - `AUTH_RATE_LIMIT_WINDOW_SECONDS=60`
 - `AUTH_RATE_LIMIT_LOGIN_REQUESTS=2`
 
-Then validate through proxy public URL (`http://localhost:${PROXY_PUBLIC_PORT:-8080}`):
+Then validate through proxy public TLS URL (`https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}`):
 
 1. Baseline limiter trigger:
    - execute 3 login attempts with invalid credentials from same client.
@@ -62,7 +74,7 @@ Then validate through proxy public URL (`http://localhost:${PROXY_PUBLIC_PORT:-8
      - limiter behavior remains consistent with proxy-resolved identity policy,
      - no unlimited bypass by arbitrary header injection.
 3. App readiness and probe path behind proxy:
-   - `curl -fsS http://localhost:${PROXY_PUBLIC_PORT:-8080}/health`
+   - `curl -k -fsS https://localhost:${PROXY_TLS_PUBLIC_PORT:-8443}/health`
    - expected: `{"status":"ok"}`.
 4. Security regression suite:
    - `py -m poetry run pytest -q tests/test_identity_rate_limit.py tests/test_config_security.py tests/test_security_surface.py tests/test_pii_field_visibility.py`

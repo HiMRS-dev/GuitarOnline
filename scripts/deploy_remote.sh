@@ -80,6 +80,54 @@ validate_auth_rate_limiter_env() {
   log "Auth rate-limiter preflight: AUTH_RATE_LIMIT_BACKEND=redis, REDIS_URL is set."
 }
 
+validate_grafana_admin_env() {
+  local admin_user
+  local admin_password
+
+  admin_user="$(read_env_value "GRAFANA_ADMIN_USER")"
+  admin_password="$(read_env_value "GRAFANA_ADMIN_PASSWORD")"
+
+  if [ -z "${admin_user}" ] || [ -z "${admin_password}" ]; then
+    die "GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD must be set in .env (unsafe defaults are not allowed)."
+  fi
+
+  log "Grafana admin credentials preflight: required values are present."
+}
+
+resolve_deploy_path() {
+  local raw_path="$1"
+
+  if [[ "${raw_path}" = /* ]]; then
+    printf '%s' "${raw_path}"
+    return
+  fi
+
+  printf '%s/%s' "${DEPLOY_PATH}" "${raw_path#./}"
+}
+
+validate_proxy_tls_assets() {
+  if [ "${PROFILE:-standard}" != "proxy" ]; then
+    return
+  fi
+
+  local certs_dir
+  local cert_file
+  local key_file
+  certs_dir="$(read_env_value "PROXY_TLS_CERTS_PATH")"
+  if [ -z "${certs_dir}" ]; then
+    certs_dir="./ops/nginx/certs"
+  fi
+  certs_dir="$(resolve_deploy_path "${certs_dir}")"
+  cert_file="${certs_dir}/tls.crt"
+  key_file="${certs_dir}/tls.key"
+
+  if [ ! -f "${cert_file}" ] || [ ! -f "${key_file}" ]; then
+    die "Proxy TLS assets are required for PROFILE=proxy. Expected files: ${cert_file}, ${key_file}"
+  fi
+
+  log "Proxy TLS preflight: certificate assets found in ${certs_dir}."
+}
+
 ensure_repo_checkout() {
   local current_origin
   local path_meta
@@ -169,6 +217,7 @@ if [ ! -f "${DEPLOY_PATH}/.env" ]; then
 fi
 log ".env file detected."
 validate_auth_rate_limiter_env
+validate_grafana_admin_env
 
 compose_files=(-f docker-compose.prod.yml)
 case "${PROFILE:-standard}" in
@@ -182,6 +231,7 @@ case "${PROFILE:-standard}" in
     ;;
 esac
 log "Compose profile selected: ${PROFILE:-standard}"
+validate_proxy_tls_assets
 
 run_compose() {
   docker compose "${compose_files[@]}" "$@"

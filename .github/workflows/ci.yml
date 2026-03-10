@@ -118,28 +118,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate production compose syntax
-        run: docker compose -f docker-compose.prod.yml config -q
-
-      - name: Validate Prometheus config
-        run: |
-          docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" \
-            prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
-
-      - name: Validate Prometheus alert rules
-        run: |
-          docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" \
-            prom/prometheus:v3.5.0 check rules /etc/prometheus/alerts.yml
-
-      - name: Validate Prometheus alert thresholds (synthetic)
-        run: |
-          docker run --rm --entrypoint promtool -v "$PWD/ops/prometheus:/etc/prometheus:ro" \
-            prom/prometheus:v3.5.0 test rules /etc/prometheus/alerts.test.yml
-
-      - name: Validate Alertmanager config
-        run: |
-          docker run --rm --entrypoint amtool -v "$PWD/ops/alertmanager:/etc/alertmanager:ro" \
-            prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
+      - name: Validate ops config bundle (shared script)
+        shell: pwsh
+        run: ./scripts/validate_ops_configs.ps1
 
   test:
     runs-on: ubuntu-latest

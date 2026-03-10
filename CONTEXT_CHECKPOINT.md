@@ -693,6 +693,21 @@
   - `gh workflow run rollback-drill.yml -f ref=main -f target_ref=main -f backup_file= -f allow_production=false -f confirm=ROLLBACK` -> run `22884013826` (`success`).
 - commit trail:
   - `c7ac8c0` (`Harden workflow marker parsing and rollback remote execution`).
+- ops follow-up (2026-03-10): `OPS-01` CI ops-config parity hardening (noise-reduction track, partial).
+- implemented:
+  - consolidated CI ops validation path in `.github/workflows/ci.yml`:
+    - `ops-config` job now executes shared script `scripts/validate_ops_configs.ps1` via `pwsh`,
+    - removed duplicated inline validation steps to prevent drift between local and CI checks.
+  - added workflow guardrail test:
+    - `tests/test_ci_ops_config_workflow.py` verifies `ops-config` job references shared script.
+- conflict handling during implementation:
+  - duplicated inline workflow commands diverged from `scripts/validate_ops_configs.ps1` coverage
+    (proxy compose profile and generated on-call conditional checks), causing parity risk;
+    centralized script invocation is now the single source of truth.
+- verification evidence:
+  - `py -m poetry run ruff check tests/test_ci_ops_config_workflow.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_ci_ops_config_workflow.py tests/test_proxy_rate_limit_config.py` -> `5 passed`.
+  - `py -m poetry run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8')); print('workflow-yaml-parse: ok')"` -> `workflow-yaml-parse: ok`.
 - architecture follow-up (2026-03-10): `AR-01` protected elevated-role provisioning flow (teacher/admin) implemented.
 - implemented:
   - admin-only provisioning endpoint:
@@ -922,7 +937,8 @@
    - in progress `2026-03-10`: continue accumulating scheduled-run streak evidence toward acceptance criterion (7 consecutive days for scheduled synthetic/restore plus >=1 successful rollback drill artifact already achieved).
    - completed `2026-03-10`: concurrent regression coverage for booking/package invariant race validated by green `ci` run `22884453747` (includes passing `integration` job).
    - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
-   - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
+   - completed `2026-03-10`: reduced `ops-config` env-file parity drift by switching CI job to shared validator `scripts/validate_ops_configs.ps1`.
+   - in progress `2026-03-10`: continue reducing CI noise from secret-scan false positives.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
 3. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
@@ -1000,6 +1016,13 @@
     - `deploy` run `22886142964` (`main`, push `a8c8954`) -> `success`.
     - `ci` run `22886142960` (`main`, push `a8c8954`) -> `success` (all jobs green, including `web-admin`, `test`, `migration`, `integration`).
     - `node -v` -> failed (`CommandNotFoundException`; local `web-admin` lint/build unavailable in this shell).
+  - OPS-01 CI ops-config parity hardening validation:
+    - `py -m poetry run ruff check tests/test_ci_ops_config_workflow.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_ci_ops_config_workflow.py tests/test_proxy_rate_limit_config.py` ->
+      `5 passed in 0.05s`.
+    - `py -m poetry run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8')); print('workflow-yaml-parse: ok')"` ->
+      `workflow-yaml-parse: ok`.
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

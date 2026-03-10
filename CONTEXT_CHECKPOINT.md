@@ -58,6 +58,14 @@
   - `restore-rehearsal` run `22883993503` -> `success` (`rpo_seconds=36`, `rto_seconds=0.517`).
   - `rollback-drill` run `22884013826` -> `success` (`rollback_drill_report=.../rollback-drill-20260310-021811.json`, nested restore `rpo_seconds=81`, `rto_seconds=0.522`).
   - rollback report artifact uploaded successfully in run `22884013826`.
+- AR-02 CI/integration closure rerun (`2026-03-10`, `push`, `main` @ `2889c1a9fcb9ab9ecb2f64e11e3ec13ef08722f8`):
+  - prior run `22884305338` -> `failure`:
+    - `test` failed in `tests/test_pii_field_visibility.py` (new route allowlist missing),
+    - `integration` failed in `tests/test_booking_billing_integration.py::test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success` (`[200, 200]` instead of `[200, 422]`).
+  - fixed by:
+    - updating route allowlist in `tests/test_pii_field_visibility.py`,
+    - forcing fresh locked package state in `app/modules/billing/repository.py` via `execution_options(populate_existing=True)` for `get_package_by_id_for_update`.
+  - verification run `22884453747` -> `success` (all jobs green, including `test` and `integration`).
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -700,6 +708,22 @@
   - `py -m poetry run ruff check app/modules/notifications/outbox_worker.py app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` -> `16 passed`.
   - `py -m poetry run pytest -q tests/test_notifications_delivery_metrics.py` -> `3 passed`.
+- architecture follow-up (2026-03-10): `AR-02` CI/integration parity confirmed after concurrent-confirm race fix.
+- implemented:
+  - package lock-read path hardened in `app/modules/billing/repository.py`:
+    - `get_package_by_id_for_update` now uses `execution_options(populate_existing=True)` with `FOR UPDATE`,
+    - prevents stale in-session package state from bypassing concurrent balance checks.
+  - PII security route allowlist updated in `tests/test_pii_field_visibility.py`:
+    - added `/api/v1/admin/users/provision` to approved email-exposing admin routes.
+- conflict handling during implementation:
+  - CI `integration` failure showed both concurrent confirms returning `200`; root cause was stale ORM identity-map state during locked package read under concurrency.
+  - forcing refresh on locked package row preserves race safety while keeping existing booking/service APIs unchanged.
+- verification evidence:
+  - `py -m poetry run ruff check app/modules/billing/repository.py tests/test_pii_field_visibility.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_pii_field_visibility.py` -> `3 passed`.
+  - `gh run view 22884305338 --job 66393693756 --log` -> prior `test` failure evidence captured.
+  - `gh run view 22884305338 --job 66393745979 --log` -> prior `integration` failure evidence captured.
+  - `ci` run `22884453747` (`main`, push `2889c1a`) -> `success` (including `test` + `integration`).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -729,7 +753,7 @@
 | ID | Priority | Status | Implemented | Remaining |
 | --- | --- | --- | --- | --- |
 | `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; added protected admin provisioning flow `POST /api/v1/admin/users/provision` for `teacher/admin` with audit trail `admin.user.provision`. | Run and store elevated-account audit report for already provisioned privileged users; finalize operational runbook for invite/approve handling around the new endpoint. |
-| `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`) after CI integration failure on `20260309_0019`; added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`. | Re-run full CI/integration to confirm green after `0020` + new concurrent confirm regression case. |
+| `AR-02` | HIGH | Done | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`); added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`; hardened locked package read with `populate_existing=True` to prevent stale identity-map race. | N/A |
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Partial | Trusted proxy matching now supports CIDR in identity rate-limit resolver; proxy compose profile now sets trusted proxy CIDR defaults for reverse-proxy mode. | Add explicit production runbook documentation for proxy/rate-limit configuration and validation procedure. |
 | `AR-05` | MEDIUM | Open | N/A | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
@@ -744,17 +768,16 @@
    - completed `2026-03-10`: enforce restore/rollback backup preflight consistency with `scripts/run_restore_rehearsal_remote.sh` and `scripts/run_backup_schedule_remote.sh`.
    - completed `2026-03-10`: rerun verification chain on `main` @ `c7ac8c0` is green (`22883983026` success -> `22883993503` success -> `22884013826` success) with rollback report artifact.
    - in progress `2026-03-10`: continue accumulating scheduled-run streak evidence toward acceptance criterion (7 consecutive days for scheduled synthetic/restore plus >=1 successful rollback drill artifact already achieved).
-   - in progress `2026-03-10`: added concurrent regression coverage for booking/package invariant race in `tests/test_booking_billing_integration.py`; pending full CI/integration rerun and evidence capture.
+   - completed `2026-03-10`: concurrent regression coverage for booking/package invariant race validated by green `ci` run `22884453747` (includes passing `integration` job).
    - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
    - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
-3. `P1` `AR-02`: partial `2026-03-10` - concurrent confirm integration test for shared package race scenario added; pending green CI confirmation.
-4. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
-5. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
-6. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
-7. `P2` `AR-07`: migrate token handling away from `localStorage`.
-8. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+3. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
+4. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
+5. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
+6. `P2` `AR-07`: migrate token handling away from `localStorage`.
+7. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -786,6 +809,14 @@
       `16 passed in 0.68s`.
     - `py -m poetry run pytest -q tests/test_notifications_delivery_metrics.py` ->
       `3 passed in 0.80s`.
+  - AR-02 CI/integration closure validation:
+    - `gh run view 22884305338 --job 66393693756 --log` -> captured failing `test` evidence (`tests/test_pii_field_visibility.py` allowlist mismatch).
+    - `gh run view 22884305338 --job 66393745979 --log` -> captured failing `integration` evidence (`[200, 200]` concurrent confirm result).
+    - `py -m poetry run ruff check app/modules/billing/repository.py tests/test_pii_field_visibility.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_pii_field_visibility.py` ->
+      `3 passed in 1.13s`.
+    - `ci` run `22884453747` (`main`, push `2889c1a`) -> `success` (all jobs green, including `test` and `integration`).
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

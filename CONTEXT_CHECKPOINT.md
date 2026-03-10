@@ -1036,6 +1036,7 @@
    - completed `2026-03-10`: reduced `ops-config` env-file parity drift by switching CI job to shared validator `scripts/validate_ops_configs.ps1`.
    - completed `2026-03-10`: reduced secret-scan false positives via context-aware allowlist tuning in `scripts/secret_guard.py` + regression tests (`tests/test_secret_guard.py`).
    - completed `2026-03-10`: hardened deploy preflight to require explicit `GRAFANA_ADMIN_USER` + `GRAFANA_ADMIN_PASSWORD` in target `.env` (removed `.env` auto-append and removed `JWT_SECRET`/`SECRET_KEY` fallback reuse).
+   - in progress `2026-03-10`: execute one-time remote `.env` migration for explicit Grafana credentials; first deploy after fail-closed hardening (`deploy` run `22895676451`) now blocks as expected when `GRAFANA_ADMIN_*` are absent.
    - in progress `2026-03-10`: monitor secret-scan signal quality and adjust heuristics only when new false-positive patterns are evidenced.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 
@@ -1061,6 +1062,10 @@
     - `py -m poetry run pytest -q tests/test_proxy_rate_limit_config.py` -> `5 passed`.
     - `py -m poetry run pytest -q tests/test_ci_ops_config_workflow.py tests/test_web_admin_smoke_gate_assets.py tests/test_ops_schedule_cadence.py` -> `7 passed`.
     - `scripts/deploy_remote.sh` no longer mutates `.env` for Grafana credentials and no longer reuses `JWT_SECRET`/`SECRET_KEY` as monitoring secret fallback.
+    - push validation on `main` @ `bbb9c14`:
+      - `ci` run `22895676428` -> `success`.
+      - `deploy` run `22895676451` -> `failure` with explicit preflight guard:
+        `Missing required Grafana admin env in <DEPLOY_PATH>/.env. Set both GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD.`.
   - OPS-01 verification chain runs (`workflow_dispatch`, `main`):
     - historical failed chain (before final hardening):
       - `backup-schedule-retention` run `22883213068` (`success`),

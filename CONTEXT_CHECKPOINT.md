@@ -133,6 +133,17 @@
   - push validation:
     - `ci` run `22888017431` -> `success` (all jobs green, including `web-admin`, `test`, `migration`, `integration`),
     - `deploy` run `22888017433` -> `success`.
+- OPS-01 deploy fail-closed remediation (`2026-03-10`):
+  - `deploy` fail-closed hardening commit `bbb9c14` intentionally blocked deploy until explicit Grafana credentials were present:
+    - `deploy` runs `22895676451`, `22895863827` -> `failure` with missing `GRAFANA_ADMIN_*` preflight guard.
+  - one-time env remediation completed:
+    - synchronized `/opt/guitaronline/.env` with explicit `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`,
+    - updated repository secret source `PROD_ENV_FILE_B64` from synchronized env.
+  - closure evidence:
+    - manual deploy run `22896469703` (`workflow_dispatch`) -> `success`,
+    - push pipeline on `main` @ `ec65886`:
+      - `ci` run `22896551065` -> `success`,
+      - `deploy` run `22896551145` -> `success`.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).

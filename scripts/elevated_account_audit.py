@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import String, cast, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -192,33 +192,46 @@ async def load_entries(session: AsyncSession) -> list[ElevatedAccountEntry]:
             User.is_active,
             User.created_at,
             User.updated_at,
-            Role.name.label("role_name"),
+            cast(Role.name, String).label("role_name_raw"),
             TeacherProfile.id.label("teacher_profile_id"),
-            TeacherProfile.status.label("teacher_status"),
+            cast(TeacherProfile.status, String).label("teacher_status_raw"),
             TeacherProfile.is_approved.label("teacher_verified"),
             provisioned_at_subquery.label("provisioned_at"),
             provisioned_by_subquery.label("provisioned_by_admin_id"),
         )
         .join(Role, Role.id == User.role_id)
         .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
-        .where(Role.name.in_((RoleEnum.TEACHER, RoleEnum.ADMIN)))
+        .where(func.lower(cast(Role.name, String)).in_(("teacher", "admin")))
         .order_by(User.created_at.asc(), User.id.asc())
     )
 
     entries: list[ElevatedAccountEntry] = []
     for row in (await session.execute(stmt)).all():
+        role_raw = str(row.role_name_raw).lower()
+        try:
+            role = RoleEnum(role_raw)
+        except ValueError:
+            continue
+
+        teacher_status: TeacherStatusEnum | None = None
+        if row.teacher_profile_id is not None and row.teacher_status_raw is not None:
+            try:
+                teacher_status = TeacherStatusEnum(str(row.teacher_status_raw).lower())
+            except ValueError:
+                teacher_status = None
+
         has_provision_event = row.provisioned_at is not None
         entries.append(
             ElevatedAccountEntry(
                 user_id=row.id,
                 email=row.email,
-                role=row.role_name,
+                role=role,
                 timezone=row.timezone,
                 is_active=row.is_active,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 teacher_profile_id=row.teacher_profile_id,
-                teacher_status=row.teacher_status if row.teacher_profile_id is not None else None,
+                teacher_status=teacher_status,
                 teacher_verified=(
                     bool(row.teacher_verified) if row.teacher_profile_id is not None else None
                 ),
@@ -294,4 +307,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

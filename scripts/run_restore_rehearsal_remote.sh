@@ -35,8 +35,10 @@ resolve_path() {
 }
 
 compose_file="${COMPOSE_FILE:-docker-compose.prod.yml}"
-backup_dir_input="${RESTORE_REHEARSAL_BACKUP_DIR:-backups/scheduled/daily}"
+backup_root="${BACKUP_ROOT:-backups/scheduled}"
+backup_dir_input="${RESTORE_REHEARSAL_BACKUP_DIR:-${backup_root%/}/daily}"
 backup_file_input="${RESTORE_REHEARSAL_BACKUP_FILE:-}"
+legacy_backup_dir_input="${RESTORE_REHEARSAL_LEGACY_BACKUP_DIR:-backups/daily}"
 report_dir_input="${RESTORE_REHEARSAL_REPORT_DIR:-backups/reports}"
 
 require_command docker
@@ -67,19 +69,49 @@ fi
 if [ -n "${backup_file_input}" ]; then
   backup_file="$(resolve_path "${backup_file_input}")"
 else
-  backup_dir="$(resolve_path "${backup_dir_input}")"
-  if [ ! -d "${backup_dir}" ]; then
-    die "Backup directory does not exist: ${backup_dir}"
+  primary_backup_dir="$(resolve_path "${backup_dir_input}")"
+  legacy_backup_dir="$(resolve_path "${legacy_backup_dir_input}")"
+
+  candidate_dirs=("${primary_backup_dir}")
+  if [ "${legacy_backup_dir}" != "${primary_backup_dir}" ]; then
+    candidate_dirs+=("${legacy_backup_dir}")
   fi
-  latest_backup_name="$(
-    find "${backup_dir}" -maxdepth 1 -type f -name "guitaronline-daily-*.sql" -printf '%f\n' \
-      | sort -r \
-      | head -n 1
-  )"
-  if [ -z "${latest_backup_name}" ]; then
-    die "No scheduled daily backups found in ${backup_dir}"
+
+  selected_backup_dir=""
+  latest_backup_name=""
+  checked_dirs=""
+  for candidate_dir in "${candidate_dirs[@]}"; do
+    if [ -z "${checked_dirs}" ]; then
+      checked_dirs="${candidate_dir}"
+    else
+      checked_dirs="${checked_dirs}, ${candidate_dir}"
+    fi
+
+    if [ ! -d "${candidate_dir}" ]; then
+      log "Backup candidate directory does not exist: ${candidate_dir}"
+      continue
+    fi
+
+    candidate_latest="$(
+      find "${candidate_dir}" -maxdepth 1 -type f -name "guitaronline-daily-*.sql" -printf '%f\n' \
+        | sort -r \
+        | head -n 1
+    )"
+    if [ -z "${candidate_latest}" ]; then
+      log "No daily backup files found in candidate directory: ${candidate_dir}"
+      continue
+    fi
+
+    selected_backup_dir="${candidate_dir}"
+    latest_backup_name="${candidate_latest}"
+    break
+  done
+
+  if [ -z "${selected_backup_dir}" ] || [ -z "${latest_backup_name}" ]; then
+    die "No daily backups found. Checked directories: ${checked_dirs}. Provide RESTORE_REHEARSAL_BACKUP_FILE or RESTORE_REHEARSAL_BACKUP_DIR."
   fi
-  backup_file="${backup_dir}/${latest_backup_name}"
+
+  backup_file="${selected_backup_dir}/${latest_backup_name}"
 fi
 
 if [ ! -s "${backup_file}" ]; then

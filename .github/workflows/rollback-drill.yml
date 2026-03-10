@@ -129,11 +129,23 @@ jobs:
           fi
           remote_cmd+="bash -s"
 
-          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_rollback_drill_remote.sh | tee "${log_file}"
+          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_rollback_drill_remote.sh 2>&1 | tee "${log_file}"
 
-          report_path="$(grep '^rollback_drill_report=' "${log_file}" | tail -n 1 | cut -d '=' -f2-)"
+          report_path="$(
+            awk -F= '
+              /^rollback_drill_report=/ {
+                value = $0
+                sub(/^[^=]*=/, "", value)
+                print value
+              }
+            ' "${log_file}" | tail -n 1 || true
+          )"
+          report_path="$(printf '%s' "${report_path}" | tr -d '\r')"
           if [ -z "${report_path}" ]; then
             echo "::error::Failed to parse rollback drill report path from remote output."
+            echo "::group::rollback-drill remote log tail"
+            tail -n 120 "${log_file}" || true
+            echo "::endgroup::"
             exit 1
           fi
           echo "report_path=${report_path}" >> "$GITHUB_OUTPUT"

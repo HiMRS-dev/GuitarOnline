@@ -672,6 +672,71 @@ async def test_concurrent_hold_attempts_on_same_slot_allow_only_one_success(
 
 
 @pytest.mark.asyncio
+async def test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success(
+    api_client: httpx.AsyncClient,
+    auth_users: AuthUsers,
+) -> None:
+    admin = auth_users.admin
+    teacher = auth_users.teacher
+    student = auth_users.student
+
+    package = await _create_package(api_client, admin, student, lessons_total=1)
+    first_slot = await _create_slot(api_client, admin, teacher, hours_from_now=66)
+    second_slot = await _create_slot(api_client, admin, teacher, hours_from_now=78)
+
+    first_hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={"slot_id": first_slot["id"], "package_id": package["id"]},
+    )
+    _assert_status(first_hold_response, 200)
+    first_hold = first_hold_response.json()
+
+    second_hold_response = await api_client.post(
+        "/booking/hold",
+        headers=_auth_headers(student.access_token),
+        json={"slot_id": second_slot["id"], "package_id": package["id"]},
+    )
+    _assert_status(second_hold_response, 200)
+    second_hold = second_hold_response.json()
+
+    async def confirm(booking_id: str) -> httpx.Response:
+        return await api_client.post(
+            f"/booking/{booking_id}/confirm",
+            headers=_auth_headers(student.access_token),
+        )
+
+    first_confirm_response, second_confirm_response = await asyncio.gather(
+        confirm(first_hold["id"]),
+        confirm(second_hold["id"]),
+    )
+
+    statuses = sorted([first_confirm_response.status_code, second_confirm_response.status_code])
+    assert statuses == [200, 422]
+
+    failed_response = (
+        first_confirm_response
+        if first_confirm_response.status_code != 200
+        else second_confirm_response
+    )
+    failed_body = failed_response.json()
+    assert failed_body["error"]["code"] == "business_rule_violation"
+    assert "No lessons left" in failed_body["error"]["message"]
+
+    package_after = await _get_package_for_student(api_client, student, package["id"])
+    assert package_after["lessons_left"] == 1
+    assert package_after["lessons_reserved"] == 1
+
+    student_bookings = await _list_my_bookings(api_client, student)
+    booking_statuses = {
+        booking["id"]: booking["status"]
+        for booking in student_bookings
+        if booking["id"] in {first_hold["id"], second_hold["id"]}
+    }
+    assert sorted(booking_statuses.values()) == ["confirmed", "hold"]
+
+
+@pytest.mark.asyncio
 async def test_confirm_rejects_hold_when_slot_start_already_passed(
     api_client: httpx.AsyncClient,
     auth_users: AuthUsers,

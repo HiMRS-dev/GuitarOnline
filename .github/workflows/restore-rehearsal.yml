@@ -108,11 +108,23 @@ jobs:
           fi
           remote_cmd+="bash -s"
 
-          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_restore_rehearsal_remote.sh | tee "${log_file}"
+          ssh -p "${port}" "${remote}" "${remote_cmd}" < scripts/run_restore_rehearsal_remote.sh 2>&1 | tee "${log_file}"
 
-          report_path="$(grep '^restore_rehearsal_report=' "${log_file}" | tail -n 1 | cut -d '=' -f2-)"
+          report_path="$(
+            awk -F= '
+              /^restore_rehearsal_report=/ {
+                value = $0
+                sub(/^[^=]*=/, "", value)
+                print value
+              }
+            ' "${log_file}" | tail -n 1 || true
+          )"
+          report_path="$(printf '%s' "${report_path}" | tr -d '\r')"
           if [ -z "${report_path}" ]; then
             echo "::error::Failed to parse restore report path from remote output."
+            echo "::group::restore-rehearsal remote log tail"
+            tail -n 120 "${log_file}" || true
+            echo "::endgroup::"
             exit 1
           fi
           echo "report_path=${report_path}" >> "$GITHUB_OUTPUT"

@@ -46,6 +46,13 @@
   - `gh run view 22834159254 --job 66227542417 --log`
     shows repeated `sqlalchemy.exc.IntegrityError` / `asyncpg.exceptions.CheckViolationError`
     from `booking/service.py` line with `reserve_package_lesson(...)`.
+- OPS-01 verification chain attempt (`2026-03-10`, `workflow_dispatch`, `main` @ `a22144e561f8cb7e3c4dc70331795d2e9ea0eecf`):
+  - `backup-schedule-retention` run `22883213068` -> `success`.
+  - `restore-rehearsal` run `22883227703` -> `failure` on step `Run restore rehearsal on target host`.
+  - `rollback-drill` run `22883250294` -> `failure` with explicit nested restore error:
+    `[restore-rehearsal][error] Backup directory does not exist: <DEPLOY_PATH>/backups/scheduled/daily`.
+  - log evidence also confirms `main` currently executes pre-hardening workflow commands
+    (`ssh ... | tee`, `grep ... report_path`) without new stderr-capture/tail diagnostics until current branch changes are merged.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -581,6 +588,49 @@
   - `6b66ec2` (`Stream retention output and add remote checkpoints`).
   - `6239c70` (`Prevent compose precheck from consuming remote script stdin`).
   - `a7e6353` (`Sync synthetic ops runner to ref and execute check script from stdin`).
+- ops follow-up (2026-03-10): `OPS-01` diagnostics hardening + restore/backup preflight alignment (partial).
+- implemented:
+  - workflow remote execution logs now capture `stdout+stderr` in:
+    - `.github/workflows/restore-rehearsal.yml`,
+    - `.github/workflows/rollback-drill.yml`.
+  - report-path parsing in both workflows now avoids silent `grep`/`pipefail` exits and prints grouped log tail on parse failure.
+  - `scripts/run_restore_rehearsal_remote.sh` now derives the default restore backup path from `BACKUP_ROOT` (`${BACKUP_ROOT:-backups/scheduled}/daily`) for consistency with `scripts/run_backup_schedule_remote.sh`.
+  - `scripts/run_rollback_drill_remote.sh` now parses `restore_rehearsal_report=` safely and prints explicit rehearsal log tail before failing.
+- conflict handling during implementation:
+  - under `set -euo pipefail`, missing `grep` matches could exit before explicit error branches; parsing is now non-fatal-first with explicit failure handling.
+  - when `BACKUP_ROOT` differs from default, restore lookup could drift from backup output path; default path source is now shared.
+- verification evidence:
+  - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/restore-rehearsal.yml', '.github/workflows/rollback-drill.yml')]; print('workflow-yaml-parse: ok')"` -> `workflow-yaml-parse: ok`.
+  - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim on this host).
+  - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim on this host).
+  - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/restore-rehearsal.yml .github/workflows/rollback-drill.yml` ->
+    failed (`docker daemon` unavailable in current shell).
+- ops follow-up (2026-03-10): booking/package integration invariant regression coverage strengthened (`OPS-01` + `AR-02` partial).
+- implemented:
+  - added concurrent confirm integration test in `tests/test_booking_billing_integration.py`:
+    - `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`.
+  - scenario covers two concurrent `POST /booking/{id}/confirm` calls on different slots using one package with `lessons_total=1`;
+    expected invariant behavior:
+    - exactly one confirm succeeds (`200`),
+    - second confirm fails with business-rule violation (`422`, `No lessons left`),
+    - package balance remains `lessons_left=1`, `lessons_reserved=1`.
+- conflict handling during implementation:
+  - test picks separate slot windows to avoid unrelated slot-overlap failures and focuses on package-balance race.
+- verification evidence:
+  - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_booking_billing_integration.py -k concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success` ->
+    `1 skipped, 10 deselected` (integration stack unavailable in current shell).
+- ops follow-up (2026-03-10): restore rehearsal fallback for legacy backup layout (`OPS-01` reliability hardening).
+- implemented:
+  - `scripts/run_restore_rehearsal_remote.sh` now probes backup candidates in order:
+    - primary: `${RESTORE_REHEARSAL_BACKUP_DIR:-${BACKUP_ROOT:-backups/scheduled}/daily}`,
+    - fallback: `${RESTORE_REHEARSAL_LEGACY_BACKUP_DIR:-backups/daily}`.
+  - when no candidate contains `guitaronline-daily-*.sql`, script now fails with explicit list of checked directories and remediation hint (`RESTORE_REHEARSAL_BACKUP_FILE` / `RESTORE_REHEARSAL_BACKUP_DIR`).
+- conflict handling during implementation:
+  - remote rollback drill failure showed missing `backups/scheduled/daily`; fallback supports hosts that still keep daily snapshots in legacy `backups/daily`.
+- verification evidence:
+  - static script inspection confirms candidate-probe/fallback path logic and explicit diagnostics are present.
+  - runtime verification requires target host or Linux shell runner (local shell lacks native `bash`).
 
 ## 12) v1.3 Backlog Draft (Prepared 2026-03-06)
 | ID | Priority | Task | Done When |
@@ -610,7 +660,7 @@
 | ID | Priority | Status | Implemented | Remaining |
 | --- | --- | --- | --- | --- |
 | `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`. | Add protected admin flow for `teacher/admin` provisioning (invite/approve) and run migration audit for already elevated accounts. |
-| `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`) after CI integration failure on `20260309_0019`. | Add dedicated concurrent integration test: two confirms on different slots using same package; re-run full CI to confirm green after `0020`. |
+| `AR-02` | HIGH | Partial | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`) after CI integration failure on `20260309_0019`; added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`. | Re-run full CI/integration to confirm green after `0020` + new concurrent confirm regression case. |
 | `AR-03` | HIGH | Partial | Outbox worker now claims pending/retryable events via `FOR UPDATE SKIP LOCKED`; added notification idempotency key derived from outbox event + recipient + template + index. | Move worker transaction boundary to commit per event (or equivalent durable step boundary) to reduce post-send/pre-commit duplication window. |
 | `AR-04` | HIGH | Partial | Trusted proxy matching now supports CIDR in identity rate-limit resolver; proxy compose profile now sets trusted proxy CIDR defaults for reverse-proxy mode. | Add explicit production runbook documentation for proxy/rate-limit configuration and validation procedure. |
 | `AR-05` | MEDIUM | Open | N/A | Make `APP_ENV` strict enum + fail-fast startup on missing/invalid environment selection. |
@@ -620,24 +670,41 @@
 | `AR-09` | MEDIUM | Partial | CI now includes dedicated `web-admin` job (`npm install`, `npm run lint`, `npm run build`) and gates backend test/migration jobs on it. | Add frontend smoke e2e checks in CI/release gate. |
 
 ## 15) Remaining Prioritized Queue
-1. `P0` `AR-01`: implement protected `teacher/admin` provisioning flow (invite/approve), then run and store elevated-account audit report.
-2. `P0` `AR-03`: switch outbox worker to per-event commit boundary (or equivalent exactly-once-safe handoff contract).
-3. `P1` `AR-02`: add concurrent confirm integration test for shared package race scenario and keep it in CI.
-4. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
-5. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
-6. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
-7. `P2` `AR-07`: migrate token handling away from `localStorage`.
-8. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+1. `P0` `OPS-01` (Priority #1): end-to-end CI/CD stabilization plan for restore/synthetic/deploy/integration reliability.
+   - completed `2026-03-10`: harden diagnostics in `.github/workflows/restore-rehearsal.yml` and `.github/workflows/rollback-drill.yml` (capture stdout+stderr, avoid silent `grep` exits, print explicit parse/precheck errors).
+   - completed `2026-03-10`: enforce restore/rollback backup preflight consistency with `scripts/run_restore_rehearsal_remote.sh` and `scripts/run_backup_schedule_remote.sh`.
+   - in progress `2026-03-10`: verification chain executed (`22883213068` success -> `22883227703` failure -> `22883250294` failure); root conflict identified (missing daily backup directory on target + stale diagnostics on `main` workflow revision). Pending rerun after current branch hardening is merged/deployed.
+   - in progress `2026-03-10`: added concurrent regression coverage for booking/package invariant race in `tests/test_booking_billing_integration.py`; pending full CI/integration rerun and evidence capture.
+   - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
+   - reduce CI noise: secret-scan false positives and `ops-config` env-file parity issues.
+   - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
+2. `P0` `AR-01`: implement protected `teacher/admin` provisioning flow (invite/approve), then run and store elevated-account audit report.
+3. `P0` `AR-03`: switch outbox worker to per-event commit boundary (or equivalent exactly-once-safe handoff contract).
+4. `P1` `AR-02`: partial `2026-03-10` - concurrent confirm integration test for shared package race scenario added; pending green CI confirmation.
+5. `P1` `AR-04`: add production-facing proxy/rate-limit configuration guide with validation checklist.
+6. `P2` `AR-05`: strict `APP_ENV` enum and fail-fast startup rules.
+7. `P2` `AR-06`: close internal ops ports and remove insecure credential fallbacks; enforce TLS/HSTS ingress path.
+8. `P2` `AR-07`: migrate token handling away from `localStorage`.
+9. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
-  - CI failure triage:
-    - `gh run list --workflow ci.yml --limit 5`
-    - `gh run view 22834159254 --job 66227542417 --log`
-  - Local backend regression checks:
-    - `py -m poetry run pytest -q tests/test_booking_rules.py tests/test_lessons_complete.py tests/test_billing_payment_rules.py`
-      -> `48 passed`.
-  - Integration suite command execution:
-    - `py -m poetry run pytest -q tests/test_booking_billing_integration.py`
-      -> `10 skipped` (integration stack absent in local shell).
+  - Workflow YAML parse check:
+    - `py -m poetry run python -c "import yaml, pathlib; [yaml.safe_load(pathlib.Path(p).read_text(encoding='utf-8')) for p in ('.github/workflows/restore-rehearsal.yml', '.github/workflows/rollback-drill.yml')]; print('workflow-yaml-parse: ok')"`
+      -> `workflow-yaml-parse: ok`.
+  - OPS-01 verification chain runs (`workflow_dispatch`, `main`):
+    - `gh workflow run backup-schedule-retention.yml -f ref=main -f daily_keep=7 -f weekly_keep=8 -f weekly_day=1 -f force_weekly=false -f confirm=BACKUP` -> run `22883213068` (`success`).
+    - `gh workflow run restore-rehearsal.yml -f ref=main -f backup_file= -f confirm=RESTORE` -> run `22883227703` (`failure`, step `Run restore rehearsal on target host`).
+    - `gh workflow run rollback-drill.yml -f ref=main -f target_ref=main -f backup_file= -f allow_production=false -f confirm=ROLLBACK` -> run `22883250294` (`failure`).
+    - `gh run view 22883250294 --job 66390459770 --log` shows:
+      `[restore-rehearsal][error] Backup directory does not exist: <DEPLOY_PATH>/backups/scheduled/daily`.
+  - Booking/package invariant regression coverage:
+    - `py -m poetry run ruff check tests/test_booking_billing_integration.py` -> `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_booking_billing_integration.py -k concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success` ->
+      `1 skipped, 10 deselected` (integration stack unavailable in current shell).
+  - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
+    - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
+    - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
+    - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/restore-rehearsal.yml .github/workflows/rollback-drill.yml` ->
+      failed (`docker daemon` unavailable in current shell).
 

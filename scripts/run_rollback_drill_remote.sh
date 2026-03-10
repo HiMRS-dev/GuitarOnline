@@ -183,11 +183,23 @@ else
   bash scripts/run_restore_rehearsal_remote.sh | tee "${rehearsal_log}"
 fi
 
-restore_report_path="$(grep '^restore_rehearsal_report=' "${rehearsal_log}" | tail -n 1 | cut -d '=' -f2-)"
-rm -f "${rehearsal_log}"
+restore_report_path="$(
+  awk -F= '
+    /^restore_rehearsal_report=/ {
+      value = $0
+      sub(/^[^=]*=/, "", value)
+      print value
+    }
+  ' "${rehearsal_log}" | tail -n 1 || true
+)"
+restore_report_path="$(printf '%s' "${restore_report_path}" | tr -d '\r')"
 if [ -z "${restore_report_path}" ]; then
+  log "Restore rehearsal output tail:"
+  tail -n 120 "${rehearsal_log}" >&2 || true
+  rm -f "${rehearsal_log}"
   die "Failed to parse restore rehearsal report path from output."
 fi
+rm -f "${rehearsal_log}"
 if [ ! -f "${restore_report_path}" ]; then
   die "Restore rehearsal report file not found: ${restore_report_path}"
 fi

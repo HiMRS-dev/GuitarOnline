@@ -52,7 +52,19 @@ ALLOWLIST_TERMS = {
     "token_here",
     "xxxx",
     "demopass123",
+    "shared_credential",
 }
+
+ENV_IDENTIFIER_RE = re.compile(r"^(?=.*_)[A-Z][A-Z0-9_]{7,}$")
+ENV_IDENTIFIER_CONTEXT_TERMS = (
+    "required repository secret",
+    "repository secret",
+    "github secret",
+    "secret name",
+    "secret_name",
+    "environment variable",
+    "env var",
+)
 
 
 @dataclass(frozen=True)
@@ -111,8 +123,7 @@ RULES: tuple[Rule, ...] = (
 def run_git(args: list[str]) -> bytes:
     process = subprocess.run(
         ["git", *args],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         check=False,
     )
     if process.returncode != 0:
@@ -171,6 +182,11 @@ def looks_allowlisted(line: str, secret: str) -> bool:
         return True
 
     if any(term in lowered_secret for term in ALLOWLIST_TERMS):
+        return True
+
+    if ENV_IDENTIFIER_RE.fullmatch(secret) and any(
+        term in lowered_line for term in ENV_IDENTIFIER_CONTEXT_TERMS
+    ):
         return True
 
     if "<" in secret and ">" in secret:

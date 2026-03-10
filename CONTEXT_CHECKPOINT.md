@@ -94,6 +94,19 @@
   - `node -v` -> `CommandNotFoundException` in current shell (cannot run local `web-admin` lint/build here).
   - `deploy` run `22886142964` -> `success`.
   - `ci` run `22886142960` -> `success` (all jobs green, including `web-admin`, `test`, `migration`, `integration`).
+- AR-01 elevated-account audit closure (`2026-03-10`, `workflow_dispatch`, `main` @ `07530f8dbcbf7f727e687a5abddf660cf5f5f31e`):
+  - added elevated-account audit workflow + runbook chain:
+    - `.github/workflows/elevated-account-audit.yml`,
+    - `scripts/elevated_account_audit.py`,
+    - `scripts/run_elevated_account_audit_remote.sh`,
+    - `ops/admin_elevated_access_runbook.md`.
+  - first run `22886912472` -> `failure` due legacy enum-string coercion mismatch (`pending` vs enum-name mapping) in audit query.
+  - fixed in commit `07530f8` by casting role/status enum columns to string and normalizing lowercase in `scripts/elevated_account_audit.py`.
+  - rerun `22886958625` -> `success`; artifact `elevated-account-audit-report-22886958625` uploaded with JSON/Markdown/log outputs.
+  - report summary (`2026-03-10T04:21:39.583094+00:00`):
+    - total elevated accounts: `13` (`teacher=6`, `admin=7`),
+    - provisioned via admin flow: `0`,
+    - legacy/unknown provisioning source: `13`.
 - Synthetic ops reliability/hygiene verification after March fixes:
   - `synthetic-ops-check` run `22833075023` -> `success`
     (`Reusing synthetic slot`, `Reusing synthetic package`, `Synthetic ops check passed.`).
@@ -708,6 +721,22 @@
   - `py -m poetry run ruff check tests/test_ci_ops_config_workflow.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_ci_ops_config_workflow.py tests/test_proxy_rate_limit_config.py` -> `5 passed`.
   - `py -m poetry run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8')); print('workflow-yaml-parse: ok')"` -> `workflow-yaml-parse: ok`.
+- ops follow-up (2026-03-10): `OPS-01` secret-scan false-positive noise reduction (`phase 1`).
+- implemented:
+  - tuned `scripts/secret_guard.py` allowlist logic:
+    - added context-aware allowlist for uppercase env-identifier values (e.g. `PROD_ENV_FILE_B64`) when used as secret-name metadata in docs/workflow messages,
+    - added explicit synthetic placeholder term `shared_credential` to avoid known local false-positive patterns.
+  - added focused scanner regression tests:
+    - `tests/test_secret_guard.py` validates:
+      - allowlist for repository-secret name metadata lines,
+      - continued detection of high-entropy real assignments,
+      - no blanket allowlist for env identifiers in real secret-assignment context.
+- conflict handling during implementation:
+  - broad env-identifier allowlisting could suppress legitimate findings; mitigation uses strict context gates (`required repository secret`, `secret name`, `github secret`, etc.) instead of global value-only suppression.
+- verification evidence:
+  - `py -m poetry run ruff check scripts/secret_guard.py tests/test_secret_guard.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_secret_guard.py` -> `4 passed`.
+  - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed.`.
 - architecture follow-up (2026-03-10): `AR-01` protected elevated-role provisioning flow (teacher/admin) implemented.
 - implemented:
   - admin-only provisioning endpoint:
@@ -733,6 +762,23 @@
 - verification evidence:
   - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_user_provisioning.py tests/test_security_surface.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_admin_user_provisioning.py tests/test_security_surface.py tests/test_identity_registration_security.py` -> `12 passed`.
+- architecture follow-up (2026-03-10): `AR-01` elevated-account audit/report workflow and invite/approve runbook finalized.
+- implemented:
+  - added elevated-account audit assets:
+    - `.github/workflows/elevated-account-audit.yml` (`workflow_dispatch` + monthly schedule + artifact upload),
+    - `scripts/elevated_account_audit.py` (JSON/Markdown report with elevated-role inventory),
+    - `scripts/run_elevated_account_audit_remote.sh` (remote execution + host-side artifact extraction).
+  - added operational runbook and checklist sync:
+    - `ops/admin_elevated_access_runbook.md`,
+    - references added in `README.md`, `ops/release_checklist.md`, and `ops/production_hardening_checklist.md`.
+- conflict handling during implementation:
+  - legacy DB enum serialization (`pending`) conflicted with strict SQLAlchemy enum name mapping (`PENDING/VERIFIED/DISABLED`) and caused audit runtime failure.
+  - resolved by reading role/status via `cast(..., String)` and normalizing lowercase before enum conversion in audit script.
+- verification evidence:
+  - `py -m poetry run ruff check scripts/elevated_account_audit.py tests/test_elevated_account_audit_ops_assets.py` -> `All checks passed!`.
+  - `py -m poetry run pytest -q tests/test_elevated_account_audit_ops_assets.py` -> `3 passed`.
+  - `py -m poetry run python -m compileall scripts/elevated_account_audit.py` -> success.
+  - `gh workflow run elevated-account-audit.yml -f ref=main -f confirm=AUDIT` -> run `22886958625` (`success`, artifact uploaded).
 - architecture follow-up (2026-03-10): `AR-03` outbox worker commit boundary moved to per-event durable steps.
 - implemented:
   - `app/modules/notifications/outbox_worker.py`:
@@ -919,7 +965,7 @@
 ## 14) Architecture Remediation Status (Update 2026-03-10)
 | ID | Priority | Status | Implemented | Remaining |
 | --- | --- | --- | --- | --- |
-| `AR-01` | CRITICAL | Partial | Public self-registration is now restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; added protected admin provisioning flow `POST /api/v1/admin/users/provision` for `teacher/admin` with audit trail `admin.user.provision`. | Run and store elevated-account audit report for already provisioned privileged users; finalize operational runbook for invite/approve handling around the new endpoint. |
+| `AR-01` | CRITICAL | Done | Public self-registration is restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; admin provisioning flow `POST /api/v1/admin/users/provision` is protected and audited (`admin.user.provision`); elevated-account audit/report chain is live (`scripts/elevated_account_audit.py`, `.github/workflows/elevated-account-audit.yml`, `scripts/run_elevated_account_audit_remote.sh`) with operational invite/approve runbook `ops/admin_elevated_access_runbook.md`. | N/A |
 | `AR-02` | HIGH | Done | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`); added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`; hardened locked package read with `populate_existing=True` to prevent stale identity-map race. | N/A |
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |
@@ -938,10 +984,10 @@
    - completed `2026-03-10`: concurrent regression coverage for booking/package invariant race validated by green `ci` run `22884453747` (includes passing `integration` job).
    - keep synthetic checks stable (`synthetic-ops-check` / `synthetic-ops-retention`) with deterministic synthetic data reuse/cleanup behavior.
    - completed `2026-03-10`: reduced `ops-config` env-file parity drift by switching CI job to shared validator `scripts/validate_ops_configs.ps1`.
-   - in progress `2026-03-10`: continue reducing CI noise from secret-scan false positives.
+   - completed `2026-03-10`: reduced secret-scan false positives via context-aware allowlist tuning in `scripts/secret_guard.py` + regression tests (`tests/test_secret_guard.py`).
+   - in progress `2026-03-10`: monitor secret-scan signal quality and adjust heuristics only when new false-positive patterns are evidenced.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
-2. `P0` `AR-01`: partial `2026-03-10` - protected `teacher/admin` provisioning flow added via `POST /api/v1/admin/users/provision` (with teacher pending-profile auto-create + audit log). Remaining: run and store elevated-account audit report and finalize invite/approve runbook step mapping.
-3. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
+2. `P2` `AR-09`: add `web-admin` smoke e2e in CI/release gate.
 
 ## 16) Validation Snapshot For This Update
 - Completed validation in this update:
@@ -966,6 +1012,15 @@
       `All checks passed!`.
     - `py -m poetry run pytest -q tests/test_admin_user_provisioning.py tests/test_security_surface.py tests/test_identity_registration_security.py` ->
       `12 passed in 2.72s`.
+  - AR-01 elevated-account audit closure validation:
+    - `py -m poetry run ruff check scripts/elevated_account_audit.py tests/test_elevated_account_audit_ops_assets.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_elevated_account_audit_ops_assets.py` ->
+      `3 passed in 0.03s`.
+    - `py -m poetry run python -m compileall scripts/elevated_account_audit.py` ->
+      `success`.
+    - `gh workflow run elevated-account-audit.yml -f ref=main -f confirm=AUDIT` ->
+      run `22886958625` (`success`, artifact `elevated-account-audit-report-22886958625` uploaded).
   - AR-03 outbox durable-boundary validation:
     - `py -m poetry run ruff check app/modules/notifications/outbox_worker.py app/workers/outbox_notifications_worker.py tests/test_outbox_notifications_worker.py tests/test_outbox_notifications_worker_entrypoint.py` ->
       `All checks passed!`.
@@ -1023,6 +1078,13 @@
       `5 passed in 0.05s`.
     - `py -m poetry run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8')); print('workflow-yaml-parse: ok')"` ->
       `workflow-yaml-parse: ok`.
+  - OPS-01 secret-scan noise-reduction validation:
+    - `py -m poetry run ruff check scripts/secret_guard.py tests/test_secret_guard.py` ->
+      `All checks passed!`.
+    - `py -m poetry run pytest -q tests/test_secret_guard.py` ->
+      `4 passed in 0.04s`.
+    - `python scripts/secret_guard.py --mode repo` ->
+      `Secret scan passed.`.
   - Shell/actionlint checks attempted but blocked by local tool/runtime availability:
     - `bash -n scripts/run_restore_rehearsal_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).
     - `bash -n scripts/run_rollback_drill_remote.sh` -> failed (`/bin/bash` unavailable in local WSL shim).

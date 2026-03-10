@@ -154,7 +154,7 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/admin\/teachers$/);
   await expect(page.getByRole("heading", { name: "Teacher List" })).toBeVisible();
-  await expect(page.getByText("Smoke Teacher")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Smoke Teacher/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Smoke Teacher" })).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();

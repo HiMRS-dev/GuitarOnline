@@ -1036,7 +1036,13 @@
    - completed `2026-03-10`: reduced `ops-config` env-file parity drift by switching CI job to shared validator `scripts/validate_ops_configs.ps1`.
    - completed `2026-03-10`: reduced secret-scan false positives via context-aware allowlist tuning in `scripts/secret_guard.py` + regression tests (`tests/test_secret_guard.py`).
    - completed `2026-03-10`: hardened deploy preflight to require explicit `GRAFANA_ADMIN_USER` + `GRAFANA_ADMIN_PASSWORD` in target `.env` (removed `.env` auto-append and removed `JWT_SECRET`/`SECRET_KEY` fallback reuse).
-   - in progress `2026-03-10`: execute one-time remote `.env` migration for explicit Grafana credentials; first deploy after fail-closed hardening (`deploy` run `22895676451`) now blocks as expected when `GRAFANA_ADMIN_*` are absent.
+   - completed `2026-03-10`: executed one-time remote `.env` migration for explicit Grafana credentials and synced secret source:
+     - pulled `/opt/guitaronline/.env`, added missing `GRAFANA_ADMIN_USER` + `GRAFANA_ADMIN_PASSWORD`,
+     - updated repository secret `PROD_ENV_FILE_B64`,
+     - uploaded synchronized `.env` back to `/opt/guitaronline/.env` (`chmod 600`).
+   - completed `2026-03-10`: deploy unblocked after fail-closed hardening:
+     - prior failures remain as expected guard evidence (`deploy` runs `22895676451`, `22895863827`),
+     - manual verification run `22896469703` (`workflow_dispatch`, `ref=main`) -> `success`.
    - in progress `2026-03-10`: monitor secret-scan signal quality and adjust heuristics only when new false-positive patterns are evidenced.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 
@@ -1066,6 +1072,9 @@
       - `ci` run `22895676428` -> `success`.
       - `deploy` run `22895676451` -> `failure` with explicit preflight guard:
         `Missing required Grafana admin env in <DEPLOY_PATH>/.env. Set both GRAFANA_ADMIN_USER and GRAFANA_ADMIN_PASSWORD.`.
+    - source+target env remediation and closure:
+      - `powershell -ExecutionPolicy Bypass -File scripts/update_github_secret_prod_env.ps1 -InputFile .tmp/prod.remote.env -SecretName PROD_ENV_FILE_B64` -> `Secret 'PROD_ENV_FILE_B64' successfully updated`.
+      - `gh workflow run deploy.yml -f ref=main -f profile=standard -f run_backup=true -f run_smoke=true -f confirm=DEPLOY` -> run `22896469703` (`success`).
   - OPS-01 verification chain runs (`workflow_dispatch`, `main`):
     - historical failed chain (before final hardening):
       - `backup-schedule-retention` run `22883213068` (`success`),

@@ -11,3 +11,11 @@ export type AdminPackage = {
   created_at_utc: string;
   updated_at_utc: string;
 };
+
+export type AdminPackageCreatePayload = {
+  student_id: string;
+  lessons_total: number;
+  expires_at_utc: string;
+  price_amount: string;
+  price_currency: string;
+};

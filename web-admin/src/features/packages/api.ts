@@ -1,7 +1,7 @@
 import { apiClient } from "../../shared/api/client";
 import type { PageResponse } from "../../shared/api/types";
 
-import type { AdminPackage } from "./types";
+import type { AdminPackage, AdminPackageCreatePayload } from "./types";
 
 type PackageListParams = {
   studentId?: string;
@@ -22,4 +22,13 @@ export async function listAdminPackages(
     query.set("status", params.status);
   }
   return apiClient.request<PageResponse<AdminPackage>>(`/admin/packages?${query.toString()}`);
+}
+
+export async function createAdminPackage(
+  payload: AdminPackageCreatePayload
+): Promise<AdminPackage> {
+  return apiClient.request<AdminPackage>("/admin/packages", {
+    method: "POST",
+    body: payload
+  });
 }

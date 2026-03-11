@@ -1,4 +1,4 @@
-"""FastAPI application entrypoint."""
+﻿"""FastAPI application entrypoint."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -35,6 +35,7 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 _FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 _FRONTEND_STATIC_DIR = _FRONTEND_DIR / "static"
+_PUBLIC_HOME_PAGE = Path(__file__).resolve().parent.parent / "index.html"
 _OPENAPI_TAGS = [
     {"name": "identity", "description": "Authentication and current-user identity endpoints."},
     {"name": "teachers", "description": "Teacher profile management endpoints."},
@@ -140,6 +141,7 @@ def _landing_page_html() -> str:
         <h1>{settings.app_name} API</h1>
         <p>Сервис backend запущен. Используйте ссылки ниже для доступа к документации и пробам.</p>
         <div class="links">
+          <a href="/home">Главная страница</a>
           <a href="/portal">Личный кабинет MVP</a>
           <a href="/docs">Документация API</a>
           <a href="/health">Проверка Health</a>
@@ -239,6 +241,26 @@ async def portal_page() -> FileResponse:
     """Serve frontend MVP page."""
     return FileResponse(_FRONTEND_DIR / "index.html")
 
+
+
+
+
+
+@app.get("/portal/login", include_in_schema=False)
+async def portal_login_page() -> RedirectResponse:
+    """Redirect to portal with login auth mode."""
+    return RedirectResponse(url="/portal?auth=login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
+@app.get("/portal/register", include_in_schema=False)
+async def portal_register_page() -> RedirectResponse:
+    """Redirect to portal with register auth mode."""
+    return RedirectResponse(url="/portal?auth=register", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+@app.get("/home", include_in_schema=False)
+async def public_home_page() -> FileResponse:
+    """Serve public website homepage."""
+    return FileResponse(_PUBLIC_HOME_PAGE)
 
 @app.get("/health")
 async def healthcheck() -> dict[str, str]:

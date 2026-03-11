@@ -1,4 +1,4 @@
-const API_PREFIX = "/api/v1";
+﻿const API_PREFIX = "/api/v1";
 
 const state = {
   accessToken: null,
@@ -36,6 +36,8 @@ const elements = {
   runExpirePackagesButton: document.getElementById("run-expire-packages-btn"),
   slotPackageControls: document.getElementById("slot-package-controls"),
   slotPackageSelect: document.getElementById("slot-package-select"),
+  registerSection: document.getElementById("register-section"),
+  loginSection: document.getElementById("login-section"),
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -46,13 +48,13 @@ document.addEventListener("DOMContentLoaded", () => {
     bootstrapAuthenticatedSession().catch((error) => {
       clearSession();
       showAuthMode();
-      setGlobalStatus(`Сессия истекла: ${error.message}`, "error");
+      setGlobalStatus(`РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°: ${error.message}`, "error");
     });
     return;
   }
 
   showAuthMode();
-  setGlobalStatus("Ожидание авторизации. Войдите или зарегистрируйтесь.", "muted");
+  setGlobalStatus("РћР¶РёРґР°РЅРёРµ Р°РІС‚РѕСЂРёР·Р°С†РёРё. Р’РѕР№РґРёС‚Рµ РёР»Рё Р·Р°СЂРµРіРёСЃС‚СЂРёСЂСѓР№С‚РµСЃСЊ.", "muted");
   bootstrapSessionFromCookie().catch((error) => {
     clearSession();
     showAuthMode();
@@ -117,7 +119,7 @@ function clearSession() {
   }
 }
 
-function moveToAuthState(message = "Сессия истекла. Выполните вход снова.") {
+function moveToAuthState(message = "РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ СЃРЅРѕРІР°.") {
   clearSession();
   showAuthMode();
   setGlobalStatus(message, "error");
@@ -135,6 +137,37 @@ function showAuthMode() {
 
   if (elements.slotPackageControls) {
     elements.slotPackageControls.hidden = true;
+  }
+
+  const requestedMode = getAuthModeFromQuery();
+  applyAuthMode(requestedMode);
+}
+
+
+function getAuthModeFromQuery() {
+  const mode = new URLSearchParams(window.location.search).get("auth");
+  if (mode === "login" || mode === "register") {
+    return mode;
+  }
+  return null;
+}
+
+function applyAuthMode(mode) {
+  if (!elements.registerSection || !elements.loginSection) {
+    return;
+  }
+
+  const registerActive = mode !== "login";
+  const loginActive = mode !== "register";
+
+  elements.registerSection.hidden = !registerActive;
+  elements.loginSection.hidden = !loginActive;
+
+  if (mode === "login") {
+    elements.loginForm?.email?.focus();
+  }
+  if (mode === "register") {
+    elements.registerForm?.email?.focus();
   }
 }
 
@@ -248,9 +281,10 @@ async function handleRegister(event) {
       retryOnUnauthorized: false,
     });
     form.password.value = "";
-    setGlobalStatus("Аккаунт создан. Теперь выполните вход.", "success");
+    applyAuthMode("login");
+    setGlobalStatus("РђРєРєР°СѓРЅС‚ СЃРѕР·РґР°РЅ. РўРµРїРµСЂСЊ РІС‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ.", "success");
   } catch (error) {
-    setGlobalStatus(`Ошибка регистрации: ${error.message}`, "error");
+    setGlobalStatus(`РћС€РёР±РєР° СЂРµРіРёСЃС‚СЂР°С†РёРё: ${error.message}`, "error");
   }
 }
 
@@ -272,9 +306,9 @@ async function handleLogin(event) {
     persistTokens(tokenPair);
     form.password.value = "";
     await bootstrapAuthenticatedSession();
-    setGlobalStatus("Вход выполнен. Данные обновлены.", "success");
+    setGlobalStatus("Р’С…РѕРґ РІС‹РїРѕР»РЅРµРЅ. Р”Р°РЅРЅС‹Рµ РѕР±РЅРѕРІР»РµРЅС‹.", "success");
   } catch (error) {
-    setGlobalStatus(`Ошибка входа: ${error.message}`, "error");
+    setGlobalStatus(`РћС€РёР±РєР° РІС…РѕРґР°: ${error.message}`, "error");
   }
 }
 
@@ -290,7 +324,7 @@ async function handleLogout() {
   }
   clearSession();
   showAuthMode();
-  setGlobalStatus("Вы вышли из системы.", "muted");
+  setGlobalStatus("Р’С‹ РІС‹С€Р»Рё РёР· СЃРёСЃС‚РµРјС‹.", "muted");
 }
 
 async function bootstrapAuthenticatedSession() {
@@ -312,14 +346,14 @@ async function refreshSlots() {
     renderSlots(state.slots);
   } catch (error) {
     state.slots = [];
-    renderEmpty(elements.slotsContent, `Не удалось загрузить слоты: ${error.message}`);
+    renderEmpty(elements.slotsContent, `РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СЃР»РѕС‚С‹: ${error.message}`);
   }
 }
 
 async function refreshBookings() {
   if (!state.accessToken) {
     state.bookings = [];
-    renderEmpty(elements.bookingsContent, "Выполните вход, чтобы увидеть бронирования.");
+    renderEmpty(elements.bookingsContent, "Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ, С‡С‚РѕР±С‹ СѓРІРёРґРµС‚СЊ Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ.");
     return;
   }
 
@@ -329,14 +363,14 @@ async function refreshBookings() {
     renderBookings(state.bookings);
   } catch (error) {
     state.bookings = [];
-    renderEmpty(elements.bookingsContent, `Не удалось загрузить бронирования: ${error.message}`);
+    renderEmpty(elements.bookingsContent, `РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ: ${error.message}`);
   }
 }
 
 async function refreshPackages() {
   if (!state.currentUser) {
     state.packages = [];
-    renderEmpty(elements.packagesContent, "Профиль не загружен.");
+    renderEmpty(elements.packagesContent, "РџСЂРѕС„РёР»СЊ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ.");
     renderSlotPackageControls();
     if (state.slots.length > 0) {
       renderSlots(state.slots);
@@ -348,7 +382,7 @@ async function refreshPackages() {
     state.packages = [];
     renderEmpty(
       elements.packagesContent,
-      "Раздел пакетов доступен только для роли student.",
+      "Р Р°Р·РґРµР» РїР°РєРµС‚РѕРІ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РґР»СЏ СЂРѕР»Рё student.",
     );
     renderSlotPackageControls();
     if (state.slots.length > 0) {
@@ -369,7 +403,7 @@ async function refreshPackages() {
     }
   } catch (error) {
     state.packages = [];
-    renderEmpty(elements.packagesContent, `Не удалось загрузить пакеты: ${error.message}`);
+    renderEmpty(elements.packagesContent, `РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РїР°РєРµС‚С‹: ${error.message}`);
     renderSlotPackageControls();
     if (state.slots.length > 0) {
       renderSlots(state.slots);
@@ -380,13 +414,13 @@ async function refreshPackages() {
 async function refreshLessons() {
   if (!state.currentUser) {
     state.lessons = [];
-    renderEmpty(elements.lessonsContent, "Профиль не загружен.");
+    renderEmpty(elements.lessonsContent, "РџСЂРѕС„РёР»СЊ РЅРµ Р·Р°РіСЂСѓР¶РµРЅ.");
     return;
   }
 
   if (!isTeacherRole()) {
     state.lessons = [];
-    renderEmpty(elements.lessonsContent, "Раздел уроков доступен только для роли teacher.");
+    renderEmpty(elements.lessonsContent, "Р Р°Р·РґРµР» СѓСЂРѕРєРѕРІ РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РґР»СЏ СЂРѕР»Рё teacher.");
     return;
   }
 
@@ -396,7 +430,7 @@ async function refreshLessons() {
     renderLessons(state.lessons);
   } catch (error) {
     state.lessons = [];
-    renderEmpty(elements.lessonsContent, `Не удалось загрузить уроки: ${error.message}`);
+    renderEmpty(elements.lessonsContent, `РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ СѓСЂРѕРєРё: ${error.message}`);
   }
 }
 
@@ -411,17 +445,17 @@ function renderProfile(user) {
     <article class="card-item">
       <h4>${escapeHtml(user.email)}</h4>
       <p class="meta"><strong>ID:</strong> ${escapeHtml(user.id)}</p>
-      <p class="meta"><strong>Роль:</strong> ${escapeHtml(user.role.name)}</p>
-      <p class="meta"><strong>Таймзона:</strong> ${escapeHtml(user.timezone)}</p>
-      <p class="meta"><strong>Активен:</strong> ${user.is_active ? "да" : "нет"}</p>
-      <p class="meta"><strong>Создан:</strong> ${formatDateTime(user.created_at)}</p>
+      <p class="meta"><strong>Р РѕР»СЊ:</strong> ${escapeHtml(user.role.name)}</p>
+      <p class="meta"><strong>РўР°Р№РјР·РѕРЅР°:</strong> ${escapeHtml(user.timezone)}</p>
+      <p class="meta"><strong>РђРєС‚РёРІРµРЅ:</strong> ${user.is_active ? "РґР°" : "РЅРµС‚"}</p>
+      <p class="meta"><strong>РЎРѕР·РґР°РЅ:</strong> ${formatDateTime(user.created_at)}</p>
     </article>
   `;
 }
 
 function renderLessons(lessons) {
   if (lessons.length === 0) {
-    renderEmpty(elements.lessonsContent, "У вас пока нет уроков.");
+    renderEmpty(elements.lessonsContent, "РЈ РІР°СЃ РїРѕРєР° РЅРµС‚ СѓСЂРѕРєРѕРІ.");
     return;
   }
 
@@ -429,13 +463,13 @@ function renderLessons(lessons) {
     .map((lesson) => {
       return `
         <article class="card-item">
-          <h4>Урок ${escapeHtml(lesson.id)}</h4>
-          <p class="meta"><strong>Статус:</strong> ${escapeHtml(lesson.status)}</p>
-          <p class="meta"><strong>Бронирование:</strong> ${escapeHtml(lesson.booking_id)}</p>
-          <p class="meta"><strong>Студент:</strong> ${escapeHtml(lesson.student_id)}</p>
-          <p class="meta"><strong>Начало:</strong> ${formatDateTime(lesson.scheduled_start_at)}</p>
-          <p class="meta"><strong>Окончание:</strong> ${formatDateTime(lesson.scheduled_end_at)}</p>
-          <p class="meta"><strong>Тема:</strong> ${escapeHtml(lesson.topic ?? "-")}</p>
+          <h4>РЈСЂРѕРє ${escapeHtml(lesson.id)}</h4>
+          <p class="meta"><strong>РЎС‚Р°С‚СѓСЃ:</strong> ${escapeHtml(lesson.status)}</p>
+          <p class="meta"><strong>Р‘СЂРѕРЅРёСЂРѕРІР°РЅРёРµ:</strong> ${escapeHtml(lesson.booking_id)}</p>
+          <p class="meta"><strong>РЎС‚СѓРґРµРЅС‚:</strong> ${escapeHtml(lesson.student_id)}</p>
+          <p class="meta"><strong>РќР°С‡Р°Р»Рѕ:</strong> ${formatDateTime(lesson.scheduled_start_at)}</p>
+          <p class="meta"><strong>РћРєРѕРЅС‡Р°РЅРёРµ:</strong> ${formatDateTime(lesson.scheduled_end_at)}</p>
+          <p class="meta"><strong>РўРµРјР°:</strong> ${escapeHtml(lesson.topic ?? "-")}</p>
         </article>
       `;
     })
@@ -444,7 +478,7 @@ function renderLessons(lessons) {
 
 function renderAdminOperations() {
   if (!isAdminRole()) {
-    renderEmpty(elements.adminActionsContent, "Раздел admin доступен только для роли admin.");
+    renderEmpty(elements.adminActionsContent, "Р Р°Р·РґРµР» admin РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РґР»СЏ СЂРѕР»Рё admin.");
     if (elements.runExpireHoldsButton) {
       elements.runExpireHoldsButton.disabled = true;
     }
@@ -463,11 +497,11 @@ function renderAdminOperations() {
 
   const lastHolds =
     state.adminOperations.lastExpiredHolds === null
-      ? "еще не запускалось"
+      ? "РµС‰Рµ РЅРµ Р·Р°РїСѓСЃРєР°Р»РѕСЃСЊ"
       : String(state.adminOperations.lastExpiredHolds);
   const lastPackages =
     state.adminOperations.lastExpiredPackages === null
-      ? "еще не запускалось"
+      ? "РµС‰Рµ РЅРµ Р·Р°РїСѓСЃРєР°Р»РѕСЃСЊ"
       : String(state.adminOperations.lastExpiredPackages);
   const updatedAt = state.adminOperations.updatedAt
     ? formatDateTime(state.adminOperations.updatedAt)
@@ -475,11 +509,11 @@ function renderAdminOperations() {
 
   elements.adminActionsContent.innerHTML = `
     <article class="card-item">
-      <h4>Сводка admin операций</h4>
-      <p class="meta"><strong>Истекших HOLD:</strong> ${escapeHtml(lastHolds)}</p>
-      <p class="meta"><strong>Истекших пакетов:</strong> ${escapeHtml(lastPackages)}</p>
-      <p class="meta"><strong>Обновлено:</strong> ${escapeHtml(updatedAt)}</p>
-      <p class="hint">Кнопки выше запускают backend-триггеры истечения.</p>
+      <h4>РЎРІРѕРґРєР° admin РѕРїРµСЂР°С†РёР№</h4>
+      <p class="meta"><strong>РСЃС‚РµРєС€РёС… HOLD:</strong> ${escapeHtml(lastHolds)}</p>
+      <p class="meta"><strong>РСЃС‚РµРєС€РёС… РїР°РєРµС‚РѕРІ:</strong> ${escapeHtml(lastPackages)}</p>
+      <p class="meta"><strong>РћР±РЅРѕРІР»РµРЅРѕ:</strong> ${escapeHtml(updatedAt)}</p>
+      <p class="hint">РљРЅРѕРїРєРё РІС‹С€Рµ Р·Р°РїСѓСЃРєР°СЋС‚ backend-С‚СЂРёРіРіРµСЂС‹ РёСЃС‚РµС‡РµРЅРёСЏ.</p>
     </article>
   `;
 }
@@ -506,7 +540,7 @@ function renderSlotPackageControls() {
   elements.slotPackageControls.hidden = false;
   elements.slotPackageSelect.innerHTML = eligiblePackages
     .map((pkg) => {
-      return `<option value="${escapeHtml(pkg.id)}">${escapeHtml(pkg.id)} (уроков: ${escapeHtml(pkg.lessons_left)})</option>`;
+      return `<option value="${escapeHtml(pkg.id)}">${escapeHtml(pkg.id)} (СѓСЂРѕРєРѕРІ: ${escapeHtml(pkg.lessons_left)})</option>`;
     })
     .join("");
 
@@ -522,7 +556,7 @@ function renderSlots(slots) {
   renderSlotPackageControls();
 
   if (slots.length === 0) {
-    renderEmpty(elements.slotsContent, "Открытых слотов пока нет.");
+    renderEmpty(elements.slotsContent, "РћС‚РєСЂС‹С‚С‹С… СЃР»РѕС‚РѕРІ РїРѕРєР° РЅРµС‚.");
     return;
   }
 
@@ -530,16 +564,16 @@ function renderSlots(slots) {
   const cards = slots
     .map((slot) => {
       const holdAction = isStudentRole()
-        ? `<div class="action-row"><button type="button" class="action-btn" data-action="hold-slot" data-slot-id="${escapeHtml(slot.id)}" ${canCreateHold ? "" : "disabled"}>Взять в hold</button></div>`
+        ? `<div class="action-row"><button type="button" class="action-btn" data-action="hold-slot" data-slot-id="${escapeHtml(slot.id)}" ${canCreateHold ? "" : "disabled"}>Р’Р·СЏС‚СЊ РІ hold</button></div>`
         : "";
 
       return `
         <article class="card-item">
-          <h4>Слот ${escapeHtml(slot.id)}</h4>
-          <p class="meta"><strong>Преподаватель:</strong> ${escapeHtml(slot.teacher_id)}</p>
-          <p class="meta"><strong>Начало:</strong> ${formatDateTime(slot.start_at)}</p>
-          <p class="meta"><strong>Окончание:</strong> ${formatDateTime(slot.end_at)}</p>
-          <p class="meta"><strong>Статус:</strong> ${escapeHtml(slot.status)}</p>
+          <h4>РЎР»РѕС‚ ${escapeHtml(slot.id)}</h4>
+          <p class="meta"><strong>РџСЂРµРїРѕРґР°РІР°С‚РµР»СЊ:</strong> ${escapeHtml(slot.teacher_id)}</p>
+          <p class="meta"><strong>РќР°С‡Р°Р»Рѕ:</strong> ${formatDateTime(slot.start_at)}</p>
+          <p class="meta"><strong>РћРєРѕРЅС‡Р°РЅРёРµ:</strong> ${formatDateTime(slot.end_at)}</p>
+          <p class="meta"><strong>РЎС‚Р°С‚СѓСЃ:</strong> ${escapeHtml(slot.status)}</p>
           ${holdAction}
         </article>
       `;
@@ -547,7 +581,7 @@ function renderSlots(slots) {
     .join("");
 
   const hint = isStudentRole() && !canCreateHold
-    ? "<p class=\"hint\">Для hold нужен активный пакет с оставшимися уроками.</p>"
+    ? "<p class=\"hint\">Р”Р»СЏ hold РЅСѓР¶РµРЅ Р°РєС‚РёРІРЅС‹Р№ РїР°РєРµС‚ СЃ РѕСЃС‚Р°РІС€РёРјРёСЃСЏ СѓСЂРѕРєР°РјРё.</p>"
     : "";
 
   elements.slotsContent.innerHTML = `${hint}${cards}`;
@@ -555,7 +589,7 @@ function renderSlots(slots) {
 
 function renderBookings(bookings) {
   if (bookings.length === 0) {
-    renderEmpty(elements.bookingsContent, "У вас пока нет бронирований.");
+    renderEmpty(elements.bookingsContent, "РЈ РІР°СЃ РїРѕРєР° РЅРµС‚ Р±СЂРѕРЅРёСЂРѕРІР°РЅРёР№.");
     return;
   }
 
@@ -575,11 +609,11 @@ function renderBookings(bookings) {
         .join("");
 
       const confirmAction = canConfirm
-        ? `<button type="button" class="action-btn" data-action="confirm-booking" data-booking-id="${escapeHtml(booking.id)}">Подтвердить</button>`
+        ? `<button type="button" class="action-btn" data-action="confirm-booking" data-booking-id="${escapeHtml(booking.id)}">РџРѕРґС‚РІРµСЂРґРёС‚СЊ</button>`
         : "";
 
       const cancelAction = canCancel
-        ? `<button type="button" class="action-btn danger" data-action="cancel-booking" data-booking-id="${escapeHtml(booking.id)}">Отменить</button>`
+        ? `<button type="button" class="action-btn danger" data-action="cancel-booking" data-booking-id="${escapeHtml(booking.id)}">РћС‚РјРµРЅРёС‚СЊ</button>`
         : "";
 
       const cancelReason = canCancel
@@ -588,7 +622,7 @@ function renderBookings(bookings) {
             <input
               type="text"
               maxlength="512"
-              placeholder="Причина отмены (опционально)"
+              placeholder="РџСЂРёС‡РёРЅР° РѕС‚РјРµРЅС‹ (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)"
               data-role="cancel-reason"
               data-booking-id="${escapeHtml(booking.id)}"
             />
@@ -611,23 +645,23 @@ function renderBookings(bookings) {
                 data-booking-id="${escapeHtml(booking.id)}"
                 data-current-slot-id="${escapeHtml(booking.slot_id)}"
               >
-                Перенести
+                РџРµСЂРµРЅРµСЃС‚Рё
               </button>
             </div>
           `;
         } else {
-          rescheduleAction = "<p class=\"hint\">Нет открытых слотов для переноса.</p>";
+          rescheduleAction = "<p class=\"hint\">РќРµС‚ РѕС‚РєСЂС‹С‚С‹С… СЃР»РѕС‚РѕРІ РґР»СЏ РїРµСЂРµРЅРѕСЃР°.</p>";
         }
       }
 
       return `
         <article class="card-item">
-          <h4>Бронирование ${escapeHtml(booking.id)}</h4>
-          <p class="meta"><strong>Статус:</strong> ${escapeHtml(booking.status)}</p>
-          <p class="meta"><strong>Слот:</strong> ${escapeHtml(booking.slot_id)}</p>
-          <p class="meta"><strong>Пакет:</strong> ${escapeHtml(booking.package_id ?? "-")}</p>
-          <p class="meta"><strong>Hold до:</strong> ${formatDateTime(booking.hold_expires_at)}</p>
-          <p class="meta"><strong>Создано:</strong> ${formatDateTime(booking.created_at)}</p>
+          <h4>Р‘СЂРѕРЅРёСЂРѕРІР°РЅРёРµ ${escapeHtml(booking.id)}</h4>
+          <p class="meta"><strong>РЎС‚Р°С‚СѓСЃ:</strong> ${escapeHtml(booking.status)}</p>
+          <p class="meta"><strong>РЎР»РѕС‚:</strong> ${escapeHtml(booking.slot_id)}</p>
+          <p class="meta"><strong>РџР°РєРµС‚:</strong> ${escapeHtml(booking.package_id ?? "-")}</p>
+          <p class="meta"><strong>Hold РґРѕ:</strong> ${formatDateTime(booking.hold_expires_at)}</p>
+          <p class="meta"><strong>РЎРѕР·РґР°РЅРѕ:</strong> ${formatDateTime(booking.created_at)}</p>
           <div class="action-row">
             ${confirmAction}
             ${cancelAction}
@@ -642,7 +676,7 @@ function renderBookings(bookings) {
 
 function renderPackages(packages) {
   if (packages.length === 0) {
-    renderEmpty(elements.packagesContent, "У вас пока нет пакетов.");
+    renderEmpty(elements.packagesContent, "РЈ РІР°СЃ РїРѕРєР° РЅРµС‚ РїР°РєРµС‚РѕРІ.");
     return;
   }
 
@@ -650,11 +684,11 @@ function renderPackages(packages) {
     .map((item) => {
       return `
         <article class="card-item">
-          <h4>Пакет ${escapeHtml(item.id)}</h4>
-          <p class="meta"><strong>Статус:</strong> ${escapeHtml(item.status)}</p>
-          <p class="meta"><strong>Уроков всего:</strong> ${escapeHtml(item.lessons_total)}</p>
-          <p class="meta"><strong>Осталось уроков:</strong> ${escapeHtml(item.lessons_left)}</p>
-          <p class="meta"><strong>Действует до:</strong> ${formatDateTime(item.expires_at)}</p>
+          <h4>РџР°РєРµС‚ ${escapeHtml(item.id)}</h4>
+          <p class="meta"><strong>РЎС‚Р°С‚СѓСЃ:</strong> ${escapeHtml(item.status)}</p>
+          <p class="meta"><strong>РЈСЂРѕРєРѕРІ РІСЃРµРіРѕ:</strong> ${escapeHtml(item.lessons_total)}</p>
+          <p class="meta"><strong>РћСЃС‚Р°Р»РѕСЃСЊ СѓСЂРѕРєРѕРІ:</strong> ${escapeHtml(item.lessons_left)}</p>
+          <p class="meta"><strong>Р”РµР№СЃС‚РІСѓРµС‚ РґРѕ:</strong> ${formatDateTime(item.expires_at)}</p>
         </article>
       `;
     })
@@ -673,7 +707,7 @@ async function handleSlotsActionClick(event) {
   }
 
   if (!isStudentRole()) {
-    setGlobalStatus("Hold доступен только для роли student.", "error");
+    setGlobalStatus("Hold РґРѕСЃС‚СѓРїРµРЅ С‚РѕР»СЊРєРѕ РґР»СЏ СЂРѕР»Рё student.", "error");
     return;
   }
 
@@ -681,7 +715,7 @@ async function handleSlotsActionClick(event) {
   const packageId = elements.slotPackageSelect?.value ?? "";
 
   if (!slotId || !packageId) {
-    setGlobalStatus("Выберите пакет и повторите попытку hold.", "error");
+    setGlobalStatus("Р’С‹Р±РµСЂРёС‚Рµ РїР°РєРµС‚ Рё РїРѕРІС‚РѕСЂРёС‚Рµ РїРѕРїС‹С‚РєСѓ hold.", "error");
     return;
   }
 
@@ -694,7 +728,7 @@ async function handleSlotsActionClick(event) {
       },
     });
 
-    setGlobalStatus(`Hold создан: ${booking.id}`, "success");
+    setGlobalStatus(`Hold СЃРѕР·РґР°РЅ: ${booking.id}`, "success");
     await refreshAfterBookingMutation();
     activateTab("bookings");
   });
@@ -725,7 +759,7 @@ async function handleBookingsActionClick(event) {
       await apiRequest(`/booking/${bookingId}/confirm`, {
         method: "POST",
       });
-      setGlobalStatus(`Бронирование подтверждено: ${bookingId}`, "success");
+      setGlobalStatus(`Р‘СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ: ${bookingId}`, "success");
       await refreshAfterBookingMutation();
       return;
     }
@@ -747,7 +781,7 @@ async function handleBookingsActionClick(event) {
         reasonInput.value = "";
       }
 
-      setGlobalStatus(`Бронирование отменено: ${bookingId}`, "success");
+      setGlobalStatus(`Р‘СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РѕС‚РјРµРЅРµРЅРѕ: ${bookingId}`, "success");
       await refreshAfterBookingMutation();
       return;
     }
@@ -760,12 +794,12 @@ async function handleBookingsActionClick(event) {
       const currentSlotId = button.dataset.currentSlotId ?? "";
 
       if (!newSlotId) {
-        setGlobalStatus("Выберите новый слот для переноса.", "error");
+        setGlobalStatus("Р’С‹Р±РµСЂРёС‚Рµ РЅРѕРІС‹Р№ СЃР»РѕС‚ РґР»СЏ РїРµСЂРµРЅРѕСЃР°.", "error");
         return;
       }
 
       if (newSlotId === currentSlotId) {
-        setGlobalStatus("Новый слот должен отличаться от текущего.", "error");
+        setGlobalStatus("РќРѕРІС‹Р№ СЃР»РѕС‚ РґРѕР»Р¶РµРЅ РѕС‚Р»РёС‡Р°С‚СЊСЃСЏ РѕС‚ С‚РµРєСѓС‰РµРіРѕ.", "error");
         return;
       }
 
@@ -776,7 +810,7 @@ async function handleBookingsActionClick(event) {
         },
       });
 
-      setGlobalStatus(`Бронирование перенесено. Новый ID: ${newBooking.id}`, "success");
+      setGlobalStatus(`Р‘СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РїРµСЂРµРЅРµСЃРµРЅРѕ. РќРѕРІС‹Р№ ID: ${newBooking.id}`, "success");
       await refreshAfterBookingMutation();
       return;
     }
@@ -785,7 +819,7 @@ async function handleBookingsActionClick(event) {
 
 async function handleExpireHolds(event) {
   if (!isAdminRole()) {
-    setGlobalStatus("Операция доступна только для роли admin.", "error");
+    setGlobalStatus("РћРїРµСЂР°С†РёСЏ РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РґР»СЏ СЂРѕР»Рё admin.", "error");
     return;
   }
 
@@ -798,14 +832,14 @@ async function handleExpireHolds(event) {
     state.adminOperations.lastExpiredHolds = Number(expiredCount);
     state.adminOperations.updatedAt = new Date().toISOString();
     renderAdminOperations();
-    setGlobalStatus(`Истекших HOLD-бронирований: ${expiredCount}`, "success");
+    setGlobalStatus(`РСЃС‚РµРєС€РёС… HOLD-Р±СЂРѕРЅРёСЂРѕРІР°РЅРёР№: ${expiredCount}`, "success");
     await Promise.all([refreshSlots(), refreshBookings()]);
   });
 }
 
 async function handleExpirePackages(event) {
   if (!isAdminRole()) {
-    setGlobalStatus("Операция доступна только для роли admin.", "error");
+    setGlobalStatus("РћРїРµСЂР°С†РёСЏ РґРѕСЃС‚СѓРїРЅР° С‚РѕР»СЊРєРѕ РґР»СЏ СЂРѕР»Рё admin.", "error");
     return;
   }
 
@@ -818,7 +852,7 @@ async function handleExpirePackages(event) {
     state.adminOperations.lastExpiredPackages = Number(expiredCount);
     state.adminOperations.updatedAt = new Date().toISOString();
     renderAdminOperations();
-    setGlobalStatus(`Истекших пакетов: ${expiredCount}`, "success");
+    setGlobalStatus(`РСЃС‚РµРєС€РёС… РїР°РєРµС‚РѕРІ: ${expiredCount}`, "success");
     await refreshPackages();
   });
 }
@@ -834,12 +868,12 @@ async function withButtonAction(button, action) {
 
   const originalText = button.textContent;
   button.disabled = true;
-  button.textContent = "Выполняется...";
+  button.textContent = "Р’С‹РїРѕР»РЅСЏРµС‚СЃСЏ...";
 
   try {
     await action();
   } catch (error) {
-    setGlobalStatus(`Ошибка операции: ${error.message}`, "error");
+    setGlobalStatus(`РћС€РёР±РєР° РѕРїРµСЂР°С†РёРё: ${error.message}`, "error");
   } finally {
     button.disabled = false;
     button.textContent = originalText;
@@ -880,38 +914,38 @@ function translateBackendMessage(message) {
   }
 
   const directTranslations = {
-    "Not authenticated": "Требуется авторизация.",
-    "Could not validate credentials": "Не удалось проверить учетные данные.",
-    "Invalid credentials": "Неверный email или пароль.",
-    "Unauthorized": "Недостаточно прав для выполнения операции.",
-    "Access denied": "Доступ запрещен.",
-    "Slot not found": "Слот не найден.",
-    "Slot is not available": "Слот сейчас недоступен.",
-    "Cannot book a slot in the past": "Нельзя бронировать слот в прошлом.",
-    "Package not found": "Пакет не найден.",
-    "Package does not belong to current student": "Пакет не принадлежит текущему студенту.",
-    "Package does not belong to current user": "Пакет не принадлежит текущему пользователю.",
-    "Package is not active": "Пакет не активен.",
-    "Package is expired": "Срок действия пакета истек.",
-    "No lessons left in package": "В пакете не осталось уроков.",
-    "No lessons left": "В пакете не осталось уроков.",
-    "Only students can hold bookings": "Только студенты могут создавать HOLD-бронирования.",
-    "Booking not found": "Бронирование не найдено.",
-    "Only HOLD booking can be confirmed": "Подтвердить можно только бронирование в статусе HOLD.",
-    "Booking hold has expired": "Время HOLD-бронирования истекло.",
-    "Booking package is required": "Для бронирования требуется пакет.",
-    "Package is inactive or expired": "Пакет неактивен или уже истек.",
-    "Booking already expired": "Бронирование уже истекло.",
+    "Not authenticated": "РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ.",
+    "Could not validate credentials": "РќРµ СѓРґР°Р»РѕСЃСЊ РїСЂРѕРІРµСЂРёС‚СЊ СѓС‡РµС‚РЅС‹Рµ РґР°РЅРЅС‹Рµ.",
+    "Invalid credentials": "РќРµРІРµСЂРЅС‹Р№ email РёР»Рё РїР°СЂРѕР»СЊ.",
+    "Unauthorized": "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ РґР»СЏ РІС‹РїРѕР»РЅРµРЅРёСЏ РѕРїРµСЂР°С†РёРё.",
+    "Access denied": "Р”РѕСЃС‚СѓРї Р·Р°РїСЂРµС‰РµРЅ.",
+    "Slot not found": "РЎР»РѕС‚ РЅРµ РЅР°Р№РґРµРЅ.",
+    "Slot is not available": "РЎР»РѕС‚ СЃРµР№С‡Р°СЃ РЅРµРґРѕСЃС‚СѓРїРµРЅ.",
+    "Cannot book a slot in the past": "РќРµР»СЊР·СЏ Р±СЂРѕРЅРёСЂРѕРІР°С‚СЊ СЃР»РѕС‚ РІ РїСЂРѕС€Р»РѕРј.",
+    "Package not found": "РџР°РєРµС‚ РЅРµ РЅР°Р№РґРµРЅ.",
+    "Package does not belong to current student": "РџР°РєРµС‚ РЅРµ РїСЂРёРЅР°РґР»РµР¶РёС‚ С‚РµРєСѓС‰РµРјСѓ СЃС‚СѓРґРµРЅС‚Сѓ.",
+    "Package does not belong to current user": "РџР°РєРµС‚ РЅРµ РїСЂРёРЅР°РґР»РµР¶РёС‚ С‚РµРєСѓС‰РµРјСѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ.",
+    "Package is not active": "РџР°РєРµС‚ РЅРµ Р°РєС‚РёРІРµРЅ.",
+    "Package is expired": "РЎСЂРѕРє РґРµР№СЃС‚РІРёСЏ РїР°РєРµС‚Р° РёСЃС‚РµРє.",
+    "No lessons left in package": "Р’ РїР°РєРµС‚Рµ РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ СѓСЂРѕРєРѕРІ.",
+    "No lessons left": "Р’ РїР°РєРµС‚Рµ РЅРµ РѕСЃС‚Р°Р»РѕСЃСЊ СѓСЂРѕРєРѕРІ.",
+    "Only students can hold bookings": "РўРѕР»СЊРєРѕ СЃС‚СѓРґРµРЅС‚С‹ РјРѕРіСѓС‚ СЃРѕР·РґР°РІР°С‚СЊ HOLD-Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ.",
+    "Booking not found": "Р‘СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ.",
+    "Only HOLD booking can be confirmed": "РџРѕРґС‚РІРµСЂРґРёС‚СЊ РјРѕР¶РЅРѕ С‚РѕР»СЊРєРѕ Р±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РІ СЃС‚Р°С‚СѓСЃРµ HOLD.",
+    "Booking hold has expired": "Р’СЂРµРјСЏ HOLD-Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ РёСЃС‚РµРєР»Рѕ.",
+    "Booking package is required": "Р”Р»СЏ Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ С‚СЂРµР±СѓРµС‚СЃСЏ РїР°РєРµС‚.",
+    "Package is inactive or expired": "РџР°РєРµС‚ РЅРµР°РєС‚РёРІРµРЅ РёР»Рё СѓР¶Рµ РёСЃС‚РµРє.",
+    "Booking already expired": "Р‘СЂРѕРЅРёСЂРѕРІР°РЅРёРµ СѓР¶Рµ РёСЃС‚РµРєР»Рѕ.",
     "Booking cannot be rescheduled in current status":
-      "В текущем статусе бронирование нельзя перенести.",
-    "You cannot manage this booking": "У вас нет прав управлять этим бронированием.",
-    "Only admin can run hold expiration": "Только admin может запускать истечение HOLD-бронирований.",
-    "Only admin can expire packages": "Только admin может запускать истечение пакетов.",
-    "Only admin can create lesson packages": "Только admin может создавать пакеты уроков.",
-    "Only admin or teacher can create lessons": "Только admin или teacher может создавать уроки.",
-    "Only admin or teacher can update lessons": "Только admin или teacher может изменять уроки.",
-    "Teacher can update only own lessons": "Teacher может изменять только свои уроки.",
-    "Lesson not found": "Урок не найден.",
+      "Р’ С‚РµРєСѓС‰РµРј СЃС‚Р°С‚СѓСЃРµ Р±СЂРѕРЅРёСЂРѕРІР°РЅРёРµ РЅРµР»СЊР·СЏ РїРµСЂРµРЅРµСЃС‚Рё.",
+    "You cannot manage this booking": "РЈ РІР°СЃ РЅРµС‚ РїСЂР°РІ СѓРїСЂР°РІР»СЏС‚СЊ СЌС‚РёРј Р±СЂРѕРЅРёСЂРѕРІР°РЅРёРµРј.",
+    "Only admin can run hold expiration": "РўРѕР»СЊРєРѕ admin РјРѕР¶РµС‚ Р·Р°РїСѓСЃРєР°С‚СЊ РёСЃС‚РµС‡РµРЅРёРµ HOLD-Р±СЂРѕРЅРёСЂРѕРІР°РЅРёР№.",
+    "Only admin can expire packages": "РўРѕР»СЊРєРѕ admin РјРѕР¶РµС‚ Р·Р°РїСѓСЃРєР°С‚СЊ РёСЃС‚РµС‡РµРЅРёРµ РїР°РєРµС‚РѕРІ.",
+    "Only admin can create lesson packages": "РўРѕР»СЊРєРѕ admin РјРѕР¶РµС‚ СЃРѕР·РґР°РІР°С‚СЊ РїР°РєРµС‚С‹ СѓСЂРѕРєРѕРІ.",
+    "Only admin or teacher can create lessons": "РўРѕР»СЊРєРѕ admin РёР»Рё teacher РјРѕР¶РµС‚ СЃРѕР·РґР°РІР°С‚СЊ СѓСЂРѕРєРё.",
+    "Only admin or teacher can update lessons": "РўРѕР»СЊРєРѕ admin РёР»Рё teacher РјРѕР¶РµС‚ РёР·РјРµРЅСЏС‚СЊ СѓСЂРѕРєРё.",
+    "Teacher can update only own lessons": "Teacher РјРѕР¶РµС‚ РёР·РјРµРЅСЏС‚СЊ С‚РѕР»СЊРєРѕ СЃРІРѕРё СѓСЂРѕРєРё.",
+    "Lesson not found": "РЈСЂРѕРє РЅРµ РЅР°Р№РґРµРЅ.",
   };
 
   if (normalized in directTranslations) {
@@ -927,10 +961,10 @@ function translateValidationMessage(message) {
   }
 
   const directTranslations = {
-    "Field required": "Поле обязательно.",
-    "Input should be a valid UUID": "Введите корректный UUID.",
-    "Input should be a valid datetime": "Введите корректную дату и время.",
-    "Input should be a valid email address": "Введите корректный email.",
+    "Field required": "РџРѕР»Рµ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ.",
+    "Input should be a valid UUID": "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ UUID.",
+    "Input should be a valid datetime": "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅСѓСЋ РґР°С‚Сѓ Рё РІСЂРµРјСЏ.",
+    "Input should be a valid email address": "Р’РІРµРґРёС‚Рµ РєРѕСЂСЂРµРєС‚РЅС‹Р№ email.",
   };
 
   if (normalized in directTranslations) {
@@ -939,12 +973,12 @@ function translateValidationMessage(message) {
 
   const minLengthMatch = normalized.match(/^String should have at least (\d+) character/);
   if (minLengthMatch) {
-    return `Минимальная длина: ${minLengthMatch[1]} символов.`;
+    return `РњРёРЅРёРјР°Р»СЊРЅР°СЏ РґР»РёРЅР°: ${minLengthMatch[1]} СЃРёРјРІРѕР»РѕРІ.`;
   }
 
   const maxLengthMatch = normalized.match(/^String should have at most (\d+) character/);
   if (maxLengthMatch) {
-    return `Максимальная длина: ${maxLengthMatch[1]} символов.`;
+    return `РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ РґР»РёРЅР°: ${maxLengthMatch[1]} СЃРёРјРІРѕР»РѕРІ.`;
   }
 
   return translateBackendMessage(normalized);
@@ -952,18 +986,18 @@ function translateValidationMessage(message) {
 
 function translateValidationPath(pathItems) {
   const fieldTranslations = {
-    body: "тело запроса",
-    query: "query-параметр",
-    path: "путь",
+    body: "С‚РµР»Рѕ Р·Р°РїСЂРѕСЃР°",
+    query: "query-РїР°СЂР°РјРµС‚СЂ",
+    path: "РїСѓС‚СЊ",
     email: "email",
-    password: "пароль",
-    timezone: "таймзона",
-    role: "роль",
-    slot_id: "ID слота",
-    package_id: "ID пакета",
-    booking_id: "ID бронирования",
-    new_slot_id: "ID нового слота",
-    reason: "причина",
+    password: "РїР°СЂРѕР»СЊ",
+    timezone: "С‚Р°Р№РјР·РѕРЅР°",
+    role: "СЂРѕР»СЊ",
+    slot_id: "ID СЃР»РѕС‚Р°",
+    package_id: "ID РїР°РєРµС‚Р°",
+    booking_id: "ID Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ",
+    new_slot_id: "ID РЅРѕРІРѕРіРѕ СЃР»РѕС‚Р°",
+    reason: "РїСЂРёС‡РёРЅР°",
     refresh_token: "refresh token",
   };
 
@@ -972,14 +1006,14 @@ function translateValidationPath(pathItems) {
 
 function fallbackStatusMessage(statusCode) {
   const fallbackMessages = {
-    400: "Некорректный запрос.",
-    401: "Требуется авторизация.",
-    403: "Недостаточно прав.",
-    404: "Ресурс не найден.",
-    409: "Конфликт данных.",
-    422: "Ошибка валидации запроса.",
-    429: "Слишком много запросов. Попробуйте позже.",
-    500: "Внутренняя ошибка сервера.",
+    400: "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Р·Р°РїСЂРѕСЃ.",
+    401: "РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ.",
+    403: "РќРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ РїСЂР°РІ.",
+    404: "Р РµСЃСѓСЂСЃ РЅРµ РЅР°Р№РґРµРЅ.",
+    409: "РљРѕРЅС„Р»РёРєС‚ РґР°РЅРЅС‹С….",
+    422: "РћС€РёР±РєР° РІР°Р»РёРґР°С†РёРё Р·Р°РїСЂРѕСЃР°.",
+    429: "РЎР»РёС€РєРѕРј РјРЅРѕРіРѕ Р·Р°РїСЂРѕСЃРѕРІ. РџРѕРїСЂРѕР±СѓР№С‚Рµ РїРѕР·Р¶Рµ.",
+    500: "Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ РѕС€РёР±РєР° СЃРµСЂРІРµСЂР°.",
   };
   return fallbackMessages[statusCode] ?? `HTTP ${statusCode}`;
 }
@@ -1100,13 +1134,13 @@ async function apiRequest(
         retryOnUnauthorized: false,
       });
     }
-    moveToAuthState("Сессия истекла. Выполните вход снова.");
-    throw new Error("Сессия истекла. Выполните вход снова.");
+    moveToAuthState("РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ СЃРЅРѕРІР°.");
+    throw new Error("РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ СЃРЅРѕРІР°.");
   }
 
   if (response.status === 401 && auth) {
-    moveToAuthState("Сессия истекла. Выполните вход снова.");
-    throw new Error("Сессия истекла. Выполните вход снова.");
+    moveToAuthState("РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ СЃРЅРѕРІР°.");
+    throw new Error("РЎРµСЃСЃРёСЏ РёСЃС‚РµРєР»Р°. Р’С‹РїРѕР»РЅРёС‚Рµ РІС…РѕРґ СЃРЅРѕРІР°.");
   }
 
   if (!response.ok) {

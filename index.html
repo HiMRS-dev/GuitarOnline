@@ -3,142 +3,432 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GuitarOnline Рабочее пространство</title>
+    <title>GuitarOnline - Онлайн-школа гитары</title>
     <style>
       :root {
-        --bg1: #e8f2ff;
-        --bg2: #eef8ef;
-        --text: #1b2b35;
-        --card: #ffffff;
-        --line: #cddce2;
-        --accent: #1f6fa0;
-        --accent-hover: #18597f;
+        --bg-top: #fff8ec;
+        --bg-bottom: #eef6ff;
+        --surface: #ffffff;
+        --ink: #1e2b33;
+        --muted: #5c6b75;
+        --line: #d6e1e6;
+        --accent: #0d8b7a;
+        --accent-hover: #0b7567;
+        --accent-soft: #e8f8f5;
+        --radius: 14px;
       }
 
       * {
         box-sizing: border-box;
       }
 
+      html {
+        scroll-behavior: smooth;
+      }
+
       body {
         margin: 0;
-        font-family: "Segoe UI", Arial, sans-serif;
-        color: var(--text);
-        background: linear-gradient(140deg, var(--bg1) 0%, var(--bg2) 100%);
-      }
-
-      .wrap {
-        max-width: 900px;
-        margin: 48px auto;
-        padding: 0 20px;
-      }
-
-      .card {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        box-shadow: 0 14px 28px rgba(23, 34, 48, 0.08);
-        padding: 26px;
-      }
-
-      h1 {
-        margin: 0 0 10px;
-        font-size: 2rem;
-      }
-
-      p {
-        margin: 0;
-        line-height: 1.5;
-      }
-
-      .hint {
-        margin-top: 12px;
-        padding: 10px 12px;
-        border: 1px dashed #9bb3bc;
-        border-radius: 10px;
-        background: #f7fbff;
-        font-size: 0.95rem;
-      }
-
-      .links {
-        margin-top: 20px;
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-        gap: 10px;
+        color: var(--ink);
+        font-family: "Trebuchet MS", "Lucida Sans Unicode", "Tahoma", sans-serif;
+        background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
       }
 
       a {
-        display: block;
-        text-decoration: none;
-        border: 1px solid #b3c7cf;
-        border-radius: 10px;
-        padding: 10px 12px;
         color: var(--accent);
-        background: #f8fcff;
-        transition: 0.15s ease;
       }
 
-      a:hover {
-        color: #ffffff;
+      .container {
+        width: min(1040px, 92vw);
+        margin: 0 auto;
+      }
+
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.95);
+        border-bottom: 1px solid var(--line);
+        backdrop-filter: blur(8px);
+      }
+
+      .header-row {
+        min-height: 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 10px 0;
+      }
+
+      .brand {
+        font-size: 1.2rem;
+        letter-spacing: 0.02em;
+      }
+
+      .main-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .main-nav a {
+        text-decoration: none;
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      .main-nav a:hover {
+        color: var(--accent);
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 10px 14px;
+        border: 1px solid var(--accent);
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: 600;
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .btn:hover {
         background: var(--accent-hover);
         border-color: var(--accent-hover);
       }
 
-      .status {
-        margin-top: 18px;
-        font-size: 0.95rem;
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--accent);
       }
 
-      .ok {
-        color: #1f7a3f;
+      .btn-secondary:hover {
+        background: var(--accent-soft);
+        color: var(--accent-hover);
+        border-color: var(--accent-hover);
       }
 
-      .bad {
-        color: #b13b3b;
+      main {
+        padding: 30px 0 44px;
+      }
+
+      .section {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 24px;
+        margin-top: 14px;
+      }
+
+      .hero {
+        margin-top: 0;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 12px;
+        line-height: 1.2;
+      }
+
+      h1 {
+        font-size: clamp(1.8rem, 2.8vw, 2.5rem);
+      }
+
+      h2 {
+        font-size: 1.45rem;
+      }
+
+      p {
+        margin: 0 0 10px;
+        line-height: 1.6;
+        color: var(--ink);
+      }
+
+      ul,
+      ol {
+        margin: 0;
+        padding-left: 18px;
+        line-height: 1.6;
+      }
+
+      .hero-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .cards-2 {
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      }
+
+      .cards-3 {
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fbfdfd;
+        padding: 14px;
+      }
+
+      .card h3 {
+        margin-bottom: 8px;
+      }
+
+      .price {
+        font-weight: 700;
+        color: var(--accent-hover);
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-top: 8px;
+        background: #fcfefe;
+      }
+
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      blockquote {
+        margin: 0;
+        padding: 10px 12px;
+        border-left: 4px solid var(--accent);
+        background: #f4fbfa;
+        border-radius: 8px;
+      }
+
+      blockquote + blockquote {
+        margin-top: 10px;
+      }
+
+      cite {
+        display: block;
+        margin-top: 6px;
+        color: var(--muted);
+      }
+
+      .site-footer {
+        border-top: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.85);
+      }
+
+      .footer-row {
+        padding: 18px 0 24px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .footer-links {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 720px) {
+        .header-row {
+          align-items: flex-start;
+        }
+
+        .header-actions {
+          width: 100%;
+        }
+
+        .header-actions a {
+          flex: 1;
+          text-align: center;
+        }
       }
     </style>
   </head>
   <body>
-    <main class="wrap">
-      <section class="card">
-        <h1>GuitarOnline Рабочее пространство backend</h1>
-        <p>
-          Эта страница отдается через VS Code Live Server (<code>:5500</code>). Сам API работает на
-          <code>:8000</code>.
-        </p>
+    <header class="site-header">
+      <div class="container header-row">
+        <div class="brand"><strong>GuitarOnline</strong></div>
 
-        <div class="hint">
-          Если ссылки API не открываются, сначала запустите backend (например:
-          <code>docker compose up --build</code>).
+        <nav class="main-nav" aria-label="Основная навигация">
+          <a href="#about">О нас</a>
+          <a href="#programs">Программы</a>
+          <a href="#pricing">Цены</a>
+          <a href="#teachers">Преподаватели</a>
+          <a href="#faq">FAQ</a>
+          <a href="#contacts">Контакты</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="/portal/login">Войти</a>
+          <a class="btn" href="/portal/register">Регистрация</a>
         </div>
+      </div>
+    </header>
 
-        <div class="links">
-          <a href="http://127.0.0.1:8000/portal" target="_blank" rel="noreferrer">Открыть кабинет MVP</a>
-          <a href="http://127.0.0.1:8000/" target="_blank" rel="noreferrer">Открыть стартовую API</a>
-          <a href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">Открыть Swagger Docs</a>
-          <a href="http://127.0.0.1:8000/health" target="_blank" rel="noreferrer">Открыть Health</a>
-          <a href="http://127.0.0.1:8000/ready" target="_blank" rel="noreferrer">Открыть Ready</a>
-          <a href="http://127.0.0.1:8000/metrics" target="_blank" rel="noreferrer">Открыть метрики</a>
-        </div>
+    <main>
+      <div class="container">
+        <section class="section hero" id="hero" aria-labelledby="hero-title">
+          <h1 id="hero-title">Научим играть любимые песни на гитаре</h1>
+          <p>
+            Онлайн-уроки для начинающих и продвинутых: индивидуальный план, удобное расписание и поддержка
+            преподавателя.
+          </p>
+          <div class="hero-actions">
+            <a class="btn" href="#start">Записаться на пробный урок</a>
+            <a class="btn btn-secondary" href="#pricing">Посмотреть цены</a>
+          </div>
+        </section>
 
-        <div class="status" id="status">Проверяю состояние API...</div>
-      </section>
+        <section class="section" id="about" aria-labelledby="about-title">
+          <h2 id="about-title">О нас</h2>
+          <p>GuitarOnline - школа, где ученики учатся играть с нуля и системно растут по уровню.</p>
+          <ul>
+            <li>Более 1 000 учеников</li>
+            <li>Команда из 20+ преподавателей</li>
+            <li>Индивидуальный трек обучения</li>
+          </ul>
+        </section>
+
+        <section class="section" id="programs" aria-labelledby="programs-title">
+          <h2 id="programs-title">Программы обучения</h2>
+          <div class="grid cards-2">
+            <article class="card">
+              <h3>С нуля</h3>
+              <p>Базовые аккорды, ритм, первые песни.</p>
+            </article>
+            <article class="card">
+              <h3>Акустическая гитара</h3>
+              <p>Бой, перебор, развитие музыкального слуха.</p>
+            </article>
+            <article class="card">
+              <h3>Электрогитара</h3>
+              <p>Риффы, соло, техника правой и левой руки.</p>
+            </article>
+            <article class="card">
+              <h3>Продвинутый уровень</h3>
+              <p>Импровизация, гармония, работа с репертуаром.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="formats" aria-labelledby="formats-title">
+          <h2 id="formats-title">Форматы занятий</h2>
+          <ul>
+            <li>Индивидуальные занятия</li>
+            <li>Мини-группы</li>
+            <li>Гибкий онлайн-формат</li>
+          </ul>
+        </section>
+
+        <section class="section" id="pricing" aria-labelledby="pricing-title">
+          <h2 id="pricing-title">Цены</h2>
+          <div class="grid cards-3">
+            <article class="card">
+              <h3>Старт</h3>
+              <p>4 занятия в месяц</p>
+              <p class="price">от 6 900 руб.</p>
+            </article>
+            <article class="card">
+              <h3>Стандарт</h3>
+              <p>8 занятий в месяц</p>
+              <p class="price">от 12 900 руб.</p>
+            </article>
+            <article class="card">
+              <h3>Интенсив</h3>
+              <p>12 занятий в месяц</p>
+              <p class="price">от 17 900 руб.</p>
+            </article>
+          </div>
+          <p style="margin-top: 12px"><a class="btn" href="#start">Выбрать тариф</a></p>
+        </section>
+
+        <section class="section" id="start" aria-labelledby="start-title">
+          <h2 id="start-title">Как начать</h2>
+          <ol>
+            <li>Оставьте заявку на пробный урок.</li>
+            <li>Пройдите короткую диагностику уровня.</li>
+            <li>Выберите программу и расписание.</li>
+            <li>Занимайтесь и отслеживайте прогресс в кабинете.</li>
+          </ol>
+        </section>
+
+        <section class="section" id="cabinet" aria-labelledby="cabinet-title">
+          <h2 id="cabinet-title">Личный кабинет</h2>
+          <p>В кабинете доступны расписание, домашние задания, история оплат, прогресс и материалы уроков.</p>
+          <div class="hero-actions">
+            <a class="btn btn-secondary" href="/portal/login">Войти</a>
+            <a class="btn" href="/portal/register">Создать аккаунт</a>
+          </div>
+        </section>
+
+        <section class="section" id="teachers" aria-labelledby="teachers-title">
+          <h2 id="teachers-title">Преподаватели</h2>
+          <p>Опытные преподаватели по современным и классическим направлениям.</p>
+        </section>
+
+        <section class="section" id="reviews" aria-labelledby="reviews-title">
+          <h2 id="reviews-title">Отзывы</h2>
+          <blockquote>
+            <p>"За 3 месяца начал уверенно играть любимые песни."</p>
+            <cite>- Алексей, начинающий</cite>
+          </blockquote>
+          <blockquote>
+            <p>"Удобное расписание и понятные домашние задания."</p>
+            <cite>- Мария, 2-й месяц обучения</cite>
+          </blockquote>
+        </section>
+
+        <section class="section" id="faq" aria-labelledby="faq-title">
+          <h2 id="faq-title">FAQ</h2>
+          <details>
+            <summary>Можно ли начать с нуля?</summary>
+            <p>Да, у нас есть отдельная программа для начинающих.</p>
+          </details>
+          <details>
+            <summary>Нужна ли своя гитара?</summary>
+            <p>Желательно, но на старте поможем подобрать инструмент.</p>
+          </details>
+          <details>
+            <summary>Как оплачивать занятия?</summary>
+            <p>Оплата доступна в личном кабинете по выбранному тарифу.</p>
+          </details>
+        </section>
+
+        <section class="section" id="contacts" aria-labelledby="contacts-title">
+          <h2 id="contacts-title">Контакты</h2>
+          <address>
+            <p>Телефон: <a href="tel:+78005553535">+7 (800) 555-35-35</a></p>
+            <p>Email: <a href="mailto:hello@guitaronline.example">hello@guitaronline.example</a></p>
+            <p>Адрес: г. Москва, ул. Примерная, д. 10</p>
+          </address>
+        </section>
+      </div>
     </main>
 
-    <script>
-      const statusNode = document.getElementById("status");
-
-      async function checkApi() {
-        try {
-          await fetch("http://127.0.0.1:8000/health", { mode: "no-cors", cache: "no-store" });
-          statusNode.textContent = "Статус API: доступен (точный ответ смотрите в /health)";
-          statusNode.className = "status ok";
-        } catch (_) {
-          statusNode.textContent = "Статус API: недоступен на 127.0.0.1:8000";
-          statusNode.className = "status bad";
-        }
-      }
-
-      checkApi();
-    </script>
+    <footer class="site-footer">
+      <div class="container footer-row">
+        <p>© GuitarOnline, 2026</p>
+        <p class="footer-links">
+          <a href="/privacy">Политика конфиденциальности</a>
+          <a href="/offer">Публичная оферта</a>
+        </p>
+      </div>
+    </footer>
   </body>
 </html>

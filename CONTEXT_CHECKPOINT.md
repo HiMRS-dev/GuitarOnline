@@ -1197,3 +1197,13 @@
     - `docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:1.7.8 .github/workflows/restore-rehearsal.yml .github/workflows/rollback-drill.yml` ->
       failed (`docker daemon` unavailable in current shell).
 
+## 17) Business Admin UI Plan (Draft 2026-03-11)
+| Stage | Priority | Scope | Target Result | Status |
+| --- | --- | --- | --- | --- |
+| `BA-01` | P0 | Dashboard: KPI, `health/ready`, key operational alerts. | Admin sees platform status and risks in one screen. | Done |
+| `BA-02` | P0 | Users: list, role visibility, activate/deactivate operations. | Admin can manage user lifecycle and access quickly. | Done |
+| `BA-03` | P0 | Teachers: moderation and verification workflow. | Admin can process teacher onboarding end-to-end. | Done |
+| `BA-04` | P1 | Bookings and slots calendar: cancel/reschedule/block flows. | Admin can handle scheduling incidents in UI. | Done |
+| `BA-05` | P1 | Packages and payments: finance overview + manual operations. | Admin can monitor and correct billing states. | Done |
+| `BA-06` | P1 | Audit: operational journal and action trace. | Admin can investigate actions/events without DB access. | Done |
+

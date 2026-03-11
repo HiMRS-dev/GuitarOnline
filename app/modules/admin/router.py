@@ -38,6 +38,7 @@ from app.modules.admin.schemas import (
     AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
+    AdminUserListItemRead,
     AdminUserProvisionRequest,
 )
 from app.modules.admin.service import AdminService, get_admin_service
@@ -143,6 +144,47 @@ async def provision_admin_user(
 ) -> AdminProvisionedUserRead:
     """Provision teacher/admin accounts through protected admin workflow."""
     return await service.provision_user(current_user, payload=payload)
+
+
+@router.get("/users", response_model=Page[AdminUserListItemRead])
+async def list_admin_users(
+    role: RoleEnum | None = Query(default=None),
+    is_active: bool | None = Query(default=None),
+    q: str | None = Query(default=None, min_length=1, max_length=255),
+    pagination=Depends(get_pagination_params),
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> Page[AdminUserListItemRead]:
+    """List users with role/activity/search filters for admin account management."""
+    items, total = await service.list_users(
+        current_user,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        role=role,
+        is_active=is_active,
+        q=q,
+    )
+    return build_page(items, total, pagination)
+
+
+@router.post("/users/{user_id}/activate", response_model=AdminUserListItemRead)
+async def activate_admin_user(
+    user_id: UUID,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminUserListItemRead:
+    """Activate user account via admin-only operation."""
+    return await service.activate_user(current_user, user_id=user_id)
+
+
+@router.post("/users/{user_id}/deactivate", response_model=AdminUserListItemRead)
+async def deactivate_admin_user(
+    user_id: UUID,
+    service: AdminService = Depends(get_admin_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminUserListItemRead:
+    """Deactivate user account via admin-only operation."""
+    return await service.deactivate_user(current_user, user_id=user_id)
 
 
 @router.post("/slots", response_model=AdminSlotCreateRead, status_code=status.HTTP_201_CREATED)

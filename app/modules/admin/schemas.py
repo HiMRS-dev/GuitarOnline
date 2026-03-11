@@ -120,6 +120,19 @@ class AdminProvisionedUserRead(BaseModel):
     teacher_profile: AdminProvisionTeacherProfileRead | None = None
 
 
+class AdminUserListItemRead(BaseModel):
+    """Admin user list item for user-management views."""
+
+    user_id: UUID
+    email: EmailStr
+    timezone: str
+    role: RoleEnum
+    is_active: bool
+    teacher_profile_display_name: str | None = None
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
 class AdminKpiOverviewRead(BaseModel):
     """Admin KPI snapshot across core domains."""
 

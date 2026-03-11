@@ -50,6 +50,7 @@ class FakeAdminRepository:
         self,
         *,
         existing_user: FakeUser | None = None,
+        users: list[FakeUser] | None = None,
         role_names: tuple[RoleEnum, ...] = (RoleEnum.STUDENT, RoleEnum.TEACHER, RoleEnum.ADMIN),
     ) -> None:
         self.existing_user = existing_user
@@ -57,7 +58,9 @@ class FakeAdminRepository:
             role_name: FakeRole(id=uuid4(), name=role_name)
             for role_name in role_names
         }
+        self.users_by_id = {user.id: user for user in (users or [])}
         self.create_calls: list[dict[str, object]] = []
+        self.set_active_calls: list[dict[str, object]] = []
 
     async def get_user_by_email(self, email: str) -> FakeUser | None:
         if self.existing_user is None:
@@ -112,9 +115,79 @@ class FakeAdminRepository:
             teacher_profile=profile_obj,
         )
 
+    async def list_users(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        role: RoleEnum | None,
+        is_active: bool | None,
+        q: str | None,
+    ) -> tuple[list[dict[str, object]], int]:
+        normalized_q = q.strip().lower() if q else None
+        filtered: list[FakeUser] = list(self.users_by_id.values())
 
-def make_actor(role: RoleEnum) -> SimpleNamespace:
-    return SimpleNamespace(id=uuid4(), role=SimpleNamespace(name=role))
+        if role is not None:
+            filtered = [user for user in filtered if user.role.name == role]
+        if is_active is not None:
+            filtered = [user for user in filtered if user.is_active is is_active]
+        if normalized_q:
+            filtered = [
+                user
+                for user in filtered
+                if normalized_q in user.email.lower()
+                or (
+                    user.teacher_profile is not None
+                    and normalized_q in user.teacher_profile.display_name.lower()
+                )
+            ]
+
+        filtered.sort(
+            key=lambda item: (item.created_at.timestamp(), str(item.id)),
+            reverse=True,
+        )
+        total = len(filtered)
+        paged = filtered[offset : offset + limit]
+        items = [
+            {
+                "user_id": user.id,
+                "email": user.email,
+                "timezone": user.timezone,
+                "role": user.role.name,
+                "is_active": user.is_active,
+                "teacher_profile_display_name": (
+                    user.teacher_profile.display_name if user.teacher_profile is not None else None
+                ),
+                "created_at_utc": user.created_at,
+                "updated_at_utc": user.updated_at,
+            }
+            for user in paged
+        ]
+        return items, total
+
+    async def get_user_by_id(
+        self,
+        *,
+        user_id: UUID,
+        lock_for_update: bool = False,
+    ) -> FakeUser | None:
+        _ = lock_for_update
+        return self.users_by_id.get(user_id)
+
+    async def set_user_active(self, *, user: FakeUser, is_active: bool, admin_id: UUID) -> FakeUser:
+        user.is_active = is_active
+        self.set_active_calls.append(
+            {
+                "user_id": user.id,
+                "is_active": is_active,
+                "admin_id": admin_id,
+            },
+        )
+        return user
+
+
+def make_actor(role: RoleEnum, *, user_id: UUID | None = None) -> SimpleNamespace:
+    return SimpleNamespace(id=user_id or uuid4(), role=SimpleNamespace(name=role))
 
 
 @pytest.mark.asyncio
@@ -243,3 +316,100 @@ def test_provision_request_rejects_student_role() -> None:
             timezone="UTC",
             role=RoleEnum.STUDENT,
         )
+
+
+def make_user(
+    *,
+    email: str,
+    role: RoleEnum,
+    is_active: bool = True,
+    display_name: str | None = None,
+) -> FakeUser:
+    now = datetime(2026, 3, 10, 10, 0, tzinfo=UTC)
+    profile = (
+        FakeTeacherProfile(
+            id=uuid4(),
+            display_name=display_name or "Teacher",
+            status=TeacherStatusEnum.PENDING,
+            is_approved=False,
+        )
+        if role == RoleEnum.TEACHER
+        else None
+    )
+    return FakeUser(
+        id=uuid4(),
+        email=email,
+        password_hash="hash",
+        timezone="UTC",
+        is_active=is_active,
+        role=FakeRole(id=uuid4(), name=role),
+        created_at=now,
+        updated_at=now,
+        teacher_profile=profile,
+    )
+
+
+@pytest.mark.asyncio
+async def test_admin_can_list_users_with_filters() -> None:
+    teacher = make_user(
+        email="teacher-list@guitaronline.dev",
+        role=RoleEnum.TEACHER,
+        display_name="Teacher List",
+    )
+    student = make_user(email="student-list@guitaronline.dev", role=RoleEnum.STUDENT)
+    repository = FakeAdminRepository(users=[teacher, student])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    items, total = await service.list_users(
+        admin,
+        limit=50,
+        offset=0,
+        role=RoleEnum.TEACHER,
+        is_active=True,
+        q="teacher-list",
+    )
+
+    assert total == 1
+    assert len(items) == 1
+    assert items[0].user_id == teacher.id
+    assert items[0].teacher_profile_display_name == "Teacher List"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_activate_and_deactivate_user() -> None:
+    target_user = make_user(
+        email="toggle@guitaronline.dev",
+        role=RoleEnum.STUDENT,
+        is_active=False,
+    )
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    activated = await service.activate_user(admin, user_id=target_user.id)
+    assert activated.is_active is True
+
+    deactivated = await service.deactivate_user(admin, user_id=target_user.id)
+    assert deactivated.is_active is False
+    assert repository.set_active_calls == [
+        {"user_id": target_user.id, "is_active": True, "admin_id": admin.id},
+        {"user_id": target_user.id, "is_active": False, "admin_id": admin.id},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_deactivate_own_account() -> None:
+    admin_user = make_user(
+        email="self-admin@guitaronline.dev",
+        role=RoleEnum.ADMIN,
+        is_active=True,
+    )
+    repository = FakeAdminRepository(users=[admin_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN, user_id=admin_user.id)
+
+    with pytest.raises(ConflictException, match="cannot deactivate own account"):
+        await service.deactivate_user(admin, user_id=admin_user.id)
+
+    assert repository.set_active_calls == []

@@ -36,6 +36,7 @@ from app.modules.admin.schemas import (
     AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
+    AdminUserListItemRead,
     AdminUserProvisionRequest,
 )
 from app.modules.identity.models import User
@@ -276,6 +277,73 @@ class AdminService:
             },
         )
 
+    async def list_users(
+        self,
+        actor: User,
+        *,
+        limit: int,
+        offset: int,
+        role: RoleEnum | None,
+        is_active: bool | None,
+        q: str | None,
+    ) -> tuple[list[AdminUserListItemRead], int]:
+        """List users for admin account-management views."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can list users")
+
+        items, total = await self.repository.list_users(
+            limit=limit,
+            offset=offset,
+            role=role,
+            is_active=is_active,
+            q=q,
+        )
+        return [AdminUserListItemRead.model_validate(item) for item in items], total
+
+    async def activate_user(
+        self,
+        actor: User,
+        *,
+        user_id: UUID,
+    ) -> AdminUserListItemRead:
+        """Activate user account via admin-only operation."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can activate users")
+
+        target_user = await self.repository.get_user_by_id(user_id=user_id, lock_for_update=True)
+        if target_user is None:
+            raise NotFoundException("User not found")
+
+        updated_user = await self.repository.set_user_active(
+            user=target_user,
+            is_active=True,
+            admin_id=actor.id,
+        )
+        return self._serialize_admin_user(updated_user)
+
+    async def deactivate_user(
+        self,
+        actor: User,
+        *,
+        user_id: UUID,
+    ) -> AdminUserListItemRead:
+        """Deactivate user account via admin-only operation."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can deactivate users")
+
+        target_user = await self.repository.get_user_by_id(user_id=user_id, lock_for_update=True)
+        if target_user is None:
+            raise NotFoundException("User not found")
+        if target_user.id == actor.id:
+            raise ConflictException("Admin cannot deactivate own account")
+
+        updated_user = await self.repository.set_user_active(
+            user=target_user,
+            is_active=False,
+            admin_id=actor.id,
+        )
+        return self._serialize_admin_user(updated_user)
+
     async def list_slots(
         self,
         actor: User,
@@ -437,6 +505,28 @@ class AdminService:
         if slot_status == SlotStatusEnum.HOLD or booking_status == BookingStatusEnum.HOLD:
             return SlotBookingAggregateStatusEnum.HELD
         return SlotBookingAggregateStatusEnum.OPEN
+
+    @staticmethod
+    def _serialize_admin_user(user: User) -> AdminUserListItemRead:
+        role = user.role
+        if role is None:
+            raise NotFoundException("User role not found")
+        return AdminUserListItemRead.model_validate(
+            {
+                "user_id": user.id,
+                "email": user.email,
+                "timezone": user.timezone,
+                "role": role.name,
+                "is_active": user.is_active,
+                "teacher_profile_display_name": (
+                    user.teacher_profile.display_name
+                    if user.teacher_profile is not None
+                    else None
+                ),
+                "created_at_utc": user.created_at,
+                "updated_at_utc": user.updated_at,
+            },
+        )
 
     async def delete_slot(
         self,

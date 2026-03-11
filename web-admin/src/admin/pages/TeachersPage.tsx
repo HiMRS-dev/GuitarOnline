@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { ApiClientError } from "../../shared/api/client";
-import { getTeacherDetail, listTeachers } from "../../features/teachers/api";
+import {
+  disableTeacher,
+  getTeacherDetail,
+  listTeachers,
+  verifyTeacher
+} from "../../features/teachers/api";
 import type { TeacherDetail, TeacherListItem } from "../../features/teachers/types";
 import {
   ADMIN_TEACHERS_STATUS_STORAGE_KEY,
@@ -12,10 +17,10 @@ const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 type TeacherStatusFilter = "all" | "pending" | "verified" | "disabled";
 
 const STATUS_FILTER_OPTIONS: Array<{ value: TeacherStatusFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "verified", label: "Verified" },
-  { value: "pending", label: "Pending" },
-  { value: "disabled", label: "Disabled" }
+  { value: "all", label: "Все" },
+  { value: "verified", label: "Подтверждённые" },
+  { value: "pending", label: "На проверке" },
+  { value: "disabled", label: "Отключённые" }
 ];
 
 function normalizeStatusFilter(value: string | null): TeacherStatusFilter {
@@ -23,6 +28,10 @@ function normalizeStatusFilter(value: string | null): TeacherStatusFilter {
     return value;
   }
   return "all";
+}
+
+function isValidTeacherStatusFilter(value: string, filter: TeacherStatusFilter): boolean {
+  return filter === "all" || value === filter;
 }
 
 export function TeachersPage() {
@@ -35,8 +44,12 @@ export function TeachersPage() {
   );
   const [teacherDetail, setTeacherDetail] = useState<TeacherDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState<"verify" | "disable" | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
@@ -44,6 +57,7 @@ export function TeachersPage() {
     setLoading(true);
     setError(null);
     setUnavailable(false);
+
     listTeachers(statusFilter === "all" ? {} : { status: statusFilter })
       .then((page) => {
         if (!active) {
@@ -69,7 +83,7 @@ export function TeachersPage() {
           setUnavailable(true);
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "Failed to load teachers");
+        setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить список");
       })
       .finally(() => {
         if (active) {
@@ -102,6 +116,8 @@ export function TeachersPage() {
 
     let active = true;
     setDetailError(null);
+    setDetailLoading(true);
+
     getTeacherDetail(selectedTeacherId)
       .then((detail) => {
         if (active) {
@@ -110,9 +126,12 @@ export function TeachersPage() {
       })
       .catch((requestError) => {
         if (active) {
-          setDetailError(
-            requestError instanceof Error ? requestError.message : "Failed to load detail"
-          );
+          setDetailError(requestError instanceof Error ? requestError.message : "Не удалось загрузить данные");
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setDetailLoading(false);
         }
       });
 
@@ -126,14 +145,69 @@ export function TeachersPage() {
     [selectedTeacherId, teachers]
   );
 
+  async function refreshTeachersAndSelection(preferredTeacherId: string | null) {
+    const page = await listTeachers(statusFilter === "all" ? {} : { status: statusFilter });
+    setTeachers(page.items);
+
+    const fallbackTeacherId = preferredTeacherId ?? page.items[0]?.teacher_id ?? null;
+    const nextSelectedId = page.items.some((item) => item.teacher_id === fallbackTeacherId)
+      ? fallbackTeacherId
+      : page.items[0]?.teacher_id ?? null;
+
+    setSelectedTeacherId(nextSelectedId);
+    if (!nextSelectedId) {
+      setTeacherDetail(null);
+    }
+  }
+
+  async function handleModerationAction(action: "verify" | "disable") {
+    if (!selectedTeacherId) {
+      return;
+    }
+
+    setActionPending(action);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const updatedDetail =
+        action === "verify"
+          ? await verifyTeacher(selectedTeacherId)
+          : await disableTeacher(selectedTeacherId);
+
+      setTeacherDetail(updatedDetail);
+      await refreshTeachersAndSelection(updatedDetail.teacher_id);
+
+      if (!isValidTeacherStatusFilter(updatedDetail.status, statusFilter)) {
+        setActionSuccess("Статус обновлён. Преподаватель скрыт текущим фильтром.");
+      } else {
+        setActionSuccess(
+          action === "verify"
+            ? "Преподаватель подтверждён."
+            : "Преподаватель отключён и вход заблокирован."
+        );
+      }
+    } catch (requestError) {
+      setActionError(
+        requestError instanceof Error
+          ? requestError.message
+          : action === "verify"
+            ? "Не удалось подтвердить преподавателя"
+            : "Не удалось отключить преподавателя"
+      );
+    } finally {
+      setActionPending(null);
+    }
+  }
+
   if (unavailable) {
     return (
       <article className="card section-page">
         <p className="eyebrow">Teachers</p>
-        <h1>Endpoint unavailable</h1>
+        <h1>Эндпоинты недоступны</h1>
         <p className="summary">
-          Teacher admin endpoints are not available yet. Expected endpoints:
-          <code>GET /admin/teachers</code> and <code>GET /admin/teachers/{`{id}`}</code>.
+          Для этого раздела нужны <code>GET /admin/teachers</code>, <code>GET /admin/teachers/{`{id}`}</code>,
+          <code>POST /admin/teachers/{`{id}`}/verify</code>, <code>POST /admin/teachers/{`{id}`}/disable</code>.
         </p>
       </article>
     );
@@ -142,8 +216,8 @@ export function TeachersPage() {
   if (loading) {
     return (
       <article className="card section-page">
-        <h1>Teachers</h1>
-        <p className="summary">Loading teacher list...</p>
+        <h1>Преподаватели</h1>
+        <p className="summary">Загрузка списка...</p>
       </article>
     );
   }
@@ -151,7 +225,7 @@ export function TeachersPage() {
   if (error) {
     return (
       <article className="card section-page">
-        <h1>Teachers</h1>
+        <h1>Преподаватели</h1>
         <p className="error-text">{error}</p>
       </article>
     );
@@ -161,8 +235,8 @@ export function TeachersPage() {
     <section className="teachers-grid">
       <article className="card">
         <p className="eyebrow">Teachers</p>
-        <h1>Teacher List</h1>
-        <div className="quick-filter-group" role="group" aria-label="Teacher status filters">
+        <h1>Список преподавателей</h1>
+        <div className="quick-filter-group" role="group" aria-label="Фильтры статуса преподавателей">
           {STATUS_FILTER_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -175,7 +249,7 @@ export function TeachersPage() {
           ))}
         </div>
         {teachers.length === 0 ? (
-          <p className="summary">No teachers found.</p>
+          <p className="summary">По выбранному фильтру нет преподавателей.</p>
         ) : (
           <div className="teacher-list">
             {teachers.map((teacher) => (
@@ -200,29 +274,66 @@ export function TeachersPage() {
 
       <article className="card">
         <p className="eyebrow">Teacher Detail</p>
-        {selectedTeacher ? <h1>{selectedTeacher.display_name}</h1> : <h1>No selection</h1>}
+        {selectedTeacher ? <h1>{selectedTeacher.display_name}</h1> : <h1>Не выбрано</h1>}
+
+        <div className="quick-filter-group" role="group" aria-label="Действия модерации">
+          <button
+            type="button"
+            className="quick-filter"
+            disabled={
+              !teacherDetail ||
+              actionPending !== null ||
+              teacherDetail.status === "verified"
+            }
+            onClick={() => void handleModerationAction("verify")}
+          >
+            {actionPending === "verify" ? "Подтверждение..." : "Подтвердить"}
+          </button>
+          <button
+            type="button"
+            className="quick-filter"
+            disabled={
+              !teacherDetail ||
+              actionPending !== null ||
+              teacherDetail.status === "disabled"
+            }
+            onClick={() => void handleModerationAction("disable")}
+          >
+            {actionPending === "disable" ? "Отключение..." : "Отключить"}
+          </button>
+        </div>
+
+        {detailLoading ? <p className="summary">Загрузка данных преподавателя...</p> : null}
         {detailError ? <p className="error-text">{detailError}</p> : null}
+        {actionError ? <p className="error-text">{actionError}</p> : null}
+        {actionSuccess ? <p className="success-text">{actionSuccess}</p> : null}
+
         {teacherDetail ? (
           <div className="teacher-detail">
             <p>
-              <strong>Status:</strong> {teacherDetail.status}
+              <strong>Статус:</strong> {teacherDetail.status}
             </p>
             <p>
-              <strong>Experience:</strong> {teacherDetail.experience_years} years
+              <strong>Подтверждён:</strong> {teacherDetail.verified ? "Да" : "Нет"}
+            </p>
+            <p>
+              <strong>Активен:</strong> {teacherDetail.is_active ? "Да" : "Нет"}
+            </p>
+            <p>
+              <strong>Опыт:</strong> {teacherDetail.experience_years} лет
             </p>
             <p>
               <strong>Email:</strong> {teacherDetail.email}
             </p>
             <p>
-              <strong>Tags:</strong>{" "}
-              {teacherDetail.tags.length ? teacherDetail.tags.join(", ") : "none"}
+              <strong>Теги:</strong> {teacherDetail.tags.length ? teacherDetail.tags.join(", ") : "нет"}
             </p>
             <p>
               <strong>Bio:</strong> {teacherDetail.bio}
             </p>
           </div>
         ) : (
-          <p className="summary">Select teacher to view detail.</p>
+          <p className="summary">Выберите преподавателя для просмотра карточки.</p>
         )}
       </article>
     </section>

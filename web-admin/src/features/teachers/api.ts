@@ -23,3 +23,15 @@ export async function listTeachers(
 export async function getTeacherDetail(teacherId: string): Promise<TeacherDetail> {
   return apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}`);
 }
+
+export async function verifyTeacher(teacherId: string): Promise<TeacherDetail> {
+  return apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}/verify`, {
+    method: "POST"
+  });
+}
+
+export async function disableTeacher(teacherId: string): Promise<TeacherDetail> {
+  return apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}/disable`, {
+    method: "POST"
+  });
+}

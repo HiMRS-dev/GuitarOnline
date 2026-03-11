@@ -156,6 +156,123 @@ class AdminRepository:
             return user
         return created_user
 
+    async def list_users(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        role: RoleEnum | None,
+        is_active: bool | None,
+        q: str | None,
+    ) -> tuple[list[dict[str, object]], int]:
+        """List users for admin user-management views."""
+        normalized_q = q.strip() if q else None
+
+        base_stmt: Select[tuple[UUID]] = select(User.id).join(Role, Role.id == User.role_id)
+        if role is not None:
+            base_stmt = base_stmt.where(Role.name == role)
+        if is_active is not None:
+            base_stmt = base_stmt.where(User.is_active.is_(is_active))
+        if normalized_q:
+            pattern = f"%{normalized_q}%"
+            base_stmt = base_stmt.outerjoin(
+                TeacherProfile,
+                TeacherProfile.user_id == User.id,
+            ).where(
+                or_(
+                    User.email.ilike(pattern),
+                    TeacherProfile.display_name.ilike(pattern),
+                ),
+            )
+
+        total_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int((await self.session.scalar(total_stmt)) or 0)
+
+        paged_ids_stmt = (
+            base_stmt.order_by(User.created_at.desc(), User.id.desc()).limit(limit).offset(offset)
+        )
+        user_ids = list((await self.session.scalars(paged_ids_stmt)).all())
+        if not user_ids:
+            return [], total
+
+        users_stmt = (
+            select(User)
+            .where(User.id.in_(user_ids))
+            .options(
+                selectinload(User.role),
+                selectinload(User.teacher_profile),
+            )
+        )
+        users = (await self.session.scalars(users_stmt)).all()
+        user_by_id = {user.id: user for user in users}
+
+        items: list[dict[str, object]] = []
+        for user_id in user_ids:
+            user = user_by_id.get(user_id)
+            if user is None or user.role is None:
+                continue
+            items.append(
+                {
+                    "user_id": user.id,
+                    "email": user.email,
+                    "timezone": user.timezone,
+                    "role": user.role.name,
+                    "is_active": user.is_active,
+                    "teacher_profile_display_name": (
+                        user.teacher_profile.display_name
+                        if user.teacher_profile is not None
+                        else None
+                    ),
+                    "created_at_utc": user.created_at,
+                    "updated_at_utc": user.updated_at,
+                },
+            )
+
+        return items, total
+
+    async def get_user_by_id(self, *, user_id: UUID, lock_for_update: bool = False) -> User | None:
+        """Get user by id with role/profile relationships preloaded."""
+        stmt = (
+            select(User)
+            .where(User.id == user_id)
+            .options(
+                selectinload(User.role),
+                selectinload(User.teacher_profile),
+            )
+        )
+        if lock_for_update:
+            stmt = stmt.with_for_update()
+        return await self.session.scalar(stmt)
+
+    async def set_user_active(
+        self,
+        *,
+        user: User,
+        is_active: bool,
+        admin_id: UUID,
+    ) -> User:
+        """Update user active flag and persist audit log."""
+        previous_is_active = user.is_active
+        user.is_active = is_active
+
+        action = "admin.user.activate" if is_active else "admin.user.deactivate"
+        self.session.add(
+            AuditLog(
+                actor_id=admin_id,
+                action=action,
+                entity_type="user",
+                entity_id=str(user.id),
+                payload={
+                    "email": user.email,
+                    "role": str(user.role.name) if user.role is not None else None,
+                    "from_is_active": previous_is_active,
+                    "to_is_active": user.is_active,
+                },
+            ),
+        )
+        await self.session.flush()
+        return user
+
     async def list_actions(self, limit: int, offset: int) -> tuple[list[AdminAction], int]:
         base_stmt: Select[tuple[AdminAction]] = select(AdminAction)
         count_stmt = select(func.count()).select_from(base_stmt.subquery())

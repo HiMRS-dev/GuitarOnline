@@ -1,7 +1,11 @@
 import { apiClient } from "../../shared/api/client";
 import type { PageResponse } from "../../shared/api/types";
 
-import type { AdminBooking, BookingReschedulePayload } from "./types";
+import type {
+  AdminBooking,
+  BookingCancelPayload,
+  BookingReschedulePayload
+} from "./types";
 
 type BookingListParams = {
   teacherId: string;
@@ -27,6 +31,16 @@ export async function rescheduleAdminBooking(
   payload: BookingReschedulePayload
 ): Promise<void> {
   await apiClient.request(`/admin/bookings/${bookingId}/reschedule`, {
+    method: "POST",
+    body: payload
+  });
+}
+
+export async function cancelAdminBooking(
+  bookingId: string,
+  payload: BookingCancelPayload
+): Promise<void> {
+  await apiClient.request(`/admin/bookings/${bookingId}/cancel`, {
     method: "POST",
     body: payload
   });

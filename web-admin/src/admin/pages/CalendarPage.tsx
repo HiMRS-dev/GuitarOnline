@@ -5,7 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiClientError } from "../../shared/api/client";
 import { ADMIN_TEACHER_FILTER_STORAGE_KEY } from "../../shared/storage/adminFilters";
-import { listAdminBookings, rescheduleAdminBooking } from "../../features/bookings/api";
+import {
+  cancelAdminBooking,
+  listAdminBookings,
+  rescheduleAdminBooking
+} from "../../features/bookings/api";
 import type { AdminBooking } from "../../features/bookings/types";
 import { listTeachers } from "../../features/teachers/api";
 import type { TeacherListItem } from "../../features/teachers/types";
@@ -71,11 +75,14 @@ export function CalendarPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showBlock, setShowBlock] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
 
   const [createStart, setCreateStart] = useState("");
   const [createEnd, setCreateEnd] = useState("");
   const [blockReason, setBlockReason] = useState("");
+  const [cancelBookingId, setCancelBookingId] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
   const [rescheduleBookingId, setRescheduleBookingId] = useState("");
   const [rescheduleSlotId, setRescheduleSlotId] = useState("");
   const [rescheduleReason, setRescheduleReason] = useState("");
@@ -293,6 +300,24 @@ export function CalendarPage() {
     }
   }
 
+  async function handleCancelBooking() {
+    if (!cancelBookingId || !cancelReason.trim()) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await cancelAdminBooking(cancelBookingId, {
+        reason: cancelReason.trim()
+      });
+      setShowCancel(false);
+      setCancelBookingId("");
+      setCancelReason("");
+      await Promise.all([loadSlots(), loadBookings()]);
+    } catch (requestError) {
+      setActionError(requestError instanceof Error ? requestError.message : "Failed to cancel booking");
+    }
+  }
+
   const availableSlots = useMemo(
     () => slots.filter((slot) => slot.slot_status === "open"),
     [slots]
@@ -401,7 +426,8 @@ export function CalendarPage() {
         {bookingsUnavailable ? (
           <p className="summary">
             Endpoint unavailable: expected <code>GET /admin/bookings</code> and
-            <code>POST /admin/bookings/{`{id}`}/reschedule</code>.
+            <code>POST /admin/bookings/{`{id}`}/reschedule</code>,
+            <code>POST /admin/bookings/{`{id}`}/cancel</code>.
           </p>
         ) : null}
         {bookingsLoading ? <p className="summary">Loading bookings...</p> : null}
@@ -426,18 +452,31 @@ export function CalendarPage() {
                       <td>{new Date(booking.slot_start_at_utc).toISOString()}</td>
                       <td>{booking.slot_id.slice(0, 8)}</td>
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRescheduleBookingId(booking.booking_id);
-                            setRescheduleSlotId(availableSlots[0]?.slot_id ?? "");
-                            setRescheduleReason("Rescheduled from calendar");
-                            setShowReschedule(true);
-                          }}
-                          disabled={!availableSlots.length}
-                        >
-                          Reschedule
-                        </button>
+                        <div className="calendar-actions">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRescheduleBookingId(booking.booking_id);
+                              setRescheduleSlotId(availableSlots[0]?.slot_id ?? "");
+                              setRescheduleReason("Rescheduled from calendar");
+                              setShowReschedule(true);
+                            }}
+                            disabled={!availableSlots.length || booking.status === "canceled"}
+                          >
+                            Reschedule
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCancelBookingId(booking.booking_id);
+                              setCancelReason("Canceled from calendar");
+                              setShowCancel(true);
+                            }}
+                            disabled={booking.status === "canceled"}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -567,6 +606,36 @@ export function CalendarPage() {
               </button>
               <button type="button" onClick={() => setShowBulk(false)}>
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCancel ? (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <h2>Cancel Booking</h2>
+            <label>
+              <span>Reason</span>
+              <input
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" onClick={handleCancelBooking}>
+                Cancel booking
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCancel(false);
+                  setCancelBookingId("");
+                  setCancelReason("");
+                }}
+              >
+                Close
               </button>
             </div>
           </div>

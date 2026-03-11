@@ -21,3 +21,7 @@ export type BookingReschedulePayload = {
   new_slot_id: string;
   reason: string;
 };
+
+export type BookingCancelPayload = {
+  reason: string;
+};

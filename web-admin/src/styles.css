@@ -380,6 +380,160 @@ button[disabled] {
   margin-top: 1rem;
 }
 
+.users-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.users-metrics-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.users-provision-form {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.users-provision-form label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.users-teacher-fields {
+  display: grid;
+  gap: 0.65rem;
+  border: 1px dashed #c9d7e4;
+  border-radius: 0.7rem;
+  padding: 0.7rem;
+  background: #f9fbff;
+}
+
+.users-teacher-fields textarea {
+  width: 100%;
+  border-radius: 0.6rem;
+  border: 1px solid #c9d7e4;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  resize: vertical;
+}
+
+.users-last-provision {
+  margin-top: 0.85rem;
+  border-top: 1px solid #dbe5ef;
+  padding-top: 0.75rem;
+}
+
+.users-last-provision p {
+  margin: 0.35rem 0;
+}
+
+.users-teachers-list {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.users-teacher-item {
+  border: 1px solid #d8e2ec;
+  border-radius: 0.75rem;
+  background: #f9fbff;
+  padding: 0.65rem;
+}
+
+.users-teacher-item p {
+  margin: 0.2rem 0;
+}
+
+.dashboard-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-status-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.status-card {
+  border: 1px solid #d8e2ec;
+  border-radius: 0.8rem;
+  padding: 0.75rem;
+  background: #f9fbff;
+}
+
+.status-card h3 {
+  margin: 0 0 0.4rem;
+}
+
+.status-chip {
+  display: inline-block;
+  margin: 0 0 0.45rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.status-ok .status-chip {
+  color: #1f7a39;
+  background: #e9f7ee;
+  border-color: #b8e2c5;
+}
+
+.status-error .status-chip {
+  color: #9d1f1f;
+  background: #ffeaea;
+  border-color: #f5c2c2;
+}
+
+.status-unknown .status-chip {
+  color: #44607a;
+  background: #eef4fb;
+  border-color: #d1dfed;
+}
+
+.dashboard-ops,
+.dashboard-alerts {
+  margin-top: 0;
+}
+
+.ops-grid {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ops-grid p {
+  margin: 0;
+}
+
+.alerts-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.alert-item {
+  border-left: 4px solid #8ba6c1;
+  padding-left: 0.5rem;
+}
+
+.alert-item.info {
+  border-left-color: #3f7ab6;
+}
+
+.alert-item.warning {
+  border-left-color: #b97700;
+}
+
+.alert-item.critical {
+  border-left-color: #9d1f1f;
+}
+
 @media (max-width: 900px) {
   .admin-shell {
     grid-template-columns: 1fr;
@@ -389,8 +543,17 @@ button[disabled] {
     grid-template-columns: 1fr;
   }
 
+  .users-metrics-grid,
+  .users-teachers-list {
+    grid-template-columns: 1fr;
+  }
+
   .kpi-range,
   .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-status-grid {
     grid-template-columns: 1fr;
   }
 }

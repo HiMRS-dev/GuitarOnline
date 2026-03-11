@@ -1,9 +1,9 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>GuitarOnline Р›РёС‡РЅС‹Р№ РєР°Р±РёРЅРµС‚ MVP</title>
+    <title>GuitarOnline Личный кабинет MVP</title>
     <link rel="stylesheet" href="/portal/static/styles.css" />
   </head>
   <body>
@@ -14,33 +14,33 @@
       <header class="hero">
         <div>
           <p class="eyebrow">GuitarOnline</p>
-          <h1>Р›РёС‡РЅС‹Р№ РєР°Р±РёРЅРµС‚ MVP</h1>
+          <h1>Личный кабинет MVP</h1>
           <p class="subtitle">
-            Р‘Р°Р·РѕРІС‹Р№ РёРЅС‚РµСЂС„РµР№СЃ РґР»СЏ РїСЂРѕРІРµСЂРєРё РєР»СЋС‡РµРІРѕРіРѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРѕРіРѕ РїРѕС‚РѕРєР° РЅР° backend API.
+            Базовый интерфейс для проверки ключевого пользовательского потока на backend API.
           </p>
         </div>
         <div class="hero-actions">
           <a href="/docs">Swagger Docs</a>
-          <a href="/">РЎС‚Р°СЂС‚ API</a>
-          <button id="logout-btn" class="danger" type="button" hidden>Р’С‹Р№С‚Рё</button>
+          <a href="/">Старт API</a>
+          <button id="logout-btn" class="danger" type="button" hidden>Выйти</button>
         </div>
       </header>
 
       <p id="global-status" class="global-status muted">
-        РћР¶РёРґР°РЅРёРµ Р°РІС‚РѕСЂРёР·Р°С†РёРё. Р’РѕР№РґРёС‚Рµ РёР»Рё Р·Р°СЂРµРіРёСЃС‚СЂРёСЂСѓР№С‚РµСЃСЊ.
+        Ожидание авторизации. Войдите или зарегистрируйтесь.
       </p>
 
       <div class="layout">
         <section class="panel auth-panel">
           <div id="register-section">
-          <h2>Р РµРіРёСЃС‚СЂР°С†РёСЏ</h2>
+          <h2>Регистрация</h2>
           <form id="register-form" class="form-stack">
             <label>
               Email
               <input name="email" type="email" autocomplete="email" required />
             </label>
             <label>
-              РџР°СЂРѕР»СЊ
+              Пароль
               <input
                 name="password"
                 type="password"
@@ -50,59 +50,59 @@
               />
             </label>
             <label>
-              РўР°Р№РјР·РѕРЅР°
+              Таймзона
               <input name="timezone" type="text" value="Europe/Moscow" required />
             </label>
             <label>
-              Р РѕР»СЊ
+              Роль
               <select name="role" required>
                 <option value="student">student</option>
                 <option value="teacher">teacher</option>
                 <option value="admin">admin</option>
               </select>
             </label>
-            <button type="submit">РЎРѕР·РґР°С‚СЊ Р°РєРєР°СѓРЅС‚</button>
+            <button type="submit">Создать аккаунт</button>
           </form>
           </div>
 
           <div id="login-section">
-          <h2>Р’С…РѕРґ</h2>
+          <h2>Вход</h2>
           <form id="login-form" class="form-stack">
             <label>
               Email
               <input name="email" type="email" autocomplete="username" required />
             </label>
             <label>
-              РџР°СЂРѕР»СЊ
+              Пароль
               <input name="password" type="password" autocomplete="current-password" required />
             </label>
-            <button type="submit">Р’РѕР№С‚Рё</button>
+            <button type="submit">Войти</button>
           </form>
           </div>
         </section>
 
         <section id="dashboard-panel" class="panel dashboard-panel" hidden>
           <div class="tabs">
-            <button type="button" class="tab-btn active" data-tab="profile">РџСЂРѕС„РёР»СЊ</button>
-            <button type="button" class="tab-btn" data-tab="slots">РћС‚РєСЂС‹С‚С‹Рµ СЃР»РѕС‚С‹</button>
-            <button type="button" class="tab-btn" data-tab="bookings">РњРѕРё Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ</button>
-            <button type="button" class="tab-btn" data-tab="packages">РњРѕРё РїР°РєРµС‚С‹</button>
-            <button type="button" class="tab-btn" data-tab="lessons">РњРѕРё СѓСЂРѕРєРё</button>
-            <button type="button" class="tab-btn" data-tab="admin-ops">Admin РѕРїРµСЂР°С†РёРё</button>
+            <button type="button" class="tab-btn active" data-tab="profile">Профиль</button>
+            <button type="button" class="tab-btn" data-tab="slots">Открытые слоты</button>
+            <button type="button" class="tab-btn" data-tab="bookings">Мои бронирования</button>
+            <button type="button" class="tab-btn" data-tab="packages">Мои пакеты</button>
+            <button type="button" class="tab-btn" data-tab="lessons">Мои уроки</button>
+            <button type="button" class="tab-btn" data-tab="admin-ops">Операции администратора</button>
           </div>
 
           <section id="tab-profile" class="tab-content active">
-            <h3>РџСЂРѕС„РёР»СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ</h3>
+            <h3>Профиль пользователя</h3>
             <div id="profile-content" class="cards"></div>
           </section>
 
           <section id="tab-slots" class="tab-content">
             <div class="tab-head">
-              <h3>РћС‚РєСЂС‹С‚С‹Рµ СЃР»РѕС‚С‹</h3>
-              <button id="refresh-slots-btn" type="button">РћР±РЅРѕРІРёС‚СЊ</button>
+              <h3>Открытые слоты</h3>
+              <button id="refresh-slots-btn" type="button">Обновить</button>
             </div>
             <div id="slot-package-controls" class="inline-controls" hidden>
-              <label class="inline-label" for="slot-package-select">РџР°РєРµС‚ РґР»СЏ hold</label>
+              <label class="inline-label" for="slot-package-select">Пакет для hold</label>
               <select id="slot-package-select"></select>
             </div>
             <div id="slots-content" class="cards"></div>
@@ -110,38 +110,38 @@
 
           <section id="tab-bookings" class="tab-content">
             <div class="tab-head">
-              <h3>РњРѕРё Р±СЂРѕРЅРёСЂРѕРІР°РЅРёСЏ</h3>
-              <button id="refresh-bookings-btn" type="button">РћР±РЅРѕРІРёС‚СЊ</button>
+              <h3>Мои бронирования</h3>
+              <button id="refresh-bookings-btn" type="button">Обновить</button>
             </div>
             <div id="bookings-content" class="cards"></div>
           </section>
 
           <section id="tab-packages" class="tab-content">
             <div class="tab-head">
-              <h3>РњРѕРё РїР°РєРµС‚С‹</h3>
-              <button id="refresh-packages-btn" type="button">РћР±РЅРѕРІРёС‚СЊ</button>
+              <h3>Мои пакеты</h3>
+              <button id="refresh-packages-btn" type="button">Обновить</button>
             </div>
             <div id="packages-content" class="cards"></div>
           </section>
 
           <section id="tab-lessons" class="tab-content">
             <div class="tab-head">
-              <h3>РњРѕРё СѓСЂРѕРєРё</h3>
-              <button id="refresh-lessons-btn" type="button">РћР±РЅРѕРІРёС‚СЊ</button>
+              <h3>Мои уроки</h3>
+              <button id="refresh-lessons-btn" type="button">Обновить</button>
             </div>
             <div id="lessons-content" class="cards"></div>
           </section>
 
           <section id="tab-admin-ops" class="tab-content">
             <div class="tab-head">
-              <h3>Admin РѕРїРµСЂР°С†РёРё</h3>
+              <h3>Операции администратора</h3>
             </div>
             <div class="action-row">
               <button id="run-expire-holds-btn" type="button" class="action-btn">
-                Expire HOLD bookings
+                Завершить просроченные HOLD-брони
               </button>
               <button id="run-expire-packages-btn" type="button" class="action-btn secondary">
-                Expire active packages
+                Завершить просроченные пакеты
               </button>
             </div>
             <div id="admin-actions-content" class="cards"></div>

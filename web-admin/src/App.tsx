@@ -2,11 +2,13 @@ import { FormEvent, ReactNode, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 
 import { AdminLayout } from "./admin/AdminLayout";
+import { AuditPage } from "./admin/pages/AuditPage";
 import { CalendarPage } from "./admin/pages/CalendarPage";
 import { KpiPage } from "./admin/pages/KpiPage";
 import { PackagesPage } from "./admin/pages/PackagesPage";
 import { StudentsPage } from "./admin/pages/StudentsPage";
 import { TeachersPage } from "./admin/pages/TeachersPage";
+import { UsersPage } from "./admin/pages/UsersPage";
 import { getCurrentUser, login, logout } from "./features/auth/api";
 import {
   clearAccessSession,
@@ -57,9 +59,11 @@ export function App() {
           </ProtectedAdminRoute>
         }
       >
-        <Route index element={<Navigate to="teachers" replace />} />
+        <Route index element={<Navigate to="kpi" replace />} />
+        <Route path="users" element={<UsersPage />} />
         <Route path="teachers" element={<TeachersPage />} />
         <Route path="calendar" element={<CalendarPage />} />
+        <Route path="audit" element={<AuditPage />} />
         <Route path="students" element={<StudentsPage />} />
         <Route path="packages" element={<PackagesPage />} />
         <Route path="kpi" element={<KpiPage />} />

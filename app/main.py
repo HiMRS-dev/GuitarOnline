@@ -544,7 +544,7 @@ def _landing_page_html() -> str:
         <div class="links">
           <a href="/home">Главная страница</a>
           <a href="/portal">Личный кабинет MVP</a>
-          <a href="https://127.0.0.1:8443/admin/">Бизнес-админка UI</a>
+          <a href="/admin/">Бизнес-админка UI</a>
           <a href="/docs">Документация API</a>
           <a href="/health">Проверка Health</a>
           <a href="/ready">Проверка Ready</a>

@@ -43,7 +43,11 @@ export function AuditPage() {
           setUnavailable(true);
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "Failed to load audit log");
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Не удалось загрузить журнал аудита"
+        );
       })
       .finally(() => setLoading(false));
   }, [offset]);
@@ -51,10 +55,10 @@ export function AuditPage() {
   if (unavailable) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Audit</p>
-        <h1>Endpoint unavailable</h1>
+        <p className="eyebrow">Аудит</p>
+        <h1>Эндпоинт недоступен</h1>
         <p className="summary">
-          Audit page requires <code>GET /admin/actions</code>.
+          Для страницы аудита требуется <code>GET /admin/actions</code>.
         </p>
       </article>
     );
@@ -62,8 +66,8 @@ export function AuditPage() {
 
   return (
     <article className="card section-page">
-      <p className="eyebrow">Audit</p>
-      <h1>Admin Actions Journal</h1>
+      <p className="eyebrow">Аудит</p>
+      <h1>Журнал действий администратора</h1>
 
       <div className="calendar-actions">
         <button
@@ -71,7 +75,7 @@ export function AuditPage() {
           onClick={() => setOffset((current) => Math.max(current - PAGE_LIMIT, 0))}
           disabled={offset === 0 || loading}
         >
-          Prev
+          Назад
         </button>
         <button
           type="button"
@@ -80,14 +84,14 @@ export function AuditPage() {
           }
           disabled={loading || offset + PAGE_LIMIT >= total}
         >
-          Next
+          Вперед
         </button>
       </div>
 
       <p className="summary">
-        Showing {items.length ? offset + 1 : 0}-{offset + items.length} of {total}
+        Показано {items.length ? offset + 1 : 0}-{offset + items.length} из {total}
       </p>
-      {loading ? <p className="summary">Loading actions...</p> : null}
+      {loading ? <p className="summary">Загрузка действий...</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
 
       {!loading && !error ? (
@@ -96,11 +100,11 @@ export function AuditPage() {
             <table className="bookings-table">
               <thead>
                 <tr>
-                  <th>Time (UTC)</th>
-                  <th>Action</th>
-                  <th>Target</th>
-                  <th>Payload</th>
-                  <th>Admin</th>
+                  <th>Время (UTC)</th>
+                  <th>Действие</th>
+                  <th>Цель</th>
+                  <th>Данные (JSON)</th>
+                  <th>Админ</th>
                 </tr>
               </thead>
               <tbody>
@@ -122,7 +126,7 @@ export function AuditPage() {
             </table>
           </div>
         ) : (
-          <p className="summary">No audit actions found.</p>
+          <p className="summary">Действия аудита не найдены.</p>
         )
       ) : null}
     </article>

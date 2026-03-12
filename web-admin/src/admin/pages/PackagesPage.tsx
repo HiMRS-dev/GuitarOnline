@@ -7,6 +7,16 @@ import type { AdminPackage } from "../../features/packages/types";
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 
 const PACKAGE_STATUSES = ["", "active", "expired", "depleted", "canceled"];
+const PACKAGE_STATUS_LABELS: Record<string, string> = {
+  active: "активен",
+  expired: "истёк",
+  depleted: "исчерпан",
+  canceled: "отменён"
+};
+
+function formatPackageStatus(status: string): string {
+  return PACKAGE_STATUS_LABELS[status] ?? status;
+}
 
 export function PackagesPage() {
   const [statusFilter, setStatusFilter] = useState("");
@@ -37,7 +47,7 @@ export function PackagesPage() {
         setUnavailable(true);
         return;
       }
-      setError(requestError instanceof Error ? requestError.message : "Failed to load packages");
+      setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить пакеты");
     } finally {
       setLoading(false);
     }
@@ -55,19 +65,19 @@ export function PackagesPage() {
     const parsedLessonsTotal = Number(lessonsTotal);
     const parsedExpiresAt = new Date(expiresAtUtc);
     if (!studentId.trim()) {
-      setCreateError("Student ID is required.");
+      setCreateError("ID студента обязателен.");
       return;
     }
     if (!Number.isInteger(parsedLessonsTotal) || parsedLessonsTotal <= 0) {
-      setCreateError("Lessons total must be a positive integer.");
+      setCreateError("Количество уроков должно быть положительным целым числом.");
       return;
     }
     if (!expiresAtUtc || Number.isNaN(parsedExpiresAt.getTime())) {
-      setCreateError("Expires at (UTC) is required.");
+      setCreateError("Дата истечения (UTC) обязательна.");
       return;
     }
     if (!priceAmount.trim()) {
-      setCreateError("Price amount is required.");
+      setCreateError("Стоимость обязательна.");
       return;
     }
 
@@ -80,10 +90,12 @@ export function PackagesPage() {
         price_amount: priceAmount.trim(),
         price_currency: (priceCurrency.trim() || "USD").toUpperCase()
       });
-      setCreateSuccess(`Package created: ${createdPackage.package_id}`);
+      setCreateSuccess(`Пакет создан: ${createdPackage.package_id}`);
       await loadPackages();
     } catch (requestError) {
-      setCreateError(requestError instanceof Error ? requestError.message : "Failed to create package");
+      setCreateError(
+        requestError instanceof Error ? requestError.message : "Не удалось создать пакет"
+      );
     } finally {
       setCreatePending(false);
     }
@@ -92,10 +104,10 @@ export function PackagesPage() {
   if (unavailable) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Packages</p>
-        <h1>Endpoint unavailable</h1>
+        <p className="eyebrow">Пакеты</p>
+        <h1>Эндпоинт недоступен</h1>
         <p className="summary">
-          Package management requires <code>GET /admin/packages</code> and
+          Для управления пакетами требуются <code>GET /admin/packages</code> и
           <code>POST /admin/packages</code>.
         </p>
       </article>
@@ -104,13 +116,13 @@ export function PackagesPage() {
 
   return (
     <article className="card section-page">
-      <p className="eyebrow">Packages</p>
-      <h1>Packages</h1>
+      <p className="eyebrow">Пакеты</p>
+      <h1>Пакеты</h1>
 
       <form className="users-provision-form" onSubmit={handleCreatePackage}>
-        <h2>Create package</h2>
+        <h2>Создать пакет</h2>
         <label>
-          <span>Student ID</span>
+          <span>ID студента</span>
           <input
             type="text"
             value={studentId}
@@ -119,7 +131,7 @@ export function PackagesPage() {
           />
         </label>
         <label>
-          <span>Lessons total</span>
+          <span>Количество уроков</span>
           <input
             type="number"
             min={1}
@@ -128,7 +140,7 @@ export function PackagesPage() {
           />
         </label>
         <label>
-          <span>Expires at UTC</span>
+          <span>Истекает в (UTC)</span>
           <input
             type="datetime-local"
             value={expiresAtUtc}
@@ -136,7 +148,7 @@ export function PackagesPage() {
           />
         </label>
         <label>
-          <span>Price amount</span>
+          <span>Стоимость</span>
           <input
             type="text"
             value={priceAmount}
@@ -145,7 +157,7 @@ export function PackagesPage() {
           />
         </label>
         <label>
-          <span>Currency</span>
+          <span>Валюта</span>
           <input
             type="text"
             value={priceCurrency}
@@ -155,24 +167,24 @@ export function PackagesPage() {
           />
         </label>
         <button type="submit" disabled={createPending}>
-          {createPending ? "Creating..." : "Create package"}
+          {createPending ? "Создание..." : "Создать пакет"}
         </button>
         {createError ? <p className="error-text">{createError}</p> : null}
         {createSuccess ? <p className="success-text">{createSuccess}</p> : null}
       </form>
 
       <label className="inline-filter">
-        <span>Status</span>
+        <span>Статус</span>
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
           {PACKAGE_STATUSES.map((status) => (
             <option key={status || "all"} value={status}>
-              {status || "all"}
+              {status ? formatPackageStatus(status) : "все"}
             </option>
           ))}
         </select>
       </label>
 
-      {loading ? <p className="summary">Loading packages...</p> : null}
+      {loading ? <p className="summary">Загрузка пакетов...</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
 
       {!loading && !error ? (
@@ -181,13 +193,13 @@ export function PackagesPage() {
             <table className="bookings-table">
               <thead>
                 <tr>
-                  <th>Package</th>
-                  <th>Student</th>
-                  <th>Status</th>
-                  <th>Left</th>
-                  <th>Reserved</th>
-                  <th>Price</th>
-                  <th>Expires</th>
+                  <th>Пакет</th>
+                  <th>Студент</th>
+                  <th>Статус</th>
+                  <th>Осталось</th>
+                  <th>Зарезервировано</th>
+                  <th>Цена</th>
+                  <th>Истекает</th>
                 </tr>
               </thead>
               <tbody>
@@ -195,7 +207,7 @@ export function PackagesPage() {
                   <tr key={pkg.package_id}>
                     <td>{pkg.package_id.slice(0, 8)}</td>
                     <td>{pkg.student_id.slice(0, 8)}</td>
-                    <td>{pkg.status}</td>
+                    <td>{formatPackageStatus(pkg.status)}</td>
                     <td>{pkg.lessons_left}</td>
                     <td>{pkg.lessons_reserved}</td>
                     <td>
@@ -210,7 +222,7 @@ export function PackagesPage() {
             </table>
           </div>
         ) : (
-          <p className="summary">No packages found for selected filter.</p>
+          <p className="summary">По выбранному фильтру пакеты не найдены.</p>
         )
       ) : null}
     </article>

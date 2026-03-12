@@ -94,7 +94,7 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
       onSignedIn(tokenPair);
       setPassword("");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unexpected error");
+      setError(submitError instanceof Error ? submitError.message : "Непредвиденная ошибка");
     } finally {
       setPending(false);
     }
@@ -108,9 +108,10 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
     <main className="app-shell">
       <section className="hero">
         <p className="eyebrow">GuitarOnline</p>
-        <h1>Admin Login Contract</h1>
+        <h1>Вход в админку</h1>
         <p className="summary">
-          Sign in to access protected admin routes. Missing or invalid session redirects here.
+          Авторизуйтесь для доступа к защищенным разделам админки. При отсутствии или
+          невалидности сессии произойдет редирект сюда.
         </p>
       </section>
 
@@ -118,7 +119,7 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
         {tokens === null ? (
           <form onSubmit={handleSubmit} className="auth-form">
             <label>
-              <span>Email</span>
+              <span>Почта</span>
               <input
                 type="email"
                 name="email"
@@ -130,7 +131,7 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
             </label>
 
             <label>
-              <span>Password</span>
+              <span>Пароль</span>
               <input
                 type="password"
                 name="password"
@@ -143,25 +144,25 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
             </label>
 
             <button type="submit" disabled={pending}>
-              {pending ? "Signing in..." : "Sign in"}
+              {pending ? "Входим..." : "Войти"}
             </button>
 
             {error ? <p className="error-text">{error}</p> : null}
           </form>
         ) : (
           <div className="auth-state">
-            <p className="success-text">Authenticated. Open the protected admin route.</p>
+            <p className="success-text">Вы авторизованы. Откройте защищенный раздел админки.</p>
             <p>
-              <strong>access_token:</strong> <code>{maskToken(tokens.access_token)}</code>
+              <strong>Токен доступа:</strong> <code>{maskToken(tokens.access_token)}</code>
             </p>
             <p>
-              <strong>token_type:</strong> <code>{tokens.token_type}</code>
+              <strong>Тип токена:</strong> <code>{tokens.token_type}</code>
             </p>
             <button type="button" onClick={handleLogout}>
-              Sign out
+              Выйти
             </button>
             <Link className="link-btn" to="/admin">
-              Go to admin
+              Открыть админку
             </Link>
           </div>
         )}
@@ -214,8 +215,8 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
     return (
       <main className="app-shell">
         <section className="card">
-          <h2>Checking session...</h2>
-          <p className="summary">Validating token and admin role gate.</p>
+          <h2>Проверяем сессию...</h2>
+          <p className="summary">Проверяем токен и роль администратора.</p>
         </section>
       </main>
     );

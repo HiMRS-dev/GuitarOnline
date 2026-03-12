@@ -5,11 +5,11 @@ export type AdminSection = {
 };
 
 export const ADMIN_SECTIONS: AdminSection[] = [
-  { id: "kpi", label: "Dashboard", path: "kpi" },
-  { id: "users", label: "Users", path: "users" },
-  { id: "teachers", label: "Teachers", path: "teachers" },
-  { id: "calendar", label: "Calendar", path: "calendar" },
-  { id: "audit", label: "Audit", path: "audit" },
-  { id: "students", label: "Students", path: "students" },
-  { id: "packages", label: "Packages", path: "packages" }
+  { id: "kpi", label: "Дашборд", path: "kpi" },
+  { id: "users", label: "Пользователи", path: "users" },
+  { id: "teachers", label: "Преподаватели", path: "teachers" },
+  { id: "calendar", label: "Календарь", path: "calendar" },
+  { id: "audit", label: "Аудит", path: "audit" },
+  { id: "students", label: "Студенты", path: "students" },
+  { id: "packages", label: "Пакеты", path: "packages" }
 ];

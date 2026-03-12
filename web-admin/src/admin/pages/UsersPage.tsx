@@ -42,6 +42,26 @@ type AdminUserListItem = {
   updated_at_utc: string;
 };
 
+const ROLE_LABELS: Record<AdminUserListItem["role"], string> = {
+  student: "студент",
+  teacher: "преподаватель",
+  admin: "администратор"
+};
+
+const TEACHER_STATUS_LABELS: Record<string, string> = {
+  pending: "на проверке",
+  verified: "подтверждён",
+  disabled: "отключён"
+};
+
+function formatRole(role: string): string {
+  return ROLE_LABELS[role as AdminUserListItem["role"]] ?? role;
+}
+
+function formatTeacherStatus(status: string): string {
+  return TEACHER_STATUS_LABELS[status] ?? status;
+}
+
 function formatDateTime(value: string | null): string {
   if (!value) {
     return "—";
@@ -113,7 +133,7 @@ export function UsersPage() {
   const [password, setPassword] = useState("");
   const [timezone, setTimezone] = useState("UTC");
   const [role, setRole] = useState<ProvisionRole>("teacher");
-  const [displayName, setDisplayName] = useState("New Teacher");
+  const [displayName, setDisplayName] = useState("Новый преподаватель");
   const [bio, setBio] = useState("");
   const [experienceYears, setExperienceYears] = useState("0");
   const [submitting, setSubmitting] = useState(false);
@@ -222,7 +242,7 @@ export function UsersPage() {
 
       if (role === "teacher") {
         payload.teacher_profile = {
-          display_name: displayName.trim() || "Teacher",
+          display_name: displayName.trim() || "Преподаватель",
           bio: bio.trim(),
           experience_years: Number(experienceYears) || 0
         };
@@ -237,7 +257,7 @@ export function UsersPage() {
       setEmail("");
       setPassword("");
       if (role === "teacher") {
-        setDisplayName("New Teacher");
+        setDisplayName("Новый преподаватель");
         setBio("");
         setExperienceYears("0");
       }
@@ -275,7 +295,7 @@ export function UsersPage() {
   if (loading && overview === null && users.length === 0 && teachers.length === 0) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Users</p>
+        <p className="eyebrow">Пользователи</p>
         <h1>Пользователи</h1>
         <p className="summary">Загрузка данных...</p>
       </article>
@@ -285,7 +305,7 @@ export function UsersPage() {
   return (
     <section className="users-page">
       <article className="card section-page">
-        <p className="eyebrow">Users</p>
+        <p className="eyebrow">Пользователи</p>
         <h1>Управление пользователями</h1>
         <p className="summary">
           Здесь доступны счётчики ролей и создание повышенных ролей (`teacher`, `admin`) через
@@ -333,9 +353,9 @@ export function UsersPage() {
               onChange={(event) => setUserRoleFilter(event.target.value as UserRoleFilter)}
             >
               <option value="all">Все роли</option>
-              <option value="student">student</option>
-              <option value="teacher">teacher</option>
-              <option value="admin">admin</option>
+              <option value="student">студент</option>
+              <option value="teacher">преподаватель</option>
+              <option value="admin">администратор</option>
             </select>
           </label>
 
@@ -352,7 +372,7 @@ export function UsersPage() {
           </label>
 
           <label>
-            <span>Поиск (email / display name)</span>
+            <span>Поиск (почта / имя)</span>
             <input
               type="search"
               value={userQuery}
@@ -377,11 +397,11 @@ export function UsersPage() {
             <table className="bookings-table">
               <thead>
                 <tr>
-                  <th>Email</th>
+                  <th>Почта</th>
                   <th>Роль</th>
                   <th>Статус</th>
                   <th>Таймзона</th>
-                  <th>Teacher profile</th>
+                  <th>Профиль преподавателя</th>
                   <th>Обновлён</th>
                   <th>Действие</th>
                 </tr>
@@ -390,7 +410,7 @@ export function UsersPage() {
                 {users.map((user) => (
                   <tr key={user.user_id}>
                     <td>{user.email}</td>
-                    <td>{user.role}</td>
+                    <td>{formatRole(user.role)}</td>
                     <td>{user.is_active ? "Активен" : "Отключён"}</td>
                     <td>{user.timezone}</td>
                     <td>{user.teacher_profile_display_name || "—"}</td>
@@ -417,10 +437,10 @@ export function UsersPage() {
       </article>
 
       <article className="card">
-        <h2>Создать пользователя (teacher/admin)</h2>
+        <h2>Создать пользователя (преподаватель/администратор)</h2>
         <form className="users-provision-form" onSubmit={handleProvision}>
           <label>
-            <span>Email</span>
+            <span>Почта</span>
             <input
               type="email"
               required
@@ -455,15 +475,15 @@ export function UsersPage() {
           <label>
             <span>Роль</span>
             <select value={role} onChange={(event) => setRole(event.target.value as ProvisionRole)}>
-              <option value="teacher">teacher</option>
-              <option value="admin">admin</option>
+              <option value="teacher">преподаватель</option>
+              <option value="admin">администратор</option>
             </select>
           </label>
 
           {role === "teacher" ? (
             <div className="users-teacher-fields">
               <label>
-                <span>Display name</span>
+                <span>Отображаемое имя</span>
                 <input
                   type="text"
                   required
@@ -472,7 +492,7 @@ export function UsersPage() {
                 />
               </label>
               <label>
-                <span>Bio</span>
+                <span>О себе</span>
                 <textarea value={bio} onChange={(event) => setBio(event.target.value)} rows={3} />
               </label>
               <label>
@@ -498,16 +518,16 @@ export function UsersPage() {
           <div className="users-last-provision">
             <p className="success-text">Пользователь создан успешно.</p>
             <p>
-              <strong>Email:</strong> {lastProvisioned.email}
+              <strong>Почта:</strong> {lastProvisioned.email}
             </p>
             <p>
-              <strong>Role:</strong> {lastProvisioned.role}
+              <strong>Роль:</strong> {formatRole(lastProvisioned.role)}
             </p>
             <p>
-              <strong>User ID:</strong> {lastProvisioned.user_id}
+              <strong>ID пользователя:</strong> {lastProvisioned.user_id}
             </p>
             <p>
-              <strong>Created:</strong> {formatDateTime(lastProvisioned.created_at_utc)}
+              <strong>Создан:</strong> {formatDateTime(lastProvisioned.created_at_utc)}
             </p>
           </div>
         ) : null}
@@ -528,7 +548,8 @@ export function UsersPage() {
                 </p>
                 <p>{teacher.email}</p>
                 <p>
-                  {teacher.status} {teacher.verified ? "• verified" : "• pending"}
+                  {formatTeacherStatus(teacher.status)}{" "}
+                  {teacher.verified ? "• подтверждён" : "• на проверке"}
                 </p>
                 <p>{formatDateTime(teacher.updated_at_utc)}</p>
               </article>

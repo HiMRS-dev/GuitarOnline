@@ -36,7 +36,7 @@ export function StudentsPage() {
         setError(
           requestError instanceof Error
             ? requestError.message
-            : "Failed to load student package data"
+            : "Не удалось загрузить данные по пакетам студентов"
         );
       })
       .finally(() => setLoading(false));
@@ -66,10 +66,10 @@ export function StudentsPage() {
   if (unavailable) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Students</p>
-        <h1>Endpoint unavailable</h1>
+        <p className="eyebrow">Студенты</p>
+        <h1>Эндпоинт недоступен</h1>
         <p className="summary">
-          Student package summary requires <code>GET /admin/packages</code>.
+          Для сводки по пакетам студентов требуется <code>GET /admin/packages</code>.
         </p>
       </article>
     );
@@ -78,8 +78,8 @@ export function StudentsPage() {
   if (loading) {
     return (
       <article className="card section-page">
-        <h1>Students</h1>
-        <p className="summary">Loading student summary...</p>
+        <h1>Студенты</h1>
+        <p className="summary">Загрузка сводки по студентам...</p>
       </article>
     );
   }
@@ -87,7 +87,7 @@ export function StudentsPage() {
   if (error) {
     return (
       <article className="card section-page">
-        <h1>Students</h1>
+        <h1>Студенты</h1>
         <p className="error-text">{error}</p>
       </article>
     );
@@ -95,18 +95,18 @@ export function StudentsPage() {
 
   return (
     <article className="card section-page">
-      <p className="eyebrow">Students</p>
-      <h1>Student Package Summary</h1>
+      <p className="eyebrow">Студенты</p>
+      <h1>Сводка пакетов студентов</h1>
       {rows.length ? (
         <div className="bookings-table-wrap">
           <table className="bookings-table">
             <thead>
               <tr>
-                <th>Student ID</th>
-                <th>Packages</th>
-                <th>Active</th>
-                <th>Lessons left</th>
-                <th>Reserved</th>
+                <th>ID студента</th>
+                <th>Пакетов</th>
+                <th>Активных</th>
+                <th>Уроков осталось</th>
+                <th>Зарезервировано</th>
               </tr>
             </thead>
             <tbody>
@@ -123,7 +123,7 @@ export function StudentsPage() {
           </table>
         </div>
       ) : (
-        <p className="summary">No student package data yet.</p>
+        <p className="summary">Пока нет данных по пакетам студентов.</p>
       )}
     </article>
   );

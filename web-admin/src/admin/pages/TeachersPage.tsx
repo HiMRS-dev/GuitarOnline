@@ -23,11 +23,21 @@ const STATUS_FILTER_OPTIONS: Array<{ value: TeacherStatusFilter; label: string }
   { value: "disabled", label: "Отключённые" }
 ];
 
+const TEACHER_STATUS_LABELS: Record<string, string> = {
+  pending: "на проверке",
+  verified: "подтверждён",
+  disabled: "отключён"
+};
+
 function normalizeStatusFilter(value: string | null): TeacherStatusFilter {
   if (value === "pending" || value === "verified" || value === "disabled") {
     return value;
   }
   return "all";
+}
+
+function formatTeacherStatus(status: string): string {
+  return TEACHER_STATUS_LABELS[status] ?? status;
 }
 
 function isValidTeacherStatusFilter(value: string, filter: TeacherStatusFilter): boolean {
@@ -203,7 +213,7 @@ export function TeachersPage() {
   if (unavailable) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Teachers</p>
+        <p className="eyebrow">Преподаватели</p>
         <h1>Эндпоинты недоступны</h1>
         <p className="summary">
           Для этого раздела нужны <code>GET /admin/teachers</code>, <code>GET /admin/teachers/{`{id}`}</code>,
@@ -234,7 +244,7 @@ export function TeachersPage() {
   return (
     <section className="teachers-grid">
       <article className="card">
-        <p className="eyebrow">Teachers</p>
+        <p className="eyebrow">Преподаватели</p>
         <h1>Список преподавателей</h1>
         <div className="quick-filter-group" role="group" aria-label="Фильтры статуса преподавателей">
           {STATUS_FILTER_OPTIONS.map((option) => (
@@ -264,7 +274,8 @@ export function TeachersPage() {
                 <strong>{teacher.display_name}</strong>
                 <span>{teacher.email}</span>
                 <span>
-                  {teacher.status} {teacher.verified ? "• verified" : "• pending"}
+                  {formatTeacherStatus(teacher.status)}{" "}
+                  {teacher.verified ? "• подтверждён" : "• на проверке"}
                 </span>
               </button>
             ))}
@@ -273,7 +284,7 @@ export function TeachersPage() {
       </article>
 
       <article className="card">
-        <p className="eyebrow">Teacher Detail</p>
+        <p className="eyebrow">Карточка преподавателя</p>
         {selectedTeacher ? <h1>{selectedTeacher.display_name}</h1> : <h1>Не выбрано</h1>}
 
         <div className="quick-filter-group" role="group" aria-label="Действия модерации">
@@ -311,7 +322,7 @@ export function TeachersPage() {
         {teacherDetail ? (
           <div className="teacher-detail">
             <p>
-              <strong>Статус:</strong> {teacherDetail.status}
+              <strong>Статус:</strong> {formatTeacherStatus(teacherDetail.status)}
             </p>
             <p>
               <strong>Подтверждён:</strong> {teacherDetail.verified ? "Да" : "Нет"}
@@ -323,13 +334,13 @@ export function TeachersPage() {
               <strong>Опыт:</strong> {teacherDetail.experience_years} лет
             </p>
             <p>
-              <strong>Email:</strong> {teacherDetail.email}
+              <strong>Почта:</strong> {teacherDetail.email}
             </p>
             <p>
               <strong>Теги:</strong> {teacherDetail.tags.length ? teacherDetail.tags.join(", ") : "нет"}
             </p>
             <p>
-              <strong>Bio:</strong> {teacherDetail.bio}
+              <strong>О себе:</strong> {teacherDetail.bio}
             </p>
           </div>
         ) : (

@@ -11,7 +11,7 @@ export function AdminLayout({ onSignOut }: AdminLayoutProps) {
     <main className="admin-shell">
       <aside className="admin-nav">
         <p className="eyebrow">GuitarOnline</p>
-        <h2>Admin</h2>
+        <h2>Админка</h2>
         <nav className="admin-nav-list">
           {ADMIN_SECTIONS.map((section) => (
             <NavLink
@@ -24,7 +24,7 @@ export function AdminLayout({ onSignOut }: AdminLayoutProps) {
           ))}
         </nav>
         <button type="button" onClick={onSignOut}>
-          Sign out
+          Выйти
         </button>
       </aside>
 

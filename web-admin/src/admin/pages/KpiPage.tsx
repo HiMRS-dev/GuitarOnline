@@ -94,9 +94,9 @@ function formatDateTime(value: string | null): string {
 
 function probeLabel(kind: ProbeKind): string {
   if (kind === "health") {
-    return "Health";
+    return "Проверка живости (/health)";
   }
-  return "Ready";
+  return "Проверка готовности (/ready)";
 }
 
 function probeStatusLabel(status: ProbeStatus): string {
@@ -165,7 +165,7 @@ function buildAlerts(opsOverview: AdminOperationsOverview | null): DashboardAler
   if (opsOverview.outbox_failed_dead_letter > 0) {
     alerts.push({
       severity: "critical",
-      title: "Outbox dead-letter события",
+      title: "События в DLQ (Outbox)",
       value: opsOverview.outbox_failed_dead_letter
     });
   }
@@ -179,7 +179,7 @@ function buildAlerts(opsOverview: AdminOperationsOverview | null): DashboardAler
   if (opsOverview.stale_booking_holds > 0) {
     alerts.push({
       severity: "warning",
-      title: "Зависшие HOLD-бронирования",
+      title: "Зависшие бронирования HOLD",
       value: opsOverview.stale_booking_holds
     });
   }
@@ -193,7 +193,7 @@ function buildAlerts(opsOverview: AdminOperationsOverview | null): DashboardAler
   if (opsOverview.outbox_failed_retryable > 0) {
     alerts.push({
       severity: "info",
-      title: "Outbox retryable ошибки",
+      title: "Ошибки Outbox с повтором",
       value: opsOverview.outbox_failed_retryable
     });
   }
@@ -281,7 +281,7 @@ export function KpiPage() {
   if (unavailable) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Dashboard</p>
+        <p className="eyebrow">Дашборд</p>
         <h1>Эндпоинты недоступны</h1>
         <p className="summary">
           Для дашборда нужны <code>GET /admin/kpi/overview</code> и <code>GET /admin/kpi/sales</code>.
@@ -292,7 +292,7 @@ export function KpiPage() {
 
   return (
     <article className="card section-page dashboard-page">
-      <p className="eyebrow">Dashboard</p>
+      <p className="eyebrow">Дашборд</p>
       <h1>Операционный дашборд</h1>
       <p className="summary">
         Единый экран для состояния платформы: системные пробы, KPI и ключевые сигналы.
@@ -344,7 +344,7 @@ export function KpiPage() {
           <div className="kpi-tile">
             <h3>Бронирования</h3>
             <p>Всего: {overview.bookings_total}</p>
-            <p>HOLD: {overview.bookings_hold}</p>
+            <p>На удержании (HOLD): {overview.bookings_hold}</p>
             <p>Подтверждено: {overview.bookings_confirmed}</p>
             <p>Отменено: {overview.bookings_canceled}</p>
           </div>
@@ -352,7 +352,7 @@ export function KpiPage() {
             <h3>Платежи</h3>
             <p>Успешных: {overview.payments_succeeded}</p>
             <p>Возвратов: {overview.payments_refunded}</p>
-            <p>Net: {overview.payments_net_amount}</p>
+            <p>Чистая сумма: {overview.payments_net_amount}</p>
           </div>
           <div className="kpi-tile">
             <h3>Пакеты</h3>
@@ -368,19 +368,19 @@ export function KpiPage() {
         <div className="kpi-sales card">
           <h3>Продажи за период</h3>
           <p>
-            <strong>Net amount:</strong> {sales.payments_net_amount}
+            <strong>Чистая сумма:</strong> {sales.payments_net_amount}
           </p>
           <p>
-            <strong>Succeeded amount:</strong> {sales.payments_succeeded_amount}
+            <strong>Успешные платежи:</strong> {sales.payments_succeeded_amount}
           </p>
           <p>
-            <strong>Refunded amount:</strong> {sales.payments_refunded_amount}
+            <strong>Возвраты:</strong> {sales.payments_refunded_amount}
           </p>
           <p>
             <strong>Создано пакетов:</strong> {sales.packages_created_total}
           </p>
           <p>
-            <strong>Paid conversion:</strong> {sales.packages_created_paid_conversion_rate}
+            <strong>Платная конверсия:</strong> {sales.packages_created_paid_conversion_rate}
           </p>
         </div>
       ) : null}
@@ -391,13 +391,13 @@ export function KpiPage() {
         {!opsError && opsOverview ? (
           <div className="ops-grid">
             <p>
-              <strong>Outbox pending:</strong> {opsOverview.outbox_pending}
+              <strong>В очереди Outbox:</strong> {opsOverview.outbox_pending}
             </p>
             <p>
-              <strong>Outbox retryable failed:</strong> {opsOverview.outbox_failed_retryable}
+              <strong>Ошибки Outbox с повтором:</strong> {opsOverview.outbox_failed_retryable}
             </p>
             <p>
-              <strong>Outbox dead-letter:</strong> {opsOverview.outbox_failed_dead_letter}
+              <strong>В DLQ (Outbox):</strong> {opsOverview.outbox_failed_dead_letter}
             </p>
             <p>
               <strong>Ошибки уведомлений:</strong> {opsOverview.notifications_failed}

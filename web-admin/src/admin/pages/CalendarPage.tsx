@@ -1,6 +1,7 @@
 import interactionPlugin from "@fullcalendar/interaction";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
+import ruLocale from "@fullcalendar/core/locales/ru";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiClientError } from "../../shared/api/client";
@@ -24,12 +25,25 @@ import type { AdminSlot } from "../../features/slots/types";
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 
 const SLOT_STATUS_META: Record<AdminSlot["slot_status"], { label: string; color: string }> = {
-  open: { label: "Open", color: "#17a34a" },
-  hold: { label: "Held", color: "#d5921d" },
-  booked: { label: "Confirmed", color: "#205ea2" },
-  blocked: { label: "Blocked", color: "#a13232" },
-  canceled: { label: "Canceled", color: "#7a8795" }
+  open: { label: "Открыт", color: "#17a34a" },
+  hold: { label: "На удержании", color: "#d5921d" },
+  booked: { label: "Подтвержден", color: "#205ea2" },
+  blocked: { label: "Заблокирован", color: "#a13232" },
+  canceled: { label: "Отменен", color: "#7a8795" }
 };
+
+const BOOKING_STATUS_LABELS: Record<string, string> = {
+  hold: "на удержании",
+  booked: "подтверждено",
+  confirmed: "подтверждено",
+  canceled: "отменено",
+  completed: "завершено",
+  no_show: "неявка"
+};
+
+function formatBookingStatus(status: string): string {
+  return BOOKING_STATUS_LABELS[status] ?? status;
+}
 
 type UtcRange = {
   fromUtc: string;
@@ -117,7 +131,9 @@ export function CalendarPage() {
           setTeachersUnavailable(true);
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "Failed to load teachers");
+        setError(
+          requestError instanceof Error ? requestError.message : "Не удалось загрузить преподавателей"
+        );
       });
     return () => {
       active = false;
@@ -156,7 +172,7 @@ export function CalendarPage() {
           setSlotsUnavailable(true);
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "Failed to load slots");
+        setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить слоты");
       })
       .finally(() => {
         setLoading(false);
@@ -187,7 +203,9 @@ export function CalendarPage() {
           setBookingsUnavailable(true);
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "Failed to load bookings");
+        setError(
+          requestError instanceof Error ? requestError.message : "Не удалось загрузить бронирования"
+        );
       })
       .finally(() => {
         setBookingsLoading(false);
@@ -232,7 +250,7 @@ export function CalendarPage() {
       await loadSlots();
     } catch (requestError) {
       setActionError(
-        requestError instanceof Error ? requestError.message : "Failed to create slot"
+        requestError instanceof Error ? requestError.message : "Не удалось создать слот"
       );
     }
   }
@@ -248,7 +266,9 @@ export function CalendarPage() {
       setBlockReason("");
       await loadSlots();
     } catch (requestError) {
-      setActionError(requestError instanceof Error ? requestError.message : "Failed to block slot");
+      setActionError(
+        requestError instanceof Error ? requestError.message : "Не удалось заблокировать слот"
+      );
     }
   }
 
@@ -273,7 +293,7 @@ export function CalendarPage() {
       await loadSlots();
     } catch (requestError) {
       setActionError(
-        requestError instanceof Error ? requestError.message : "Failed to bulk create"
+        requestError instanceof Error ? requestError.message : "Не удалось создать слоты массово"
       );
     }
   }
@@ -295,7 +315,7 @@ export function CalendarPage() {
       await Promise.all([loadSlots(), loadBookings()]);
     } catch (requestError) {
       setActionError(
-        requestError instanceof Error ? requestError.message : "Failed to reschedule booking"
+        requestError instanceof Error ? requestError.message : "Не удалось перенести бронирование"
       );
     }
   }
@@ -314,7 +334,9 @@ export function CalendarPage() {
       setCancelReason("");
       await Promise.all([loadSlots(), loadBookings()]);
     } catch (requestError) {
-      setActionError(requestError instanceof Error ? requestError.message : "Failed to cancel booking");
+      setActionError(
+        requestError instanceof Error ? requestError.message : "Не удалось отменить бронирование"
+      );
     }
   }
 
@@ -326,10 +348,10 @@ export function CalendarPage() {
   if (teachersUnavailable) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Calendar</p>
-        <h1>Endpoint unavailable</h1>
+        <p className="eyebrow">Календарь</p>
+        <h1>Эндпоинт недоступен</h1>
         <p className="summary">
-          Calendar requires <code>GET /admin/teachers</code>, but the endpoint is unavailable.
+          Для календаря требуется <code>GET /admin/teachers</code>, но эндпоинт недоступен.
         </p>
       </article>
     );
@@ -338,13 +360,13 @@ export function CalendarPage() {
   if (slotsUnavailable) {
     return (
       <article className="card section-page">
-        <p className="eyebrow">Calendar</p>
-        <h1>Endpoint unavailable</h1>
+        <p className="eyebrow">Календарь</p>
+        <h1>Эндпоинт недоступен</h1>
         <p className="summary">
-          Slot actions require
+          Для работы со слотами требуются
           <code>GET /admin/slots</code>,
           <code>POST /admin/slots</code>,
-          <code>POST /admin/slots/{`{slot_id}`}/block</code> and
+          <code>POST /admin/slots/{`{slot_id}`}/block</code> и
           <code>POST /admin/slots/bulk-create</code>.
         </p>
       </article>
@@ -356,14 +378,14 @@ export function CalendarPage() {
       <article className="card calendar-toolbar">
         <div className="calendar-toolbar-controls">
           <label>
-            <span>Teacher</span>
+            <span>Преподаватель</span>
             <select
               value={teacherId}
               onChange={(event) => {
                 setTeacherId(event.target.value);
               }}
             >
-              <option value="">Select teacher</option>
+              <option value="">Выберите преподавателя</option>
               {teachers.map((teacher) => (
                 <option key={teacher.teacher_id} value={teacher.teacher_id}>
                   {teacher.display_name}
@@ -374,13 +396,13 @@ export function CalendarPage() {
 
           <div className="calendar-actions">
             <button type="button" onClick={() => setShowCreate(true)} disabled={!teacherId}>
-              Create slot
+              Создать слот
             </button>
             <button type="button" onClick={() => setShowBlock(true)} disabled={!selectedSlotId}>
-              Block selected
+              Заблокировать выбранный
             </button>
             <button type="button" onClick={() => setShowBulk(true)} disabled={!teacherId}>
-              Bulk create
+              Массовое создание
             </button>
           </div>
         </div>
@@ -399,9 +421,11 @@ export function CalendarPage() {
       </article>
 
       <article className="card">
-        {loading ? <p className="summary">Loading calendar...</p> : null}
+        {loading ? <p className="summary">Загрузка календаря...</p> : null}
         <FullCalendar
           plugins={[timeGridPlugin, interactionPlugin]}
+          locales={[ruLocale]}
+          locale="ru"
           initialView="timeGridWeek"
           events={events}
           height="auto"
@@ -421,34 +445,34 @@ export function CalendarPage() {
       </article>
 
       <article className="card bookings-panel">
-        <p className="eyebrow">Bookings</p>
-        <h2>Bookings Table</h2>
+        <p className="eyebrow">Бронирования</p>
+        <h2>Таблица бронирований</h2>
         {bookingsUnavailable ? (
           <p className="summary">
-            Endpoint unavailable: expected <code>GET /admin/bookings</code> and
+            Эндпоинт недоступен: ожидаются <code>GET /admin/bookings</code> и
             <code>POST /admin/bookings/{`{id}`}/reschedule</code>,
             <code>POST /admin/bookings/{`{id}`}/cancel</code>.
           </p>
         ) : null}
-        {bookingsLoading ? <p className="summary">Loading bookings...</p> : null}
+        {bookingsLoading ? <p className="summary">Загрузка бронирований...</p> : null}
         {!bookingsUnavailable && !bookingsLoading ? (
           bookings.length ? (
             <div className="bookings-table-wrap">
               <table className="bookings-table">
                 <thead>
                   <tr>
-                    <th>Booking</th>
-                    <th>Status</th>
-                    <th>Start (UTC)</th>
-                    <th>Slot</th>
-                    <th>Action</th>
+                    <th>Бронирование</th>
+                    <th>Статус</th>
+                    <th>Начало (UTC)</th>
+                    <th>Слот</th>
+                    <th>Действие</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bookings.map((booking) => (
                     <tr key={booking.booking_id}>
                       <td>{booking.booking_id.slice(0, 8)}</td>
-                      <td>{booking.status}</td>
+                      <td>{formatBookingStatus(booking.status)}</td>
                       <td>{new Date(booking.slot_start_at_utc).toISOString()}</td>
                       <td>{booking.slot_id.slice(0, 8)}</td>
                       <td>
@@ -458,23 +482,23 @@ export function CalendarPage() {
                             onClick={() => {
                               setRescheduleBookingId(booking.booking_id);
                               setRescheduleSlotId(availableSlots[0]?.slot_id ?? "");
-                              setRescheduleReason("Rescheduled from calendar");
+                              setRescheduleReason("Перенос из календаря");
                               setShowReschedule(true);
                             }}
                             disabled={!availableSlots.length || booking.status === "canceled"}
                           >
-                            Reschedule
+                            Перенести
                           </button>
                           <button
                             type="button"
                             onClick={() => {
                               setCancelBookingId(booking.booking_id);
-                              setCancelReason("Canceled from calendar");
+                              setCancelReason("Отмена из календаря");
                               setShowCancel(true);
                             }}
                             disabled={booking.status === "canceled"}
                           >
-                            Cancel
+                            Отменить
                           </button>
                         </div>
                       </td>
@@ -484,7 +508,7 @@ export function CalendarPage() {
               </table>
             </div>
           ) : (
-            <p className="summary">No bookings in selected time range.</p>
+            <p className="summary">В выбранном диапазоне бронирований нет.</p>
           )
         ) : null}
       </article>
@@ -492,9 +516,9 @@ export function CalendarPage() {
       {showCreate ? (
         <div className="modal-backdrop">
           <div className="modal-card">
-            <h2>Create Slot</h2>
+            <h2>Создать слот</h2>
             <label>
-              <span>Start (UTC)</span>
+              <span>Начало (UTC)</span>
               <input
                 type="datetime-local"
                 value={createStart}
@@ -502,7 +526,7 @@ export function CalendarPage() {
               />
             </label>
             <label>
-              <span>End (UTC)</span>
+              <span>Конец (UTC)</span>
               <input
                 type="datetime-local"
                 value={createEnd}
@@ -511,10 +535,10 @@ export function CalendarPage() {
             </label>
             <div className="modal-actions">
               <button type="button" onClick={handleCreateSlot}>
-                Save
+                Сохранить
               </button>
               <button type="button" onClick={() => setShowCreate(false)}>
-                Cancel
+                Отмена
               </button>
             </div>
           </div>
@@ -524,17 +548,17 @@ export function CalendarPage() {
       {showBlock ? (
         <div className="modal-backdrop">
           <div className="modal-card">
-            <h2>Block Slot</h2>
+            <h2>Блокировка слота</h2>
             <label>
-              <span>Reason</span>
+              <span>Причина</span>
               <input value={blockReason} onChange={(event) => setBlockReason(event.target.value)} />
             </label>
             <div className="modal-actions">
               <button type="button" onClick={handleBlockSlot}>
-                Block
+                Заблокировать
               </button>
               <button type="button" onClick={() => setShowBlock(false)}>
-                Cancel
+                Отмена
               </button>
             </div>
           </div>
@@ -544,9 +568,9 @@ export function CalendarPage() {
       {showBulk ? (
         <div className="modal-backdrop">
           <div className="modal-card">
-            <h2>Bulk Create Slots</h2>
+            <h2>Массовое создание слотов</h2>
             <label>
-              <span>Date from</span>
+              <span>Дата с</span>
               <input
                 type="date"
                 value={bulkDateFrom}
@@ -554,7 +578,7 @@ export function CalendarPage() {
               />
             </label>
             <label>
-              <span>Date to</span>
+              <span>Дата по</span>
               <input
                 type="date"
                 value={bulkDateTo}
@@ -562,7 +586,7 @@ export function CalendarPage() {
               />
             </label>
             <label>
-              <span>Start time (UTC)</span>
+              <span>Время начала (UTC)</span>
               <input
                 type="time"
                 value={bulkStartTime}
@@ -570,7 +594,7 @@ export function CalendarPage() {
               />
             </label>
             <label>
-              <span>End time (UTC)</span>
+              <span>Время окончания (UTC)</span>
               <input
                 type="time"
                 value={bulkEndTime}
@@ -578,7 +602,7 @@ export function CalendarPage() {
               />
             </label>
             <label>
-              <span>Duration (minutes)</span>
+              <span>Длительность (минуты)</span>
               <input
                 type="number"
                 min={1}
@@ -588,7 +612,7 @@ export function CalendarPage() {
               />
             </label>
             <label>
-              <span>Weekdays (0=Mon .. 6=Sun)</span>
+              <span>Дни недели (0=Пн .. 6=Вс)</span>
               <input
                 value={bulkWeekdays.join(",")}
                 onChange={(event) => {
@@ -602,10 +626,10 @@ export function CalendarPage() {
             </label>
             <div className="modal-actions">
               <button type="button" onClick={handleBulkCreate}>
-                Run
+                Запустить
               </button>
               <button type="button" onClick={() => setShowBulk(false)}>
-                Cancel
+                Отмена
               </button>
             </div>
           </div>
@@ -615,9 +639,9 @@ export function CalendarPage() {
       {showCancel ? (
         <div className="modal-backdrop">
           <div className="modal-card">
-            <h2>Cancel Booking</h2>
+            <h2>Отмена бронирования</h2>
             <label>
-              <span>Reason</span>
+              <span>Причина</span>
               <input
                 value={cancelReason}
                 onChange={(event) => setCancelReason(event.target.value)}
@@ -625,7 +649,7 @@ export function CalendarPage() {
             </label>
             <div className="modal-actions">
               <button type="button" onClick={handleCancelBooking}>
-                Cancel booking
+                Отменить бронирование
               </button>
               <button
                 type="button"
@@ -635,7 +659,7 @@ export function CalendarPage() {
                   setCancelReason("");
                 }}
               >
-                Close
+                Закрыть
               </button>
             </div>
           </div>
@@ -645,14 +669,14 @@ export function CalendarPage() {
       {showReschedule ? (
         <div className="modal-backdrop">
           <div className="modal-card">
-            <h2>Reschedule Booking</h2>
+            <h2>Перенос бронирования</h2>
             <label>
-              <span>New slot</span>
+              <span>Новый слот</span>
               <select
                 value={rescheduleSlotId}
                 onChange={(event) => setRescheduleSlotId(event.target.value)}
               >
-                <option value="">Select slot</option>
+                <option value="">Выберите слот</option>
                 {availableSlots.map((slot) => (
                   <option key={slot.slot_id} value={slot.slot_id}>
                     {new Date(slot.start_at_utc).toISOString()} - {slot.slot_id.slice(0, 8)}
@@ -661,7 +685,7 @@ export function CalendarPage() {
               </select>
             </label>
             <label>
-              <span>Reason</span>
+              <span>Причина</span>
               <input
                 value={rescheduleReason}
                 onChange={(event) => setRescheduleReason(event.target.value)}
@@ -669,10 +693,10 @@ export function CalendarPage() {
             </label>
             <div className="modal-actions">
               <button type="button" onClick={handleRescheduleBooking}>
-                Reschedule
+                Перенести
               </button>
               <button type="button" onClick={() => setShowReschedule(false)}>
-                Cancel
+                Отмена
               </button>
             </div>
           </div>

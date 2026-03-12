@@ -213,6 +213,14 @@ jobs:
             echo "smoke_verified_marker=${verified_marker}"
           } > .tmp/deploy-evidence/summary.txt
 
+          run_smoke_normalized="$(printf '%s' "${RUN_SMOKE:-true}" | tr '[:upper:]' '[:lower:]')"
+          if [ "${run_smoke_normalized}" = "true" ]; then
+            if [ "${role_marker}" != "present" ] || [ "${smoke_marker}" != "present" ] || [ "${verified_marker}" != "present" ]; then
+              echo "::error::Deploy smoke markers are missing in deploy_remote.log. role_gate_marker=${role_marker}, smoke_passed_marker=${smoke_marker}, smoke_verified_marker=${verified_marker}"
+              exit 1
+            fi
+          fi
+
       - name: Upload deploy evidence artifact
         if: ${{ always() && steps.auto_deploy_guard.outputs.enabled == 'true' }}
         uses: actions/upload-artifact@v4

@@ -141,23 +141,27 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
 
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole("heading", { name: "Admin Login Contract" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Admin Login Contract|Вход в админку/ })
+  ).toBeVisible();
 
-  await page.getByLabel("Email").fill("admin-smoke@guitaronline.dev");
-  await page.getByLabel("Password").fill("StrongPass123!");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByLabel(/Email|Почта/).fill("admin-smoke@guitaronline.dev");
+  await page.getByLabel(/Password|Пароль/).fill("StrongPass123!");
+  await page.getByRole("button", { name: /Sign in|Войти/ }).click();
 
   await expect(
-    page.getByText("Authenticated. Open the protected admin route.")
+    page.getByText(
+      /Authenticated\. Open the protected admin route\.|Вы авторизованы\. Откройте защищенный раздел админки\./
+    )
   ).toBeVisible();
-  await page.getByRole("link", { name: "Go to admin" }).click();
+  await page.getByRole("link", { name: /Go to admin|Открыть админку/ }).click();
 
   await expect(page).toHaveURL(/\/admin\/kpi$/);
-  await page.getByRole("link", { name: "Teachers" }).click();
+  await page.getByRole("link", { name: /Teachers|Преподаватели/ }).click();
   await expect(page).toHaveURL(/\/admin\/teachers$/);
   await expect(page.getByRole("button", { name: /Smoke Teacher/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Smoke Teacher" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("button", { name: /Sign out|Выйти/ }).click();
   await expect(page).toHaveURL(/\/login$/);
 });

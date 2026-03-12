@@ -89,6 +89,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
 - Run post-deploy smoke script:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
+  - when elevated self-registration is disabled (`AUTH_REGISTER_ALLOWED_ROLES=student`),
+    set `DEPLOY_SMOKE_ADMIN_EMAIL` and `DEPLOY_SMOKE_ADMIN_PASSWORD` in runtime `.env`.
 - Run load sanity scenario (~1000 weekly slots + admin list envelope checks):
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - optional custom target (must stay within bulk-create cap):
@@ -133,6 +135,8 @@ Production-ready modular monolith backend for an online guitar school.
 | `SYNTHETIC_RETENTION_DRY_RUN` | No | ops scripts | Default dry-run mode for synthetic retention script (`true`/`false`, default: `false`). |
 | `ADMIN_UI_API_BASE_URL` | No | admin-ui profile | Build-time API base for `web-admin` Docker profile. |
 | `ADMIN_UI_BASE_PATH` | No | admin-ui profile | Build-time base path for `web-admin` (`/admin/` by default). |
+| `DEPLOY_SMOKE_ADMIN_EMAIL` | Conditionally yes | deploy smoke | Existing admin email used by `scripts/deploy_smoke_check.py` when elevated self-registration is disabled. |
+| `DEPLOY_SMOKE_ADMIN_PASSWORD` | Conditionally yes | deploy smoke | Existing admin password used by `scripts/deploy_smoke_check.py` when elevated self-registration is disabled. |
 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Yes | monitoring | Required by production compose; unsafe `admin/admin` fallback is removed. |
 
 ### CI/CD secrets

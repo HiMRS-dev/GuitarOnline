@@ -257,7 +257,7 @@ rollback() {
     warn "Deployment failed. Rolling back to ${PREV_SHA}"
     git checkout "${PREV_SHA}" || true
     run_compose up --build -d || true
-    docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head || true
+    docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head </dev/null || true
   else
     warn "Deployment failed during initial bootstrap and there is no previous SHA to roll back to."
   fi
@@ -274,10 +274,10 @@ if [ "${RUN_BACKUP:-true}" = "true" ]; then
   log "Creating pre-deploy backup (if db container is running)"
   mkdir -p backups
   ts="$(date +%Y%m%d-%H%M%S)"
-  if docker compose -f docker-compose.prod.yml exec -T db true > /dev/null 2>&1; then
+  if docker compose -f docker-compose.prod.yml exec -T db true </dev/null > /dev/null 2>&1; then
     docker compose -f docker-compose.prod.yml exec -T db sh -c \
       'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
-      > "backups/predeploy-${ts}.sql"
+      </dev/null > "backups/predeploy-${ts}.sql"
   else
     warn "Skipping pre-deploy backup: db container is not running yet."
   fi
@@ -294,14 +294,14 @@ run_compose up --build -d
 
 log "=== Stage 5/6: Database migrations ==="
 log "Running Alembic migrations"
-docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head
+docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head </dev/null
 
 if [ "${RUN_SMOKE:-true}" = "true" ]; then
   log "=== Stage 6/6: Smoke checks ==="
   log "Running smoke checks"
   if [ -f scripts/deploy_smoke_check.py ]; then
     smoke_log="$(mktemp)"
-    if ! docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py | tee "${smoke_log}"; then
+    if ! docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py </dev/null | tee "${smoke_log}"; then
       rm -f "${smoke_log}"
       die "Smoke script failed before completion."
     fi

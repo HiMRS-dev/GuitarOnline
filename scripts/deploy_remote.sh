@@ -298,6 +298,19 @@ docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head </dev
 
 if [ "${RUN_SMOKE:-true}" = "true" ]; then
   log "=== Stage 6/6: Smoke checks ==="
+  log "Waiting for app HTTP readiness before smoke checks"
+  app_ready="false"
+  for _ in $(seq 1 30); do
+    if docker compose -f docker-compose.prod.yml exec -T app python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=5)" </dev/null > /dev/null 2>&1; then
+      app_ready="true"
+      break
+    fi
+    sleep 2
+  done
+  if [ "${app_ready}" != "true" ]; then
+    die "App HTTP readiness check failed before smoke checks."
+  fi
+
   log "Running smoke checks"
   if [ -f scripts/deploy_smoke_check.py ]; then
     smoke_log="$(mktemp)"

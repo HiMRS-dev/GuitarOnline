@@ -36,9 +36,24 @@ from app.shared.utils import utc_now
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+_APP_ROOT = Path(__file__).resolve().parent.parent
 _FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 _FRONTEND_STATIC_DIR = _FRONTEND_DIR / "static"
-_PUBLIC_HOME_PAGE = Path(__file__).resolve().parent.parent / "index.html"
+_PUBLIC_HOME_PAGE = _APP_ROOT / "index.html"
+_ADMIN_UI_DIST_DIR = next(
+    (
+        candidate
+        for candidate in (
+            _APP_ROOT / "admin-ui-dist",
+            _APP_ROOT / "web-admin" / "dist",
+        )
+        if candidate.exists()
+    ),
+    None,
+)
+_ADMIN_UI_ASSETS_DIR = (
+    _ADMIN_UI_DIST_DIR / "assets" if _ADMIN_UI_DIST_DIR is not None else None
+)
 _OPENAPI_TAGS = [
     {"name": "identity", "description": "Authentication and current-user identity endpoints."},
     {"name": "teachers", "description": "Teacher profile management endpoints."},
@@ -618,6 +633,12 @@ async def apply_security_headers(request: Request, call_next):
 
 
 app.mount("/portal/static", StaticFiles(directory=_FRONTEND_STATIC_DIR), name="portal-static")
+if _ADMIN_UI_ASSETS_DIR is not None and _ADMIN_UI_ASSETS_DIR.exists():
+    app.mount("/admin/assets", StaticFiles(directory=_ADMIN_UI_ASSETS_DIR), name="admin-ui-assets")
+elif _ADMIN_UI_DIST_DIR is not None:
+    logger.warning("Admin UI assets directory is missing in %s", _ADMIN_UI_DIST_DIR)
+else:
+    logger.warning("Admin UI dist directory is missing; /admin/ will return 404.")
 
 register_exception_handlers(app)
 
@@ -767,6 +788,19 @@ async def landing_page() -> HTMLResponse:
     return HTMLResponse(content=_landing_page_html())
 
 
+@app.get("/admin", include_in_schema=False)
+@app.get("/admin/", include_in_schema=False)
+@app.get("/admin/{path:path}", include_in_schema=False)
+async def admin_ui_page(path: str = "") -> FileResponse:
+    """Serve business admin SPA shell."""
+    if _ADMIN_UI_DIST_DIR is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Admin UI is not available",
+        )
+    return FileResponse(_ADMIN_UI_DIST_DIR / "index.html")
+
+
 @app.get("/portal", include_in_schema=False)
 async def portal_page() -> FileResponse:
     """Serve frontend MVP page."""
@@ -780,13 +814,20 @@ async def portal_page() -> FileResponse:
 @app.get("/portal/login", include_in_schema=False)
 async def portal_login_page() -> RedirectResponse:
     """Redirect to portal with login auth mode."""
-    return RedirectResponse(url="/portal?auth=login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    return RedirectResponse(
+        url="/portal?auth=login",
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
 
 
 @app.get("/portal/register", include_in_schema=False)
 async def portal_register_page() -> RedirectResponse:
     """Redirect to portal with register auth mode."""
-    return RedirectResponse(url="/portal?auth=register", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+    return RedirectResponse(
+        url="/portal?auth=register",
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
+
 
 @app.get("/home", include_in_schema=False)
 async def public_home_page() -> FileResponse:

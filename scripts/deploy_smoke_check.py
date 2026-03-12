@@ -85,6 +85,7 @@ def main() -> None:
         "/docs",
         "/metrics",
         "/portal",
+        "/admin/",
         "/portal/static/app.js",
         "/portal/static/styles.css",
     ]:

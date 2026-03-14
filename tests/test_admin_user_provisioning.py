@@ -54,6 +54,43 @@ class FakeAdminRepository:
         self.set_role_calls: list[dict[str, object]] = []
         self.set_active_calls: list[dict[str, object]] = []
 
+    @staticmethod
+    def _resolve_teacher_profile_status(
+        user: FakeUser,
+        profile: FakeTeacherProfile,
+    ) -> TeacherStatusEnum:
+        if user.role.name != RoleEnum.TEACHER or not user.is_active:
+            return TeacherStatusEnum.DISABLED
+        return TeacherStatusEnum.ACTIVE
+
+    def _sync_teacher_profile_state(
+        self,
+        *,
+        user: FakeUser,
+        create_if_missing: bool,
+    ) -> tuple[FakeTeacherProfile | None, bool]:
+        profile = user.teacher_profile
+        teacher_profile_created = False
+
+        if user.role.name == RoleEnum.TEACHER:
+            if profile is None:
+                if not create_if_missing:
+                    return None, False
+                profile = FakeTeacherProfile(
+                    id=uuid4(),
+                    display_name=user.email.split("@", 1)[0],
+                    status=TeacherStatusEnum.ACTIVE,
+                )
+                user.teacher_profile = profile
+                teacher_profile_created = True
+
+            profile.status = self._resolve_teacher_profile_status(user, profile)
+            return profile, teacher_profile_created
+
+        if profile is not None:
+            profile.status = TeacherStatusEnum.DISABLED
+        return profile, teacher_profile_created
+
     async def get_role_by_name(self, role_name: RoleEnum) -> FakeRole | None:
         return self.roles.get(role_name)
 
@@ -66,22 +103,10 @@ class FakeAdminRepository:
     ) -> FakeUser:
         previous_role = user.role.name
         user.role = role
-
-        profile = user.teacher_profile
-        teacher_profile_created = False
-        if role.name == RoleEnum.TEACHER:
-            if profile is None:
-                profile = FakeTeacherProfile(
-                    id=uuid4(),
-                    display_name=user.email.split("@", 1)[0],
-                    status=TeacherStatusEnum.ACTIVE,
-                )
-                user.teacher_profile = profile
-                teacher_profile_created = True
-            else:
-                profile.status = TeacherStatusEnum.ACTIVE
-        elif profile is not None:
-            profile.status = TeacherStatusEnum.DISABLED
+        _, teacher_profile_created = self._sync_teacher_profile_state(
+            user=user,
+            create_if_missing=True,
+        )
 
         self.set_role_calls.append(
             {
@@ -157,6 +182,7 @@ class FakeAdminRepository:
 
     async def set_user_active(self, *, user: FakeUser, is_active: bool, admin_id: UUID) -> FakeUser:
         user.is_active = is_active
+        self._sync_teacher_profile_state(user=user, create_if_missing=False)
         self.set_active_calls.append(
             {
                 "user_id": user.id,
@@ -228,6 +254,28 @@ async def test_admin_can_promote_student_to_teacher_with_active_profile() -> Non
             "teacher_profile_created": True,
         },
     ]
+
+
+@pytest.mark.asyncio
+async def test_admin_promote_inactive_student_to_teacher_keeps_teacher_profile_disabled() -> None:
+    target_user = make_user(
+        email="inactive-student@guitaronline.dev",
+        role=RoleEnum.STUDENT,
+        is_active=False,
+    )
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    result = await service.update_user_role(
+        admin,
+        user_id=target_user.id,
+        payload=AdminUserRoleUpdateRequest(role=RoleEnum.TEACHER),
+    )
+
+    assert result.role == RoleEnum.TEACHER
+    assert target_user.teacher_profile is not None
+    assert target_user.teacher_profile.status == TeacherStatusEnum.DISABLED
 
 
 @pytest.mark.asyncio
@@ -345,6 +393,30 @@ async def test_update_user_role_with_same_role_is_noop() -> None:
 
 
 @pytest.mark.asyncio
+async def test_same_teacher_role_reapplies_sync_for_inactive_teacher() -> None:
+    target_user = make_user(
+        email="inactive-teacher@guitaronline.dev",
+        role=RoleEnum.TEACHER,
+        is_active=False,
+        teacher_status=TeacherStatusEnum.ACTIVE,
+    )
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    result = await service.update_user_role(
+        admin,
+        user_id=target_user.id,
+        payload=AdminUserRoleUpdateRequest(role=RoleEnum.TEACHER),
+    )
+
+    assert result.role == RoleEnum.TEACHER
+    assert target_user.teacher_profile is not None
+    assert target_user.teacher_profile.status == TeacherStatusEnum.DISABLED
+    assert repository.set_role_calls[0]["to_role"] == RoleEnum.TEACHER
+
+
+@pytest.mark.asyncio
 async def test_admin_can_list_users_with_filters() -> None:
     teacher = make_user(
         email="teacher-list@guitaronline.dev",
@@ -391,6 +463,28 @@ async def test_admin_can_activate_and_deactivate_user() -> None:
         {"user_id": target_user.id, "is_active": True, "admin_id": admin.id},
         {"user_id": target_user.id, "is_active": False, "admin_id": admin.id},
     ]
+
+
+@pytest.mark.asyncio
+async def test_admin_activate_and_deactivate_teacher_syncs_teacher_profile_status() -> None:
+    target_user = make_user(
+        email="teacher-toggle@guitaronline.dev",
+        role=RoleEnum.TEACHER,
+        is_active=False,
+        teacher_status=TeacherStatusEnum.DISABLED,
+    )
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    activated = await service.activate_user(admin, user_id=target_user.id)
+    assert activated.is_active is True
+    assert target_user.teacher_profile is not None
+    assert target_user.teacher_profile.status == TeacherStatusEnum.ACTIVE
+
+    deactivated = await service.deactivate_user(admin, user_id=target_user.id)
+    assert deactivated.is_active is False
+    assert target_user.teacher_profile.status == TeacherStatusEnum.DISABLED
 
 
 @pytest.mark.asyncio

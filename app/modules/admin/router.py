@@ -87,7 +87,7 @@ async def list_admin_teachers(
     service: AdminService = Depends(get_admin_service),
     current_user=Depends(require_roles(RoleEnum.ADMIN)),
 ) -> Page[AdminTeacherListItemRead]:
-    """List teachers for admin filters by status/verification/query/tag."""
+    """List teachers for admin filters by status/query/tag."""
     items, total = await service.list_teachers(
         current_user,
         limit=pagination.limit,

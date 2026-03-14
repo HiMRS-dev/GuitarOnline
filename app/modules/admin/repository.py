@@ -85,6 +85,51 @@ class AdminRepository:
         local_part = email.split("@", 1)[0].strip()
         return (local_part or "teacher")[:128]
 
+    @staticmethod
+    def _resolve_teacher_profile_status(
+        *,
+        user: User,
+        profile: TeacherProfile,
+    ) -> TeacherStatusEnum:
+        role_name = user.role.name if user.role is not None else None
+        if role_name != RoleEnum.TEACHER or not user.is_active:
+            return TeacherStatusEnum.DISABLED
+        return TeacherStatusEnum.ACTIVE
+
+    async def _sync_teacher_profile_state(
+        self,
+        *,
+        user: User,
+        create_if_missing: bool,
+    ) -> tuple[TeacherProfile | None, TeacherStatusEnum | None, bool]:
+        profile = user.teacher_profile
+        previous_status = profile.status if profile is not None else None
+        profile_created = False
+
+        if user.role is not None and user.role.name == RoleEnum.TEACHER:
+            if profile is None:
+                if not create_if_missing:
+                    return None, previous_status, False
+                profile = TeacherProfile(
+                    user_id=user.id,
+                    display_name=self._default_teacher_display_name(user.email),
+                    bio="",
+                    experience_years=0,
+                    status=TeacherStatusEnum.ACTIVE,
+                )
+                self.session.add(profile)
+                await self.session.flush()
+                user.teacher_profile = profile
+                profile_created = True
+
+            profile.status = self._resolve_teacher_profile_status(user=user, profile=profile)
+            return profile, previous_status, profile_created
+
+        if profile is not None:
+            profile.status = TeacherStatusEnum.DISABLED
+
+        return profile, previous_status, profile_created
+
     async def set_user_role(
         self,
         *,
@@ -94,30 +139,16 @@ class AdminRepository:
     ) -> User:
         """Update user role and synchronize teacher profile state with audit trail."""
         previous_role_name = user.role.name if user.role is not None else None
-        previous_profile = user.teacher_profile
-        previous_profile_status = previous_profile.status if previous_profile is not None else None
-        teacher_profile_created = False
 
         user.role_id = role.id
         user.role = role
 
-        if role.name == RoleEnum.TEACHER:
-            if previous_profile is None:
-                previous_profile = TeacherProfile(
-                    user_id=user.id,
-                    display_name=self._default_teacher_display_name(user.email),
-                    bio="",
-                    experience_years=0,
-                    status=TeacherStatusEnum.ACTIVE,
-                )
-                self.session.add(previous_profile)
-                await self.session.flush()
-                user.teacher_profile = previous_profile
-                teacher_profile_created = True
-            else:
-                previous_profile.status = TeacherStatusEnum.ACTIVE
-        elif previous_profile is not None:
-            previous_profile.status = TeacherStatusEnum.DISABLED
+        previous_profile, previous_profile_status, teacher_profile_created = (
+            await self._sync_teacher_profile_state(
+                user=user,
+                create_if_missing=True,
+            )
+        )
 
         self.session.add(
             AuditLog(
@@ -258,7 +289,14 @@ class AdminRepository:
     ) -> User:
         """Update user active flag and persist audit log."""
         previous_is_active = user.is_active
+        previous_profile_status = (
+            user.teacher_profile.status if user.teacher_profile is not None else None
+        )
         user.is_active = is_active
+        profile, _, _ = await self._sync_teacher_profile_state(
+            user=user,
+            create_if_missing=False,
+        )
 
         action = "admin.user.activate" if is_active else "admin.user.deactivate"
         self.session.add(
@@ -272,6 +310,15 @@ class AdminRepository:
                     "role": str(user.role.name) if user.role is not None else None,
                     "from_is_active": previous_is_active,
                     "to_is_active": user.is_active,
+                    "teacher_profile_id": str(profile.id) if profile is not None else None,
+                    "teacher_profile_from_status": (
+                        str(previous_profile_status)
+                        if previous_profile_status is not None
+                        else None
+                    ),
+                    "teacher_profile_to_status": (
+                        str(profile.status) if profile is not None else None
+                    ),
                 },
             ),
         )
@@ -311,9 +358,17 @@ class AdminRepository:
 
         if status is not None:
             if status == TeacherStatusEnum.ACTIVE:
-                base_stmt = base_stmt.where(TeacherProfile.status != TeacherStatusEnum.DISABLED)
+                base_stmt = base_stmt.where(
+                    User.is_active.is_(True),
+                    TeacherProfile.status != TeacherStatusEnum.DISABLED,
+                )
             else:
-                base_stmt = base_stmt.where(TeacherProfile.status == status)
+                base_stmt = base_stmt.where(
+                    or_(
+                        User.is_active.is_(False),
+                        TeacherProfile.status == TeacherStatusEnum.DISABLED,
+                    ),
+                )
         if normalized_q:
             pattern = f"%{normalized_q}%"
             base_stmt = base_stmt.where(
@@ -453,11 +508,7 @@ class AdminRepository:
             return None
 
         tags = sorted({tag_row.tag for tag_row in profile.tags}, key=str.lower)
-        serialized_status = (
-            TeacherStatusEnum.DISABLED
-            if profile.status == TeacherStatusEnum.DISABLED
-            else TeacherStatusEnum.ACTIVE
-        )
+        serialized_status = self._resolve_teacher_profile_status(user=user, profile=profile)
         data: dict[str, object] = {
             "teacher_id": profile.user_id,
             "profile_id": profile.id,

@@ -234,6 +234,7 @@ class AdminService:
             target_user.role.name == payload.role
             and payload.role == RoleEnum.TEACHER
             and target_user.teacher_profile is not None
+            and target_user.is_active
             and target_user.teacher_profile.status == TeacherStatusEnum.ACTIVE
         ):
             return self._serialize_admin_user(target_user)

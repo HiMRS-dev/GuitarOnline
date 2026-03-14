@@ -9,6 +9,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+web-admin/node_modules/
+web-admin/dist/
 
 # Git
 .git/

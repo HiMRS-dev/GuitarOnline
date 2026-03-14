@@ -1202,8 +1202,76 @@
 | --- | --- | --- | --- | --- |
 | `BA-01` | P0 | Dashboard: KPI, `health/ready`, key operational alerts. | Admin sees platform status and risks in one screen. | Done |
 | `BA-02` | P0 | Users: list, role visibility, activate/deactivate operations. | Admin can manage user lifecycle and access quickly. | Done |
-| `BA-03` | P0 | Teachers: moderation and verification workflow. | Admin can process teacher onboarding end-to-end. | Done |
+| `BA-03` | P0 | Teachers: moderation and lifecycle workflow. | Admin can process teacher onboarding and disable flows end-to-end. | Done |
 | `BA-04` | P1 | Bookings and slots calendar: cancel/reschedule/block flows. | Admin can handle scheduling incidents in UI. | Done |
 | `BA-05` | P1 | Packages and payments: finance overview + manual operations. | Admin can monitor and correct billing states. | Done |
 | `BA-06` | P1 | Audit: operational journal and action trace. | Admin can investigate actions/events without DB access. | Done |
+
+## 18) Live/Test Separation Policy And Backlog (Approved 2026-03-14)
+- Current live operational state after confirmed cleanup (`2026-03-14`):
+  - `users=0`,
+  - `teacher_profiles=0`,
+  - `refresh_tokens=0`,
+  - `notifications=0`,
+  - `lesson_packages=0`,
+  - `bookings=0`,
+  - `lessons=0`,
+  - `availability_slots=0`,
+  - `admin_actions=0`,
+  - `payments=0`,
+  - `roles=3`,
+  - `audit_logs=4038` with `actor_id` nulled by FK `ON DELETE SET NULL`.
+- Immediate operational consequence:
+  - recreate exactly one emergency `bootstrap-admin` in `live` before any normal admin/UI operations.
+- Approved target policy:
+  - `live` stores only real users and real business data plus one emergency `bootstrap-admin`.
+  - automated synthetic accounts are forbidden in `live`.
+  - `live smoke` is limited to safe operational checks:
+    - reverse proxy reachability,
+    - `health` / `ready`,
+    - backend API reachability,
+    - DB / Redis / worker availability,
+    - metrics, logs, and alerts.
+  - `live smoke` must not create or mutate user/business entities:
+    - no synthetic registration,
+    - no role changes,
+    - no slot creation,
+    - no booking/package/lesson/payment flow.
+  - all user-path smoke, RBAC, integration, booking, lesson, billing, notification, and perf checks move to isolated `test` infrastructure.
+  - `booking smoke = test DB only`.
+  - `test DB` uses a reusable smoke pool instead of creating unbounded new users:
+    - `smoke-admin-1`,
+    - `smoke-teacher-1`,
+    - `smoke-student-1`.
+  - smoke-pool accounts are reset to a known baseline before each run; they are not recreated per run.
+
+### 18.1) Implementation Backlog
+| ID | Priority | Task | Scope | Done When |
+| --- | --- | --- | --- | --- |
+| `ENV-01` | P0 | Restore minimal live access baseline. | Create one `bootstrap-admin` in `live`; confirm no other users exist. | `live` contains exactly one emergency admin and zero synthetic users. |
+| `ENV-02` | P0 | Split live/test runtime contours. | Add isolated `test` stack with separate DB/Redis and same app/workers/proxy images or equivalent runtime profile. | `live` and `test` run independently and data cannot overlap. |
+| `ENV-03` | P0 | Add hard environment guardrails. | Introduce explicit runtime/env markers (`APP_ENV` and/or dedicated stack role) and make synthetic scripts fail closed outside `test`. | `smoke`/`perf`/`synthetic` scripts abort before side effects when pointed at `live`. |
+| `ENV-04` | P0 | Implement reusable smoke pool in `test DB`. | Seed/reset `smoke-admin-1`, `smoke-teacher-1`, `smoke-student-1`; clear their tokens and generated business artifacts before each run. | Two consecutive runs start from the same baseline without creating extra users. |
+| `ENV-05` | P0 | Move auth/RBAC smoke to `test DB`. | Registration, login, refresh, `/identity/users/me`, role reassignment, activate/deactivate, teacher-profile lifecycle. | User/auth smoke runs only against `test` and never touches `live`. |
+| `ENV-06` | P0 | Move booking/lesson/billing smoke to `test DB`. | Slot creation, booking flow, lesson flow, package/payment rules, notifications/outbox coverage. | Critical business-path smoke succeeds in `test`; `live` creates no synthetic business records. |
+| `ENV-07` | P1 | Reduce `live` smoke to ops-only probes. | Keep deploy/runtime checks focused on service health, readiness, reachability, metrics, logs, and alerts. | `live` smoke can validate production contour health without mutating business data. |
+| `ENV-08` | P1 | Add cleanup/reset automation for `test DB`. | Post-run reset of smoke pool and nightly cleanup of temporary synthetic artifacts/records. | Synthetic dataset size in `test` stays bounded and deterministic. |
+| `ENV-09` | P1 | Update ops/docs/runbooks to new policy. | Align `README`, release checklist, deploy smoke docs, synthetic retention docs, and checkpoint references. | Documentation consistently states `live != synthetic user flows`, `booking smoke = test DB only`. |
+
+### 18.2) Execution Order
+1. `ENV-01`: restore one emergency `bootstrap-admin` in `live`.
+2. `ENV-02`: stand up isolated `test` stack and wire separate env/config.
+3. `ENV-03`: add fail-closed environment guards to synthetic/perf/smoke scripts.
+4. `ENV-04`: seed/reset reusable smoke-pool accounts in `test DB`.
+5. `ENV-05`: move auth/RBAC smoke to `test`.
+6. `ENV-06`: move booking/lesson/billing smoke to `test`.
+7. `ENV-07`: simplify `live` smoke to safe ops-only probes.
+8. `ENV-08`: automate reset/cleanup for test synthetic data.
+9. `ENV-09`: finalize docs/runbooks/checkpoint alignment.
+
+### 18.3) Explicit Non-Goals
+- Do not keep automatic smoke users in `live`.
+- Do not run booking smoke in `live`.
+- Do not allow perf/synthetic scripts to create ad-hoc users in production-like business data.
+- Do not rely on periodic manual cleanup as the main hygiene mechanism; isolation and reset must be the default.
 

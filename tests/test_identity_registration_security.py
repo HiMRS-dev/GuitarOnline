@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 
 import app.modules.identity.service as identity_service_module
 from app.core.enums import RoleEnum
@@ -65,47 +66,53 @@ class FakeIdentityRepository:
 
 
 @pytest.mark.asyncio
-async def test_register_rejects_role_outside_self_register_allowlist(
+async def test_register_rejects_when_student_self_registration_is_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         identity_service_module,
         "get_settings",
-        lambda: SimpleNamespace(auth_register_allowed_roles=(RoleEnum.STUDENT,)),
+        lambda: SimpleNamespace(auth_self_registration_enabled=False),
     )
     service = IdentityService(FakeIdentityRepository())  # type: ignore[arg-type]
 
     with pytest.raises(UnauthorizedException, match="Self-registration is disabled"):
         await service.register(
             UserCreate(
-                email="admin-register@guitaronline.dev",
+                email="student-register-disabled@guitaronline.dev",
                 password="StrongPass123!",
                 timezone="UTC",
-                role=RoleEnum.ADMIN,
             ),
         )
 
 
 @pytest.mark.asyncio
-async def test_register_allows_role_explicitly_enabled_in_allowlist(
+async def test_register_always_creates_student_when_self_registration_is_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         identity_service_module,
         "get_settings",
-        lambda: SimpleNamespace(
-            auth_register_allowed_roles=(RoleEnum.STUDENT, RoleEnum.ADMIN),
-        ),
+        lambda: SimpleNamespace(auth_self_registration_enabled=True),
     )
     service = IdentityService(FakeIdentityRepository())  # type: ignore[arg-type]
 
     user = await service.register(
         UserCreate(
-            email="admin-enabled@guitaronline.dev",
+            email="student-default@guitaronline.dev",
             password="StrongPass123!",
             timezone="UTC",
-            role=RoleEnum.ADMIN,
         ),
     )
 
-    assert user.role.name == RoleEnum.ADMIN
+    assert user.role.name == RoleEnum.STUDENT
+
+
+def test_user_create_rejects_public_role_field() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        UserCreate(
+            email="role-field@guitaronline.dev",
+            password="StrongPass123!",
+            timezone="UTC",
+            role=RoleEnum.ADMIN,
+        )

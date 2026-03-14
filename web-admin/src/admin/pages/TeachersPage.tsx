@@ -1,36 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { ApiClientError } from "../../shared/api/client";
-import {
-  disableTeacher,
-  getTeacherDetail,
-  listTeachers,
-  verifyTeacher
-} from "../../features/teachers/api";
+import { disableTeacher, getTeacherDetail, listTeachers } from "../../features/teachers/api";
 import type { TeacherDetail, TeacherListItem } from "../../features/teachers/types";
+import { ApiClientError } from "../../shared/api/client";
 import {
   ADMIN_TEACHERS_STATUS_STORAGE_KEY,
   ADMIN_TEACHER_FILTER_STORAGE_KEY
 } from "../../shared/storage/adminFilters";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
-type TeacherStatusFilter = "all" | "pending" | "verified" | "disabled";
+type TeacherStatusFilter = "all" | "active" | "disabled";
 
 const STATUS_FILTER_OPTIONS: Array<{ value: TeacherStatusFilter; label: string }> = [
   { value: "all", label: "Все" },
-  { value: "verified", label: "Подтверждённые" },
-  { value: "pending", label: "На проверке" },
+  { value: "active", label: "Активные" },
   { value: "disabled", label: "Отключённые" }
 ];
 
 const TEACHER_STATUS_LABELS: Record<string, string> = {
-  pending: "на проверке",
-  verified: "подтверждён",
+  active: "активен",
   disabled: "отключён"
 };
 
 function normalizeStatusFilter(value: string | null): TeacherStatusFilter {
-  if (value === "pending" || value === "verified" || value === "disabled") {
+  if (value === "active" || value === "disabled") {
     return value;
   }
   return "all";
@@ -59,7 +52,7 @@ export function TeachersPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [actionPending, setActionPending] = useState<"verify" | "disable" | null>(null);
+  const [actionPending, setActionPending] = useState<"disable" | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
@@ -170,40 +163,28 @@ export function TeachersPage() {
     }
   }
 
-  async function handleModerationAction(action: "verify" | "disable") {
+  async function handleDisableAction() {
     if (!selectedTeacherId) {
       return;
     }
 
-    setActionPending(action);
+    setActionPending("disable");
     setActionError(null);
     setActionSuccess(null);
 
     try {
-      const updatedDetail =
-        action === "verify"
-          ? await verifyTeacher(selectedTeacherId)
-          : await disableTeacher(selectedTeacherId);
-
+      const updatedDetail = await disableTeacher(selectedTeacherId);
       setTeacherDetail(updatedDetail);
       await refreshTeachersAndSelection(updatedDetail.teacher_id);
 
       if (!isValidTeacherStatusFilter(updatedDetail.status, statusFilter)) {
         setActionSuccess("Статус обновлён. Преподаватель скрыт текущим фильтром.");
       } else {
-        setActionSuccess(
-          action === "verify"
-            ? "Преподаватель подтверждён."
-            : "Преподаватель отключён и вход заблокирован."
-        );
+        setActionSuccess("Преподаватель отключён, вход заблокирован.");
       }
     } catch (requestError) {
       setActionError(
-        requestError instanceof Error
-          ? requestError.message
-          : action === "verify"
-            ? "Не удалось подтвердить преподавателя"
-            : "Не удалось отключить преподавателя"
+        requestError instanceof Error ? requestError.message : "Не удалось отключить преподавателя"
       );
     } finally {
       setActionPending(null);
@@ -216,8 +197,9 @@ export function TeachersPage() {
         <p className="eyebrow">Преподаватели</p>
         <h1>Эндпоинты недоступны</h1>
         <p className="summary">
-          Для этого раздела нужны <code>GET /admin/teachers</code>, <code>GET /admin/teachers/{`{id}`}</code>,
-          <code>POST /admin/teachers/{`{id}`}/verify</code>, <code>POST /admin/teachers/{`{id}`}/disable</code>.
+          Для этого раздела нужны <code>GET /admin/teachers</code>,{" "}
+          <code>GET /admin/teachers/{`{id}`}</code>,{" "}
+          <code>POST /admin/teachers/{`{id}`}/disable</code>.
         </p>
       </article>
     );
@@ -273,10 +255,7 @@ export function TeachersPage() {
               >
                 <strong>{teacher.display_name}</strong>
                 <span>{teacher.email}</span>
-                <span>
-                  {formatTeacherStatus(teacher.status)}{" "}
-                  {teacher.verified ? "• подтверждён" : "• на проверке"}
-                </span>
+                <span>{formatTeacherStatus(teacher.status)}</span>
               </button>
             ))}
           </div>
@@ -287,19 +266,7 @@ export function TeachersPage() {
         <p className="eyebrow">Карточка преподавателя</p>
         {selectedTeacher ? <h1>{selectedTeacher.display_name}</h1> : <h1>Не выбрано</h1>}
 
-        <div className="quick-filter-group" role="group" aria-label="Действия модерации">
-          <button
-            type="button"
-            className="quick-filter"
-            disabled={
-              !teacherDetail ||
-              actionPending !== null ||
-              teacherDetail.status === "verified"
-            }
-            onClick={() => void handleModerationAction("verify")}
-          >
-            {actionPending === "verify" ? "Подтверждение..." : "Подтвердить"}
-          </button>
+        <div className="quick-filter-group" role="group" aria-label="Действия по аккаунту преподавателя">
           <button
             type="button"
             className="quick-filter"
@@ -308,7 +275,7 @@ export function TeachersPage() {
               actionPending !== null ||
               teacherDetail.status === "disabled"
             }
-            onClick={() => void handleModerationAction("disable")}
+            onClick={() => void handleDisableAction()}
           >
             {actionPending === "disable" ? "Отключение..." : "Отключить"}
           </button>
@@ -323,9 +290,6 @@ export function TeachersPage() {
           <div className="teacher-detail">
             <p>
               <strong>Статус:</strong> {formatTeacherStatus(teacherDetail.status)}
-            </p>
-            <p>
-              <strong>Подтверждён:</strong> {teacherDetail.verified ? "Да" : "Нет"}
             </p>
             <p>
               <strong>Активен:</strong> {teacherDetail.is_active ? "Да" : "Нет"}

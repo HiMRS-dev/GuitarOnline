@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import Boolean, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base, BaseModelMixin
@@ -32,10 +32,9 @@ class TeacherProfile(BaseModelMixin, Base):
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     bio: Mapped[str] = mapped_column(Text, default="", nullable=False)
     experience_years: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     status: Mapped[TeacherStatusEnum] = mapped_column(
         SAEnum(TeacherStatusEnum, name="teacher_status_enum", native_enum=False),
-        default=TeacherStatusEnum.PENDING,
+        default=TeacherStatusEnum.ACTIVE,
         nullable=False,
         index=True,
     )

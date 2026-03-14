@@ -17,6 +17,14 @@ API_BASE_URL = os.getenv("INTEGRATION_BASE_URL", "http://localhost:8000/api/v1")
 HEALTHCHECK_URL = os.getenv("INTEGRATION_HEALTH_URL", "http://localhost:8000/health")
 DB_DSN = os.getenv("INTEGRATION_DB_DSN", "postgresql://postgres:postgres@localhost:5432/guitaronline")
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("INTEGRATION_TIMEOUT_SECONDS", "15"))
+INTEGRATION_ADMIN_EMAIL = os.getenv(
+    "INTEGRATION_ADMIN_EMAIL",
+    os.getenv("DEPLOY_SMOKE_ADMIN_EMAIL", "demo-admin@guitaronline.dev"),
+).strip()
+INTEGRATION_ADMIN_PASSWORD = os.getenv(
+    "INTEGRATION_ADMIN_PASSWORD",
+    os.getenv("DEPLOY_SMOKE_ADMIN_PASSWORD", "DemoPass123!"),
+)
 
 _INTEGRATION_STACK_HEALTHY: bool | None = None
 _INTEGRATION_STACK_ERROR: str | None = None
@@ -49,7 +57,6 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
             "email": email,
             "password": password,
             "timezone": "UTC",
-            "role": role,
         },
     )
     _assert_status(register_response, 201)
@@ -62,7 +69,45 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
     _assert_status(login_response, 200)
     access_token = login_response.json()["access_token"]
 
-    return AuthUser(id=user_id, access_token=access_token)
+    return await _ensure_role(client, AuthUser(id=user_id, access_token=access_token), role=role)
+
+
+async def _login_existing_admin(client: httpx.AsyncClient) -> AuthUser:
+    login_response = await client.post(
+        "/identity/auth/login",
+        json={
+            "email": INTEGRATION_ADMIN_EMAIL,
+            "password": INTEGRATION_ADMIN_PASSWORD,
+        },
+    )
+    if login_response.status_code != 200:
+        pytest.skip(
+            "Bootstrap admin credentials are unavailable for integration role reassignment "
+            f"({INTEGRATION_ADMIN_EMAIL}).",
+        )
+        raise AssertionError("unreachable")
+
+    access_token = login_response.json()["access_token"]
+    me_response = await client.get(
+        "/identity/users/me",
+        headers=_auth_headers(access_token),
+    )
+    _assert_status(me_response, 200)
+    return AuthUser(id=UUID(me_response.json()["id"]), access_token=access_token)
+
+
+async def _ensure_role(client: httpx.AsyncClient, user: AuthUser, *, role: str) -> AuthUser:
+    if role == "student":
+        return user
+
+    bootstrap_admin = await _login_existing_admin(client)
+    role_change_response = await client.post(
+        f"/admin/users/{user.id}/role",
+        headers=_auth_headers(bootstrap_admin.access_token),
+        json={"role": role},
+    )
+    _assert_status(role_change_response, 200)
+    return user
 
 
 async def _count_teacher_overlaps(
@@ -140,8 +185,16 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
 async def test_admin_bulk_create_keeps_teacher_slots_non_overlapping_in_db(
     api_client: httpx.AsyncClient,
 ) -> None:
-    admin = await _register_and_login(api_client, "admin")
-    teacher = await _register_and_login(api_client, "teacher")
+    admin = await _ensure_role(
+        api_client,
+        await _register_and_login(api_client, "admin"),
+        role="admin",
+    )
+    teacher = await _ensure_role(
+        api_client,
+        await _register_and_login(api_client, "teacher"),
+        role="teacher",
+    )
 
     target_day: date = (datetime.now(UTC) + timedelta(days=14)).date()
     seed_start = datetime.combine(target_day, time(10, 0), tzinfo=UTC)

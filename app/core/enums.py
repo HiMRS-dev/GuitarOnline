@@ -48,10 +48,9 @@ class BookingStatusEnum(StrEnum):
 
 
 class TeacherStatusEnum(StrEnum):
-    """Teacher profile moderation status."""
+    """Teacher profile lifecycle status."""
 
-    PENDING = "pending"
-    VERIFIED = "verified"
+    ACTIVE = "active"
     DISABLED = "disabled"
 
 

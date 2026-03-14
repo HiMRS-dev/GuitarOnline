@@ -71,10 +71,9 @@ def test_email_fields_are_exposed_only_on_identity_or_admin_routes() -> None:
         "/api/v1/identity/users/me",
         "/api/v1/admin/teachers",
         "/api/v1/admin/teachers/{teacher_id}",
-        "/api/v1/admin/teachers/{teacher_id}/verify",
         "/api/v1/admin/teachers/{teacher_id}/disable",
         "/api/v1/admin/users",
-        "/api/v1/admin/users/provision",
+        "/api/v1/admin/users/{user_id}/role",
         "/api/v1/admin/users/{user_id}/activate",
         "/api/v1/admin/users/{user_id}/deactivate",
     }

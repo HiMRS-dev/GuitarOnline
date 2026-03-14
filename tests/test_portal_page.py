@@ -28,6 +28,16 @@ def test_portal_static_styles_route_serves_css() -> None:
     assert ":root {" in response.text
 
 
+def test_portal_page_registration_form_does_not_expose_role_selector() -> None:
+    client = TestClient(main_module.app)
+
+    response = client.get("/portal")
+
+    assert response.status_code == 200
+    assert 'id="register-form"' in response.text
+    assert 'name="role"' not in response.text
+
+
 def test_portal_static_app_route_serves_javascript() -> None:
     client = TestClient(main_module.app)
 
@@ -36,3 +46,4 @@ def test_portal_static_app_route_serves_javascript() -> None:
     assert response.status_code == 200
     assert "javascript" in response.headers.get("content-type", "")
     assert 'const API_PREFIX = "/api/v1";' in response.text
+    assert "form.role.value" not in response.text

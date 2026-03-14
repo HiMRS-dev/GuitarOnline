@@ -27,7 +27,6 @@ from app.modules.admin.schemas import (
     AdminPackageCreateRead,
     AdminPackageCreateRequest,
     AdminPackageListItemRead,
-    AdminProvisionedUserRead,
     AdminSlotBlockRead,
     AdminSlotBlockRequest,
     AdminSlotBulkCreateRead,
@@ -39,7 +38,7 @@ from app.modules.admin.schemas import (
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
     AdminUserListItemRead,
-    AdminUserProvisionRequest,
+    AdminUserRoleUpdateRequest,
 )
 from app.modules.admin.service import AdminService, get_admin_service
 from app.modules.billing.schemas import PackageCreateAdmin
@@ -82,7 +81,6 @@ async def list_admin_actions(
 @router.get("/teachers", response_model=Page[AdminTeacherListItemRead])
 async def list_admin_teachers(
     status_filter: TeacherStatusEnum | None = Query(default=None, alias="status"),
-    verified: bool | None = Query(default=None),
     q: str | None = Query(default=None, min_length=1, max_length=255),
     tag: str | None = Query(default=None, min_length=1, max_length=64),
     pagination=Depends(get_pagination_params),
@@ -95,7 +93,6 @@ async def list_admin_teachers(
         limit=pagination.limit,
         offset=pagination.offset,
         status=status_filter,
-        verified=verified,
         q=q,
         tag=tag,
     )
@@ -112,16 +109,6 @@ async def get_admin_teacher_detail(
     return await service.get_teacher_detail(current_user, teacher_id=teacher_id)
 
 
-@router.post("/teachers/{teacher_id}/verify", response_model=AdminTeacherDetailRead)
-async def verify_admin_teacher(
-    teacher_id: UUID,
-    service: AdminService = Depends(get_admin_service),
-    current_user=Depends(require_roles(RoleEnum.ADMIN)),
-) -> AdminTeacherDetailRead:
-    """Verify teacher profile from admin panel."""
-    return await service.verify_teacher(current_user, teacher_id=teacher_id)
-
-
 @router.post("/teachers/{teacher_id}/disable", response_model=AdminTeacherDetailRead)
 async def disable_admin_teacher(
     teacher_id: UUID,
@@ -132,18 +119,15 @@ async def disable_admin_teacher(
     return await service.disable_teacher(current_user, teacher_id=teacher_id)
 
 
-@router.post(
-    "/users/provision",
-    response_model=AdminProvisionedUserRead,
-    status_code=status.HTTP_201_CREATED,
-)
-async def provision_admin_user(
-    payload: AdminUserProvisionRequest,
+@router.post("/users/{user_id}/role", response_model=AdminUserListItemRead)
+async def update_admin_user_role(
+    user_id: UUID,
+    payload: AdminUserRoleUpdateRequest,
     service: AdminService = Depends(get_admin_service),
     current_user=Depends(require_roles(RoleEnum.ADMIN)),
-) -> AdminProvisionedUserRead:
-    """Provision teacher/admin accounts through protected admin workflow."""
-    return await service.provision_user(current_user, payload=payload)
+) -> AdminUserListItemRead:
+    """Reassign an existing user role through admin-only workflow."""
+    return await service.update_user_role(current_user, user_id=user_id, payload=payload)
 
 
 @router.get("/users", response_model=Page[AdminUserListItemRead])

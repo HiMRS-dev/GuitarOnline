@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getKpiOverview } from "../../features/kpi/api";
 import type { KpiOverview } from "../../features/kpi/types";
@@ -9,53 +9,34 @@ import type { PageResponse } from "../../shared/api/types";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 
-type ProvisionRole = "teacher" | "admin";
-type UserRoleFilter = "all" | "student" | "teacher" | "admin";
+type UserRole = "student" | "teacher" | "admin";
+type UserRoleFilter = "all" | UserRole;
 type UserActiveFilter = "all" | "active" | "inactive";
-
-type ProvisionedTeacherProfile = {
-  profile_id: string;
-  display_name: string;
-  status: string;
-  verified: boolean;
-};
-
-type ProvisionedUser = {
-  user_id: string;
-  email: string;
-  timezone: string;
-  role: string;
-  is_active: boolean;
-  created_at_utc: string;
-  updated_at_utc: string;
-  teacher_profile?: ProvisionedTeacherProfile | null;
-};
 
 type AdminUserListItem = {
   user_id: string;
   email: string;
   timezone: string;
-  role: "student" | "teacher" | "admin";
+  role: UserRole;
   is_active: boolean;
   teacher_profile_display_name?: string | null;
   created_at_utc: string;
   updated_at_utc: string;
 };
 
-const ROLE_LABELS: Record<AdminUserListItem["role"], string> = {
+const ROLE_LABELS: Record<UserRole, string> = {
   student: "студент",
   teacher: "преподаватель",
   admin: "администратор"
 };
 
 const TEACHER_STATUS_LABELS: Record<string, string> = {
-  pending: "на проверке",
-  verified: "подтверждён",
-  disabled: "отключён"
+  active: "активен",
+  disabled: "отключен"
 };
 
 function formatRole(role: string): string {
-  return ROLE_LABELS[role as AdminUserListItem["role"]] ?? role;
+  return ROLE_LABELS[role as UserRole] ?? role;
 }
 
 function formatTeacherStatus(status: string): string {
@@ -64,7 +45,7 @@ function formatTeacherStatus(status: string): string {
 
 function formatDateTime(value: string | null): string {
   if (!value) {
-    return "—";
+    return "-";
   }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -114,10 +95,19 @@ function buildUsersQuery(
   return params.toString();
 }
 
+function buildRoleDrafts(items: AdminUserListItem[]): Record<string, UserRole> {
+  const drafts: Record<string, UserRole> = {};
+  for (const item of items) {
+    drafts[item.user_id] = item.role;
+  }
+  return drafts;
+}
+
 export function UsersPage() {
   const [overview, setOverview] = useState<KpiOverview | null>(null);
   const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
+  const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, UserRole>>({});
   const [usersTotal, setUsersTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,18 +119,9 @@ export function UsersPage() {
   const [userActiveFilter, setUserActiveFilter] = useState<UserActiveFilter>("all");
   const [userQuery, setUserQuery] = useState("");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [timezone, setTimezone] = useState("UTC");
-  const [role, setRole] = useState<ProvisionRole>("teacher");
-  const [displayName, setDisplayName] = useState("Новый преподаватель");
-  const [bio, setBio] = useState("");
-  const [experienceYears, setExperienceYears] = useState("0");
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [activeActionUserId, setActiveActionUserId] = useState<string | null>(null);
-  const [lastProvisioned, setLastProvisioned] = useState<ProvisionedUser | null>(null);
+  const [activeToggleUserId, setActiveToggleUserId] = useState<string | null>(null);
+  const [activeRoleUserId, setActiveRoleUserId] = useState<string | null>(null);
 
   async function loadPageData() {
     setLoading(true);
@@ -183,9 +164,11 @@ export function UsersPage() {
 
     if (usersResult.status === "fulfilled") {
       setUsers(usersResult.value.items);
+      setUserRoleDrafts(buildRoleDrafts(usersResult.value.items));
       setUsersTotal(usersResult.value.total);
     } else {
       setUsers([]);
+      setUserRoleDrafts({});
       setUsersTotal(0);
       if (
         usersResult.reason instanceof ApiClientError &&
@@ -217,61 +200,37 @@ export function UsersPage() {
     [teachers]
   );
 
-  async function handleProvision(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setSubmitError(null);
+  function handleRoleDraftChange(userId: string, role: UserRole) {
+    setUserRoleDrafts((current) => ({
+      ...current,
+      [userId]: role
+    }));
+  }
+
+  async function handleChangeUserRole(user: AdminUserListItem) {
+    const nextRole = userRoleDrafts[user.user_id] ?? user.role;
+    if (nextRole === user.role) {
+      return;
+    }
+
+    setActiveRoleUserId(user.user_id);
+    setActionError(null);
 
     try {
-      const payload: {
-        email: string;
-        password: string;
-        timezone: string;
-        role: ProvisionRole;
-        teacher_profile?: {
-          display_name: string;
-          bio: string;
-          experience_years: number;
-        };
-      } = {
-        email: email.trim(),
-        password,
-        timezone: timezone.trim() || "UTC",
-        role
-      };
-
-      if (role === "teacher") {
-        payload.teacher_profile = {
-          display_name: displayName.trim() || "Преподаватель",
-          bio: bio.trim(),
-          experience_years: Number(experienceYears) || 0
-        };
-      }
-
-      const provisioned = await apiClient.request<ProvisionedUser>("/admin/users/provision", {
+      await apiClient.request<AdminUserListItem>(`/admin/users/${user.user_id}/role`, {
         method: "POST",
-        body: payload
+        body: { role: nextRole }
       });
-
-      setLastProvisioned(provisioned);
-      setEmail("");
-      setPassword("");
-      if (role === "teacher") {
-        setDisplayName("Новый преподаватель");
-        setBio("");
-        setExperienceYears("0");
-      }
-
       await loadPageData();
     } catch (requestError) {
-      setSubmitError(toLocalizedError(requestError, "Не удалось создать пользователя"));
+      setActionError(toLocalizedError(requestError, "Не удалось изменить роль пользователя"));
     } finally {
-      setSubmitting(false);
+      setActiveRoleUserId(null);
     }
   }
 
   async function handleToggleUserActive(user: AdminUserListItem) {
-    setActiveActionUserId(user.user_id);
+    setActiveToggleUserId(user.user_id);
     setActionError(null);
     const nextAction = user.is_active ? "deactivate" : "activate";
 
@@ -284,11 +243,13 @@ export function UsersPage() {
       setActionError(
         toLocalizedError(
           requestError,
-          user.is_active ? "Не удалось деактивировать пользователя" : "Не удалось активировать пользователя"
+          user.is_active
+            ? "Не удалось деактивировать пользователя"
+            : "Не удалось активировать пользователя"
         )
       );
     } finally {
-      setActiveActionUserId(null);
+      setActiveToggleUserId(null);
     }
   }
 
@@ -308,11 +269,12 @@ export function UsersPage() {
         <p className="eyebrow">Пользователи</p>
         <h1>Управление пользователями</h1>
         <p className="summary">
-          Здесь доступны счётчики ролей и создание повышенных ролей (`teacher`, `admin`) через
-          защищенный `POST /admin/users/provision`.
+          Публичная регистрация всегда создаёт аккаунт `student`. Повышенные роли назначаются
+          только админом для уже существующих аккаунтов через `POST /admin/users/&lt;user_id&gt;/role`.
         </p>
         <p className="summary">
-          Аккаунты `student` создаются через публичную регистрацию (`/identity/auth/register`).
+          При переводе пользователя в `teacher` backend автоматически создаёт или возвращает его
+          профиль преподавателя в активное состояние.
         </p>
         {error ? <p className="error-text">{error}</p> : null}
       </article>
@@ -367,7 +329,7 @@ export function UsersPage() {
             >
               <option value="all">Все</option>
               <option value="active">Только активные</option>
-              <option value="inactive">Только отключённые</option>
+              <option value="inactive">Только отключенные</option>
             </select>
           </label>
 
@@ -388,7 +350,7 @@ export function UsersPage() {
 
         {usersUnavailable ? (
           <p className="summary">
-            `GET /admin/users` и операции активации/деактивации пока недоступны в backend.
+            `GET /admin/users` и операции управления ролями пока недоступны в backend.
           </p>
         ) : users.length === 0 ? (
           <p className="summary">Пользователи не найдены по выбранным фильтрам.</p>
@@ -402,135 +364,70 @@ export function UsersPage() {
                   <th>Статус</th>
                   <th>Таймзона</th>
                   <th>Профиль преподавателя</th>
-                  <th>Обновлён</th>
-                  <th>Действие</th>
+                  <th>Обновлен</th>
+                  <th>Управление</th>
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
-                  <tr key={user.user_id}>
-                    <td>{user.email}</td>
-                    <td>{formatRole(user.role)}</td>
-                    <td>{user.is_active ? "Активен" : "Отключён"}</td>
-                    <td>{user.timezone}</td>
-                    <td>{user.teacher_profile_display_name || "—"}</td>
-                    <td>{formatDateTime(user.updated_at_utc)}</td>
-                    <td>
-                      <button
-                        type="button"
-                        disabled={activeActionUserId === user.user_id}
-                        onClick={() => void handleToggleUserActive(user)}
-                      >
-                        {activeActionUserId === user.user_id
-                          ? "Выполняется..."
-                          : user.is_active
-                            ? "Деактивировать"
-                            : "Активировать"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((user) => {
+                  const draftRole = userRoleDrafts[user.user_id] ?? user.role;
+                  const roleChanged = draftRole !== user.role;
+                  const toggleInProgress = activeToggleUserId === user.user_id;
+                  const roleInProgress = activeRoleUserId === user.user_id;
+
+                  return (
+                    <tr key={user.user_id}>
+                      <td>{user.email}</td>
+                      <td>{formatRole(user.role)}</td>
+                      <td>{user.is_active ? "Активен" : "Отключен"}</td>
+                      <td>{user.timezone}</td>
+                      <td>{user.teacher_profile_display_name || "-"}</td>
+                      <td>{formatDateTime(user.updated_at_utc)}</td>
+                      <td>
+                        <div className="users-teacher-fields">
+                          <label>
+                            <span>Новая роль</span>
+                            <select
+                              value={draftRole}
+                              disabled={roleInProgress || toggleInProgress}
+                              onChange={(event) =>
+                                handleRoleDraftChange(user.user_id, event.target.value as UserRole)
+                              }
+                            >
+                              <option value="student">студент</option>
+                              <option value="teacher">преподаватель</option>
+                              <option value="admin">администратор</option>
+                            </select>
+                          </label>
+
+                          <button
+                            type="button"
+                            disabled={!roleChanged || roleInProgress || toggleInProgress}
+                            onClick={() => void handleChangeUserRole(user)}
+                          >
+                            {roleInProgress ? "Сохраняю..." : "Сменить роль"}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={toggleInProgress || roleInProgress}
+                            onClick={() => void handleToggleUserActive(user)}
+                          >
+                            {toggleInProgress
+                              ? "Выполняется..."
+                              : user.is_active
+                                ? "Деактивировать"
+                                : "Активировать"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </article>
-
-      <article className="card">
-        <h2>Создать пользователя (преподаватель/администратор)</h2>
-        <form className="users-provision-form" onSubmit={handleProvision}>
-          <label>
-            <span>Почта</span>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="off"
-            />
-          </label>
-
-          <label>
-            <span>Пароль</span>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="new-password"
-            />
-          </label>
-
-          <label>
-            <span>Таймзона</span>
-            <input
-              type="text"
-              required
-              value={timezone}
-              onChange={(event) => setTimezone(event.target.value)}
-            />
-          </label>
-
-          <label>
-            <span>Роль</span>
-            <select value={role} onChange={(event) => setRole(event.target.value as ProvisionRole)}>
-              <option value="teacher">преподаватель</option>
-              <option value="admin">администратор</option>
-            </select>
-          </label>
-
-          {role === "teacher" ? (
-            <div className="users-teacher-fields">
-              <label>
-                <span>Отображаемое имя</span>
-                <input
-                  type="text"
-                  required
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>О себе</span>
-                <textarea value={bio} onChange={(event) => setBio(event.target.value)} rows={3} />
-              </label>
-              <label>
-                <span>Опыт (лет)</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={80}
-                  value={experienceYears}
-                  onChange={(event) => setExperienceYears(event.target.value)}
-                />
-              </label>
-            </div>
-          ) : null}
-
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Создание..." : "Создать пользователя"}
-          </button>
-          {submitError ? <p className="error-text">{submitError}</p> : null}
-        </form>
-
-        {lastProvisioned ? (
-          <div className="users-last-provision">
-            <p className="success-text">Пользователь создан успешно.</p>
-            <p>
-              <strong>Почта:</strong> {lastProvisioned.email}
-            </p>
-            <p>
-              <strong>Роль:</strong> {formatRole(lastProvisioned.role)}
-            </p>
-            <p>
-              <strong>ID пользователя:</strong> {lastProvisioned.user_id}
-            </p>
-            <p>
-              <strong>Создан:</strong> {formatDateTime(lastProvisioned.created_at_utc)}
-            </p>
-          </div>
-        ) : null}
       </article>
 
       <article className="card">
@@ -547,10 +444,7 @@ export function UsersPage() {
                   <strong>{teacher.display_name}</strong>
                 </p>
                 <p>{teacher.email}</p>
-                <p>
-                  {formatTeacherStatus(teacher.status)}{" "}
-                  {teacher.verified ? "• подтверждён" : "• на проверке"}
-                </p>
+                <p>{formatTeacherStatus(teacher.status)}</p>
                 <p>{formatDateTime(teacher.updated_at_utc)}</p>
               </article>
             ))}

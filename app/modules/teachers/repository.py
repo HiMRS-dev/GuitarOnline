@@ -31,7 +31,6 @@ class TeachersRepository:
             bio=bio,
             experience_years=experience_years,
             status=status,
-            is_approved=status == TeacherStatusEnum.VERIFIED,
         )
         self.session.add(profile)
         await self.session.flush()

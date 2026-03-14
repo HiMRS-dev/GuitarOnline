@@ -47,8 +47,7 @@ This document defines the baseline response DTOs for the admin frontend.
   "display_name": "Alice Blues",
   "bio": "Fingerstyle teacher",
   "experience_years": 8,
-  "status": "verified",
-  "is_approved": true,
+  "status": "active",
   "created_at_utc": "2026-03-04T09:30:00+00:00",
   "updated_at_utc": "2026-03-04T10:00:00+00:00"
 }

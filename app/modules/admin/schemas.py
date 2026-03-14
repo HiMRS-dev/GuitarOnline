@@ -26,10 +26,10 @@ class AdminActionCreate(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "action": "admin.teacher.verify",
-                "target_type": "teacher_profile",
+                "action": "admin.user.role.change",
+                "target_type": "user",
                 "target_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
-                "payload": {"reason": "manual_review_passed"},
+                "payload": {"from_role": "student", "to_role": "teacher"},
             },
         },
     )
@@ -49,10 +49,10 @@ class AdminActionRead(BaseModel):
             "example": {
                 "id": "eb4fbb69-951f-4f4f-aaf6-ebfff510db5b",
                 "admin_id": "8a937f92-0132-4691-b735-c224078afaef",
-                "action": "admin.teacher.verify",
-                "target_type": "teacher_profile",
+                "action": "admin.user.role.change",
+                "target_type": "user",
                 "target_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
-                "payload": {"reason": "manual_review_passed"},
+                "payload": {"from_role": "student", "to_role": "teacher"},
                 "created_at": "2026-03-04T11:00:00+00:00",
                 "updated_at": "2026-03-04T11:00:00+00:00",
             },
@@ -69,55 +69,15 @@ class AdminActionRead(BaseModel):
     updated_at: datetime
 
 
-class AdminProvisionTeacherProfileRequest(BaseModel):
-    """Teacher profile payload for admin provisioning flow."""
+class AdminUserRoleUpdateRequest(BaseModel):
+    """Admin-only request to reassign an existing user role."""
 
-    display_name: str = Field(min_length=1, max_length=128)
-    bio: str = Field(default="", max_length=5000)
-    experience_years: int = Field(default=0, ge=0, le=80)
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"example": {"role": "teacher"}},
+    )
 
-
-class AdminUserProvisionRequest(BaseModel):
-    """Admin-only user provisioning request for elevated roles."""
-
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
-    timezone: str = Field(default="UTC", max_length=64)
     role: RoleEnum
-    teacher_profile: AdminProvisionTeacherProfileRequest | None = None
-
-    @model_validator(mode="after")
-    def validate_role_specific_payload(self) -> AdminUserProvisionRequest:
-        """Allow provisioning only for teacher/admin with role-specific payload."""
-        if self.role == RoleEnum.TEACHER and self.teacher_profile is None:
-            raise ValueError("teacher_profile is required when role=teacher")
-        if self.role == RoleEnum.ADMIN and self.teacher_profile is not None:
-            raise ValueError("teacher_profile must be omitted when role=admin")
-        if self.role not in (RoleEnum.TEACHER, RoleEnum.ADMIN):
-            raise ValueError("Provisioning endpoint allows only teacher/admin roles")
-        return self
-
-
-class AdminProvisionTeacherProfileRead(BaseModel):
-    """Provisioned teacher profile snapshot in admin response."""
-
-    profile_id: UUID
-    display_name: str
-    status: TeacherStatusEnum
-    verified: bool
-
-
-class AdminProvisionedUserRead(BaseModel):
-    """Provisioned user response without sensitive fields."""
-
-    user_id: UUID
-    email: EmailStr
-    timezone: str
-    role: RoleEnum
-    is_active: bool
-    created_at_utc: datetime
-    updated_at_utc: datetime
-    teacher_profile: AdminProvisionTeacherProfileRead | None = None
 
 
 class AdminUserListItemRead(BaseModel):
@@ -199,8 +159,7 @@ class AdminTeacherListItemRead(BaseModel):
                 "profile_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
                 "email": "teacher@example.com",
                 "display_name": "Alice Blues",
-                "status": "verified",
-                "verified": True,
+                "status": "active",
                 "is_active": True,
                 "tags": ["jazz", "fingerstyle"],
                 "created_at_utc": "2026-03-05T10:00:00+00:00",
@@ -214,7 +173,6 @@ class AdminTeacherListItemRead(BaseModel):
     email: str
     display_name: str
     status: TeacherStatusEnum
-    verified: bool
     is_active: bool
     tags: list[str]
     created_at_utc: datetime
@@ -233,8 +191,7 @@ class AdminTeacherDetailRead(BaseModel):
                 "display_name": "Alice Blues",
                 "bio": "Fingerstyle and jazz guitar teacher.",
                 "experience_years": 8,
-                "status": "verified",
-                "verified": True,
+                "status": "active",
                 "is_active": True,
                 "tags": ["jazz", "fingerstyle"],
                 "created_at_utc": "2026-03-05T10:00:00+00:00",
@@ -250,7 +207,6 @@ class AdminTeacherDetailRead(BaseModel):
     bio: str
     experience_years: int
     status: TeacherStatusEnum
-    verified: bool
     is_active: bool
     tags: list[str]
     created_at_utc: datetime

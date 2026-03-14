@@ -145,15 +145,11 @@ def test_kpi_excluded_email_prefixes_parsing_from_comma_string() -> None:
     assert settings.kpi_excluded_email_prefixes == ("synthetic-ops-", "deploy-smoke-")
 
 
-def test_register_allowed_roles_default_is_student_only() -> None:
+def test_self_registration_is_enabled_by_default() -> None:
     settings = _build_settings()
-    assert tuple(str(role) for role in settings.auth_register_allowed_roles) == ("student",)
+    assert settings.auth_self_registration_enabled is True
 
 
-def test_register_allowed_roles_parsing_from_comma_string() -> None:
-    settings = _build_settings(auth_register_allowed_roles="student,teacher,admin")
-    assert tuple(str(role) for role in settings.auth_register_allowed_roles) == (
-        "student",
-        "teacher",
-        "admin",
-    )
+def test_self_registration_flag_can_be_disabled() -> None:
+    settings = _build_settings(auth_self_registration_enabled=False)
+    assert settings.auth_self_registration_enabled is False

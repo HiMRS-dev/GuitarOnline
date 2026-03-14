@@ -6,14 +6,9 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import ValidationError
 
 from app.core.enums import RoleEnum, TeacherStatusEnum
-from app.core.security import verify_password
-from app.modules.admin.schemas import (
-    AdminProvisionTeacherProfileRequest,
-    AdminUserProvisionRequest,
-)
+from app.modules.admin.schemas import AdminUserRoleUpdateRequest
 from app.modules.admin.service import AdminService
 from app.shared.exceptions import ConflictException, NotFoundException, UnauthorizedException
 
@@ -29,7 +24,6 @@ class FakeTeacherProfile:
     id: UUID
     display_name: str
     status: TeacherStatusEnum
-    is_approved: bool
 
 
 @dataclass
@@ -49,71 +43,56 @@ class FakeAdminRepository:
     def __init__(
         self,
         *,
-        existing_user: FakeUser | None = None,
         users: list[FakeUser] | None = None,
         role_names: tuple[RoleEnum, ...] = (RoleEnum.STUDENT, RoleEnum.TEACHER, RoleEnum.ADMIN),
     ) -> None:
-        self.existing_user = existing_user
         self.roles = {
             role_name: FakeRole(id=uuid4(), name=role_name)
             for role_name in role_names
         }
         self.users_by_id = {user.id: user for user in (users or [])}
-        self.create_calls: list[dict[str, object]] = []
+        self.set_role_calls: list[dict[str, object]] = []
         self.set_active_calls: list[dict[str, object]] = []
-
-    async def get_user_by_email(self, email: str) -> FakeUser | None:
-        if self.existing_user is None:
-            return None
-        return self.existing_user if self.existing_user.email == email else None
 
     async def get_role_by_name(self, role_name: RoleEnum) -> FakeRole | None:
         return self.roles.get(role_name)
 
-    async def create_provisioned_user(
+    async def set_user_role(
         self,
         *,
-        email: str,
-        password_hash: str,
-        timezone: str,
-        role_id: UUID,
-        role_name: RoleEnum,
-        teacher_profile: dict[str, object] | None,
+        user: FakeUser,
+        role: FakeRole,
         admin_id: UUID,
     ) -> FakeUser:
-        self.create_calls.append(
+        previous_role = user.role.name
+        user.role = role
+
+        profile = user.teacher_profile
+        teacher_profile_created = False
+        if role.name == RoleEnum.TEACHER:
+            if profile is None:
+                profile = FakeTeacherProfile(
+                    id=uuid4(),
+                    display_name=user.email.split("@", 1)[0],
+                    status=TeacherStatusEnum.ACTIVE,
+                )
+                user.teacher_profile = profile
+                teacher_profile_created = True
+            else:
+                profile.status = TeacherStatusEnum.ACTIVE
+        elif profile is not None:
+            profile.status = TeacherStatusEnum.DISABLED
+
+        self.set_role_calls.append(
             {
-                "email": email,
-                "password_hash": password_hash,
-                "timezone": timezone,
-                "role_id": role_id,
-                "role_name": role_name,
-                "teacher_profile": teacher_profile,
+                "user_id": user.id,
+                "from_role": previous_role,
+                "to_role": role.name,
                 "admin_id": admin_id,
+                "teacher_profile_created": teacher_profile_created,
             },
         )
-        role = self.roles[role_name]
-        profile_obj: FakeTeacherProfile | None = None
-        if role_name == RoleEnum.TEACHER and teacher_profile is not None:
-            profile_obj = FakeTeacherProfile(
-                id=uuid4(),
-                display_name=str(teacher_profile["display_name"]),
-                status=TeacherStatusEnum.PENDING,
-                is_approved=False,
-            )
-
-        now = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
-        return FakeUser(
-            id=uuid4(),
-            email=email,
-            password_hash=password_hash,
-            timezone=timezone,
-            is_active=True,
-            role=role,
-            created_at=now,
-            updated_at=now,
-            teacher_profile=profile_obj,
-        )
+        return user
 
     async def list_users(
         self,
@@ -156,7 +135,9 @@ class FakeAdminRepository:
                 "role": user.role.name,
                 "is_active": user.is_active,
                 "teacher_profile_display_name": (
-                    user.teacher_profile.display_name if user.teacher_profile is not None else None
+                    user.teacher_profile.display_name
+                    if user.role.name == RoleEnum.TEACHER and user.teacher_profile is not None
+                    else None
                 ),
                 "created_at_utc": user.created_at,
                 "updated_at_utc": user.updated_at,
@@ -190,148 +171,20 @@ def make_actor(role: RoleEnum, *, user_id: UUID | None = None) -> SimpleNamespac
     return SimpleNamespace(id=user_id or uuid4(), role=SimpleNamespace(name=role))
 
 
-@pytest.mark.asyncio
-async def test_admin_can_provision_teacher_with_pending_profile() -> None:
-    repository = FakeAdminRepository()
-    service = AdminService(repository=repository)  # type: ignore[arg-type]
-    admin = make_actor(RoleEnum.ADMIN)
-
-    payload = AdminUserProvisionRequest(
-        email="provision-teacher@guitaronline.dev",
-        password="StrongPass123!",
-        timezone="UTC",
-        role=RoleEnum.TEACHER,
-        teacher_profile=AdminProvisionTeacherProfileRequest(
-            display_name="Provisioned Teacher",
-            bio="Jazz and blues",
-            experience_years=9,
-        ),
-    )
-
-    result = await service.provision_user(admin, payload=payload)
-
-    assert result.role == RoleEnum.TEACHER
-    assert result.teacher_profile is not None
-    assert result.teacher_profile.display_name == "Provisioned Teacher"
-    assert result.teacher_profile.status == TeacherStatusEnum.PENDING
-    assert result.teacher_profile.verified is False
-    assert len(repository.create_calls) == 1
-    call = repository.create_calls[0]
-    assert call["role_name"] == RoleEnum.TEACHER
-    assert call["teacher_profile"] is not None
-    assert verify_password(payload.password, str(call["password_hash"]))
-    assert call["password_hash"] != payload.password
-
-
-@pytest.mark.asyncio
-async def test_admin_can_provision_admin_without_teacher_profile() -> None:
-    repository = FakeAdminRepository()
-    service = AdminService(repository=repository)  # type: ignore[arg-type]
-    admin = make_actor(RoleEnum.ADMIN)
-
-    payload = AdminUserProvisionRequest(
-        email="provision-admin@guitaronline.dev",
-        password="StrongPass123!",
-        timezone="Europe/Moscow",
-        role=RoleEnum.ADMIN,
-    )
-
-    result = await service.provision_user(admin, payload=payload)
-
-    assert result.role == RoleEnum.ADMIN
-    assert result.teacher_profile is None
-    assert repository.create_calls[0]["role_name"] == RoleEnum.ADMIN
-    assert repository.create_calls[0]["teacher_profile"] is None
-
-
-@pytest.mark.asyncio
-async def test_provision_user_requires_admin_role() -> None:
-    repository = FakeAdminRepository()
-    service = AdminService(repository=repository)  # type: ignore[arg-type]
-    teacher = make_actor(RoleEnum.TEACHER)
-    payload = AdminUserProvisionRequest(
-        email="forbidden@guitaronline.dev",
-        password="StrongPass123!",
-        timezone="UTC",
-        role=RoleEnum.ADMIN,
-    )
-
-    with pytest.raises(UnauthorizedException, match="Only admin can provision users"):
-        await service.provision_user(teacher, payload=payload)
-
-    assert repository.create_calls == []
-
-
-@pytest.mark.asyncio
-async def test_provision_user_rejects_duplicate_email() -> None:
-    existing = FakeUser(
-        id=uuid4(),
-        email="duplicate@guitaronline.dev",
-        password_hash="hash",
-        timezone="UTC",
-        is_active=True,
-        role=FakeRole(id=uuid4(), name=RoleEnum.STUDENT),
-        created_at=datetime(2026, 3, 10, 11, 0, tzinfo=UTC),
-        updated_at=datetime(2026, 3, 10, 11, 0, tzinfo=UTC),
-    )
-    repository = FakeAdminRepository(existing_user=existing)
-    service = AdminService(repository=repository)  # type: ignore[arg-type]
-    admin = make_actor(RoleEnum.ADMIN)
-    payload = AdminUserProvisionRequest(
-        email="duplicate@guitaronline.dev",
-        password="StrongPass123!",
-        timezone="UTC",
-        role=RoleEnum.ADMIN,
-    )
-
-    with pytest.raises(ConflictException, match="already exists"):
-        await service.provision_user(admin, payload=payload)
-
-    assert repository.create_calls == []
-
-
-@pytest.mark.asyncio
-async def test_provision_user_fails_when_target_role_is_missing() -> None:
-    repository = FakeAdminRepository(role_names=(RoleEnum.STUDENT, RoleEnum.TEACHER))
-    service = AdminService(repository=repository)  # type: ignore[arg-type]
-    admin = make_actor(RoleEnum.ADMIN)
-    payload = AdminUserProvisionRequest(
-        email="missing-role@guitaronline.dev",
-        password="StrongPass123!",
-        timezone="UTC",
-        role=RoleEnum.ADMIN,
-    )
-
-    with pytest.raises(NotFoundException, match="Role not found"):
-        await service.provision_user(admin, payload=payload)
-
-    assert repository.create_calls == []
-
-
-def test_provision_request_rejects_student_role() -> None:
-    with pytest.raises(ValidationError, match="teacher/admin"):
-        AdminUserProvisionRequest(
-            email="student@guitaronline.dev",
-            password="StrongPass123!",
-            timezone="UTC",
-            role=RoleEnum.STUDENT,
-        )
-
-
 def make_user(
     *,
     email: str,
     role: RoleEnum,
     is_active: bool = True,
     display_name: str | None = None,
+    teacher_status: TeacherStatusEnum = TeacherStatusEnum.ACTIVE,
 ) -> FakeUser:
     now = datetime(2026, 3, 10, 10, 0, tzinfo=UTC)
     profile = (
         FakeTeacherProfile(
             id=uuid4(),
             display_name=display_name or "Teacher",
-            status=TeacherStatusEnum.PENDING,
-            is_approved=False,
+            status=teacher_status,
         )
         if role == RoleEnum.TEACHER
         else None
@@ -347,6 +200,148 @@ def make_user(
         updated_at=now,
         teacher_profile=profile,
     )
+
+
+@pytest.mark.asyncio
+async def test_admin_can_promote_student_to_teacher_with_active_profile() -> None:
+    target_user = make_user(email="student@guitaronline.dev", role=RoleEnum.STUDENT)
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    result = await service.update_user_role(
+        admin,
+        user_id=target_user.id,
+        payload=AdminUserRoleUpdateRequest(role=RoleEnum.TEACHER),
+    )
+
+    assert result.role == RoleEnum.TEACHER
+    assert result.teacher_profile_display_name == "student"
+    assert target_user.teacher_profile is not None
+    assert target_user.teacher_profile.status == TeacherStatusEnum.ACTIVE
+    assert repository.set_role_calls == [
+        {
+            "user_id": target_user.id,
+            "from_role": RoleEnum.STUDENT,
+            "to_role": RoleEnum.TEACHER,
+            "admin_id": admin.id,
+            "teacher_profile_created": True,
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_admin_can_promote_student_to_admin_without_teacher_profile() -> None:
+    target_user = make_user(email="student-admin@guitaronline.dev", role=RoleEnum.STUDENT)
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    result = await service.update_user_role(
+        admin,
+        user_id=target_user.id,
+        payload=AdminUserRoleUpdateRequest(role=RoleEnum.ADMIN),
+    )
+
+    assert result.role == RoleEnum.ADMIN
+    assert result.teacher_profile_display_name is None
+    assert target_user.teacher_profile is None
+    assert repository.set_role_calls[0]["to_role"] == RoleEnum.ADMIN
+
+
+@pytest.mark.asyncio
+async def test_admin_can_demote_teacher_and_hide_teacher_profile_from_user_list() -> None:
+    target_user = make_user(
+        email="teacher@guitaronline.dev",
+        role=RoleEnum.TEACHER,
+        display_name="Teacher Name",
+        teacher_status=TeacherStatusEnum.ACTIVE,
+    )
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    result = await service.update_user_role(
+        admin,
+        user_id=target_user.id,
+        payload=AdminUserRoleUpdateRequest(role=RoleEnum.STUDENT),
+    )
+
+    assert result.role == RoleEnum.STUDENT
+    assert result.teacher_profile_display_name is None
+    assert target_user.teacher_profile is not None
+    assert target_user.teacher_profile.status == TeacherStatusEnum.DISABLED
+
+
+@pytest.mark.asyncio
+async def test_update_user_role_requires_admin_role() -> None:
+    target_user = make_user(email="target@guitaronline.dev", role=RoleEnum.STUDENT)
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    teacher = make_actor(RoleEnum.TEACHER)
+
+    with pytest.raises(UnauthorizedException, match="Only admin can change user roles"):
+        await service.update_user_role(
+            teacher,
+            user_id=target_user.id,
+            payload=AdminUserRoleUpdateRequest(role=RoleEnum.ADMIN),
+        )
+
+    assert repository.set_role_calls == []
+
+
+@pytest.mark.asyncio
+async def test_update_user_role_fails_when_target_role_is_missing() -> None:
+    target_user = make_user(email="missing-role@guitaronline.dev", role=RoleEnum.STUDENT)
+    repository = FakeAdminRepository(
+        users=[target_user],
+        role_names=(RoleEnum.STUDENT, RoleEnum.TEACHER),
+    )
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    with pytest.raises(NotFoundException, match="Role not found"):
+        await service.update_user_role(
+            admin,
+            user_id=target_user.id,
+            payload=AdminUserRoleUpdateRequest(role=RoleEnum.ADMIN),
+        )
+
+    assert repository.set_role_calls == []
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_change_own_role() -> None:
+    admin_user = make_user(email="self-admin@guitaronline.dev", role=RoleEnum.ADMIN)
+    repository = FakeAdminRepository(users=[admin_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN, user_id=admin_user.id)
+
+    with pytest.raises(ConflictException, match="cannot change own role"):
+        await service.update_user_role(
+            admin,
+            user_id=admin_user.id,
+            payload=AdminUserRoleUpdateRequest(role=RoleEnum.STUDENT),
+        )
+
+    assert repository.set_role_calls == []
+
+
+@pytest.mark.asyncio
+async def test_update_user_role_with_same_role_is_noop() -> None:
+    target_user = make_user(email="admin@guitaronline.dev", role=RoleEnum.ADMIN)
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    result = await service.update_user_role(
+        admin,
+        user_id=target_user.id,
+        payload=AdminUserRoleUpdateRequest(role=RoleEnum.ADMIN),
+    )
+
+    assert result.role == RoleEnum.ADMIN
+    assert repository.set_role_calls == []
 
 
 @pytest.mark.asyncio

@@ -10,10 +10,11 @@ def test_elevated_account_audit_workflow_references_remote_runner_and_artifact()
     assert "elevated-account-audit-report-${{ github.run_id }}" in workflow
 
 
-def test_elevated_access_runbook_maps_provision_and_approval_endpoints() -> None:
+def test_elevated_access_runbook_maps_role_change_and_disable_endpoints() -> None:
     runbook = Path("ops/admin_elevated_access_runbook.md").read_text(encoding="utf-8")
-    assert "POST /api/v1/admin/users/provision" in runbook
-    assert "/api/v1/admin/teachers/${TEACHER_USER_ID}/verify" in runbook
+    assert "POST /api/v1/admin/users/${USER_ID}/role" in runbook
+    assert "users/provision" not in runbook
+    assert "/api/v1/admin/teachers/${TEACHER_USER_ID}/verify" not in runbook
     assert "/api/v1/admin/teachers/${TEACHER_USER_ID}/disable" in runbook
 
 
@@ -22,3 +23,10 @@ def test_elevated_account_audit_script_emits_expected_report_markers() -> None:
     assert "elevated_account_audit_json=" in script
     assert "elevated_account_audit_markdown=" in script
     assert "elevated_account_audit_status=success" in script
+
+
+def test_deploy_smoke_check_uses_role_reassignment_flow() -> None:
+    script = Path("scripts/deploy_smoke_check.py").read_text(encoding="utf-8")
+    assert "/api/v1/admin/users/" in script
+    assert "/role" in script
+    assert "users/provision" not in script

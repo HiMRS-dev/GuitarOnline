@@ -22,10 +22,11 @@ class RoleRead(BaseModel):
 class UserCreate(BaseModel):
     """User registration request."""
 
+    model_config = ConfigDict(extra="forbid")
+
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     timezone: str = Field(default="UTC", max_length=64)
-    role: RoleEnum = RoleEnum.STUDENT
 
 
 class LoginRequest(BaseModel):

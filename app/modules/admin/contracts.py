@@ -31,7 +31,6 @@ class AdminTeacherDTO(BaseModel):
     bio: str
     experience_years: int
     status: TeacherStatusEnum
-    is_approved: bool
     created_at_utc: datetime
     updated_at_utc: datetime
 

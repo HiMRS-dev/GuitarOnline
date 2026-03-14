@@ -15,6 +15,14 @@ import pytest_asyncio
 API_BASE_URL = os.getenv("INTEGRATION_BASE_URL", "http://localhost:8000/api/v1").rstrip("/")
 HEALTHCHECK_URL = os.getenv("INTEGRATION_HEALTH_URL", "http://localhost:8000/health")
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("INTEGRATION_TIMEOUT_SECONDS", "15"))
+INTEGRATION_ADMIN_EMAIL = os.getenv(
+    "INTEGRATION_ADMIN_EMAIL",
+    os.getenv("DEPLOY_SMOKE_ADMIN_EMAIL", "demo-admin@guitaronline.dev"),
+).strip()
+INTEGRATION_ADMIN_PASSWORD = os.getenv(
+    "INTEGRATION_ADMIN_PASSWORD",
+    os.getenv("DEPLOY_SMOKE_ADMIN_PASSWORD", "DemoPass123!"),
+)
 
 _INTEGRATION_STACK_HEALTHY: bool | None = None
 _INTEGRATION_STACK_ERROR: str | None = None
@@ -47,7 +55,6 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
             "email": email,
             "password": password,
             "timezone": "UTC",
-            "role": role,
         },
     )
     _assert_status(register_response, 201)
@@ -60,7 +67,45 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
     _assert_status(login_response, 200)
     access_token = login_response.json()["access_token"]
 
-    return AuthUser(id=user_id, access_token=access_token)
+    return await _ensure_role(client, AuthUser(id=user_id, access_token=access_token), role=role)
+
+
+async def _login_existing_admin(client: httpx.AsyncClient) -> AuthUser:
+    login_response = await client.post(
+        "/identity/auth/login",
+        json={
+            "email": INTEGRATION_ADMIN_EMAIL,
+            "password": INTEGRATION_ADMIN_PASSWORD,
+        },
+    )
+    if login_response.status_code != 200:
+        pytest.skip(
+            "Bootstrap admin credentials are unavailable for integration role reassignment "
+            f"({INTEGRATION_ADMIN_EMAIL}).",
+        )
+        raise AssertionError("unreachable")
+
+    access_token = login_response.json()["access_token"]
+    me_response = await client.get(
+        "/identity/users/me",
+        headers=_auth_headers(access_token),
+    )
+    _assert_status(me_response, 200)
+    return AuthUser(id=UUID(me_response.json()["id"]), access_token=access_token)
+
+
+async def _ensure_role(client: httpx.AsyncClient, user: AuthUser, *, role: str) -> AuthUser:
+    if role == "student":
+        return user
+
+    bootstrap_admin = await _login_existing_admin(client)
+    role_change_response = await client.post(
+        f"/admin/users/{user.id}/role",
+        headers=_auth_headers(bootstrap_admin.access_token),
+        json={"role": role},
+    )
+    _assert_status(role_change_response, 200)
+    return user
 
 
 @pytest_asyncio.fixture()
@@ -264,18 +309,6 @@ async def test_admin_teacher_detail_endpoint_returns_401_403_and_200_by_role(
     student = await _register_and_login(api_client, "student")
     teacher = await _register_and_login(api_client, "teacher")
 
-    create_profile_response = await api_client.post(
-        "/teachers/profiles",
-        headers=_auth_headers(teacher.access_token),
-        json={
-            "user_id": str(teacher.id),
-            "display_name": "Teacher For Admin Detail",
-            "bio": "test",
-            "experience_years": 3,
-        },
-    )
-    _assert_status(create_profile_response, 201)
-
     no_token_response = await api_client.get(f"/admin/teachers/{teacher.id}")
     _assert_status(no_token_response, 401)
 
@@ -292,47 +325,7 @@ async def test_admin_teacher_detail_endpoint_returns_401_403_and_200_by_role(
     _assert_status(admin_response, 200)
     payload = admin_response.json()
     assert payload["teacher_id"] == str(teacher.id)
-    assert payload["status"] in {"pending", "verified", "disabled"}
-
-
-@pytest.mark.asyncio
-async def test_admin_teacher_verify_endpoint_returns_401_403_and_200_by_role(
-    api_client: httpx.AsyncClient,
-) -> None:
-    admin = await _register_and_login(api_client, "admin")
-    student = await _register_and_login(api_client, "student")
-    teacher = await _register_and_login(api_client, "teacher")
-
-    create_profile_response = await api_client.post(
-        "/teachers/profiles",
-        headers=_auth_headers(teacher.access_token),
-        json={
-            "user_id": str(teacher.id),
-            "display_name": "Teacher For Verify",
-            "bio": "test",
-            "experience_years": 3,
-        },
-    )
-    _assert_status(create_profile_response, 201)
-
-    no_token_response = await api_client.post(f"/admin/teachers/{teacher.id}/verify")
-    _assert_status(no_token_response, 401)
-
-    student_response = await api_client.post(
-        f"/admin/teachers/{teacher.id}/verify",
-        headers=_auth_headers(student.access_token),
-    )
-    _assert_status(student_response, 403)
-
-    admin_response = await api_client.post(
-        f"/admin/teachers/{teacher.id}/verify",
-        headers=_auth_headers(admin.access_token),
-    )
-    _assert_status(admin_response, 200)
-    payload = admin_response.json()
-    assert payload["teacher_id"] == str(teacher.id)
-    assert payload["status"] == "verified"
-    assert payload["verified"] is True
+    assert payload["status"] in {"active", "disabled"}
 
 
 @pytest.mark.asyncio
@@ -342,18 +335,6 @@ async def test_admin_teacher_disable_endpoint_returns_401_403_and_200_by_role(
     admin = await _register_and_login(api_client, "admin")
     student = await _register_and_login(api_client, "student")
     teacher = await _register_and_login(api_client, "teacher")
-
-    create_profile_response = await api_client.post(
-        "/teachers/profiles",
-        headers=_auth_headers(teacher.access_token),
-        json={
-            "user_id": str(teacher.id),
-            "display_name": "Teacher For Disable",
-            "bio": "test",
-            "experience_years": 3,
-        },
-    )
-    _assert_status(create_profile_response, 201)
 
     no_token_response = await api_client.post(f"/admin/teachers/{teacher.id}/disable")
     _assert_status(no_token_response, 401)
@@ -372,7 +353,6 @@ async def test_admin_teacher_disable_endpoint_returns_401_403_and_200_by_role(
     payload = admin_response.json()
     assert payload["teacher_id"] == str(teacher.id)
     assert payload["status"] == "disabled"
-    assert payload["verified"] is False
     assert payload["is_active"] is False
 
 
@@ -382,24 +362,6 @@ async def test_admin_teacher_moderation_endpoints_write_audit_logs(
 ) -> None:
     admin = await _register_and_login(api_client, "admin")
     teacher = await _register_and_login(api_client, "teacher")
-
-    create_profile_response = await api_client.post(
-        "/teachers/profiles",
-        headers=_auth_headers(teacher.access_token),
-        json={
-            "user_id": str(teacher.id),
-            "display_name": "Teacher For Audit",
-            "bio": "test",
-            "experience_years": 3,
-        },
-    )
-    _assert_status(create_profile_response, 201)
-
-    verify_response = await api_client.post(
-        f"/admin/teachers/{teacher.id}/verify",
-        headers=_auth_headers(admin.access_token),
-    )
-    _assert_status(verify_response, 200)
 
     disable_response = await api_client.post(
         f"/admin/teachers/{teacher.id}/disable",
@@ -419,7 +381,6 @@ async def test_admin_teacher_moderation_endpoints_write_audit_logs(
         for item in items
         if item.get("payload", {}).get("teacher_id") == str(teacher.id)
     }
-    assert "admin.teacher.verify" in actions_for_teacher
     assert "admin.teacher.disable" in actions_for_teacher
 
 

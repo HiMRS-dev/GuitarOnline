@@ -2,6 +2,14 @@
 
 Production-ready modular monolith backend for an online guitar school.
 
+## Role Policy
+
+- Public registration always creates `student`.
+- Role selection is not available in the public UI or public registration API.
+- Elevated roles `teacher` and `admin` are assigned only by admin for existing accounts via
+  `POST /api/v1/admin/users/{user_id}/role`.
+- Legacy elevated-account creation via `/api/v1/admin/users/provision` is removed and unsupported.
+
 ## Quick start
 
 1. Copy env file:
@@ -89,8 +97,8 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
 - Run post-deploy smoke script:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
-  - when elevated self-registration is disabled (`AUTH_REGISTER_ALLOWED_ROLES=student`),
-    set `DEPLOY_SMOKE_ADMIN_EMAIL` and `DEPLOY_SMOKE_ADMIN_PASSWORD` in runtime `.env`.
+  - set `DEPLOY_SMOKE_ADMIN_EMAIL` and `DEPLOY_SMOKE_ADMIN_PASSWORD` in runtime `.env`,
+    because admin self-registration is not supported.
 - Run load sanity scenario (~1000 weekly slots + admin list envelope checks):
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - optional custom target (must stay within bulk-create cap):
@@ -374,7 +382,7 @@ Production-ready modular monolith backend for an online guitar school.
     - 1 admin,
     - 3 teachers,
     - 5 students,
-  - creates/updates verified teacher profiles for all demo teachers,
+  - creates/updates active teacher profiles for all demo teachers,
   - creates 10 future slots distributed across demo teachers,
   - ensures 2 active student packages.
 - Safety:

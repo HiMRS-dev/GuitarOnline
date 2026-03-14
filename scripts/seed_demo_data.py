@@ -133,8 +133,7 @@ async def _ensure_teacher_profile(
             display_name=display_name,
             bio=bio,
             experience_years=experience_years,
-            is_approved=True,
-            status=TeacherStatusEnum.VERIFIED,
+            status=TeacherStatusEnum.ACTIVE,
         )
         session.add(profile)
         await session.flush()
@@ -143,8 +142,7 @@ async def _ensure_teacher_profile(
     profile.display_name = display_name
     profile.bio = bio
     profile.experience_years = experience_years
-    profile.is_approved = True
-    profile.status = TeacherStatusEnum.VERIFIED
+    profile.status = TeacherStatusEnum.ACTIVE
     await session.flush()
     return False
 

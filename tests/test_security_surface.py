@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import pytest
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 
 import app.main as main_module
-from app.modules.admin.schemas import AdminProvisionedUserRead
+from app.modules.admin.schemas import AdminUserListItemRead
 from app.modules.identity.rate_limit import (
     enforce_login_rate_limit,
     enforce_refresh_rate_limit,
     enforce_register_rate_limit,
 )
-from app.modules.identity.schemas import TokenPair, UserRead
+from app.modules.identity.schemas import TokenPair, UserCreate, UserRead
 
 
 def _route(path: str, method: str) -> APIRoute:
@@ -65,10 +66,24 @@ def test_identity_response_models_are_minimized() -> None:
         assert field_name not in TokenPair.model_fields
 
 
-def test_admin_provision_response_model_is_minimized() -> None:
-    provision_route = _route("/api/v1/admin/users/provision", "POST")
-    assert provision_route.response_model is AdminProvisionedUserRead
+def test_public_registration_request_schema_does_not_expose_role() -> None:
+    assert "role" not in UserCreate.model_fields
+
+
+def test_admin_role_change_response_model_is_minimized() -> None:
+    role_route = _route("/api/v1/admin/users/{user_id}/role", "POST")
+    assert role_route.response_model is AdminUserListItemRead
 
     forbidden_fields = {"password", "password_hash", "role_id", "secret_key"}
     for field_name in forbidden_fields:
-        assert field_name not in AdminProvisionedUserRead.model_fields
+        assert field_name not in AdminUserListItemRead.model_fields
+
+
+def test_legacy_admin_provision_route_is_removed() -> None:
+    with pytest.raises(AssertionError):
+        _route("/api/v1/admin/users/provision", "POST")
+
+
+def test_legacy_admin_teacher_verify_route_is_removed() -> None:
+    with pytest.raises(AssertionError):
+        _route("/api/v1/admin/teachers/{teacher_id}/verify", "POST")

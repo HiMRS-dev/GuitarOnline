@@ -23,7 +23,6 @@ class FakeAdminRepository:
         limit: int,
         offset: int,
         status: TeacherStatusEnum | None,
-        verified: bool | None,
         q: str | None,
         tag: str | None,
     ) -> tuple[list[dict], int]:
@@ -32,7 +31,6 @@ class FakeAdminRepository:
                 "limit": limit,
                 "offset": offset,
                 "status": status,
-                "verified": verified,
                 "q": q,
                 "tag": tag,
             },
@@ -50,8 +48,7 @@ def make_item() -> dict:
         "profile_id": uuid4(),
         "email": "teacher@example.com",
         "display_name": "Alice Blues",
-        "status": TeacherStatusEnum.VERIFIED,
-        "verified": True,
+        "status": TeacherStatusEnum.ACTIVE,
         "is_active": True,
         "tags": ["jazz", "fingerstyle"],
         "created_at_utc": datetime(2026, 3, 5, 10, 0, tzinfo=UTC),
@@ -69,8 +66,7 @@ async def test_admin_teacher_list_returns_items_and_passes_filters() -> None:
         admin,
         limit=20,
         offset=0,
-        status=TeacherStatusEnum.VERIFIED,
-        verified=True,
+        status=TeacherStatusEnum.ACTIVE,
         q="alice",
         tag="jazz",
     )
@@ -82,8 +78,7 @@ async def test_admin_teacher_list_returns_items_and_passes_filters() -> None:
         {
             "limit": 20,
             "offset": 0,
-            "status": TeacherStatusEnum.VERIFIED,
-            "verified": True,
+            "status": TeacherStatusEnum.ACTIVE,
             "q": "alice",
             "tag": "jazz",
         },
@@ -102,7 +97,6 @@ async def test_admin_teacher_list_requires_admin_role() -> None:
             limit=20,
             offset=0,
             status=None,
-            verified=None,
             q=None,
             tag=None,
         )

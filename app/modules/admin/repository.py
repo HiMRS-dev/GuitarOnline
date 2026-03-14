@@ -80,64 +80,69 @@ class AdminRepository:
         stmt = select(Role).where(Role.name == role_name)
         return await self.session.scalar(stmt)
 
-    async def get_user_by_email(self, email: str) -> User | None:
-        """Return user by email with role/profile relationships preloaded."""
-        stmt = (
-            select(User)
-            .where(User.email == email)
-            .options(
-                selectinload(User.role),
-                selectinload(User.teacher_profile),
-            )
-        )
-        return await self.session.scalar(stmt)
+    @staticmethod
+    def _default_teacher_display_name(email: str) -> str:
+        local_part = email.split("@", 1)[0].strip()
+        return (local_part or "teacher")[:128]
 
-    async def create_provisioned_user(
+    async def set_user_role(
         self,
         *,
-        email: str,
-        password_hash: str,
-        timezone: str,
-        role_id: UUID,
-        role_name: RoleEnum,
-        teacher_profile: dict[str, object] | None,
+        user: User,
+        role: Role,
         admin_id: UUID,
     ) -> User:
-        """Create privileged user and optional teacher profile with audit trail."""
-        user = User(
-            email=email,
-            password_hash=password_hash,
-            timezone=timezone,
-            role_id=role_id,
-        )
-        self.session.add(user)
-        await self.session.flush()
+        """Update user role and synchronize teacher profile state with audit trail."""
+        previous_role_name = user.role.name if user.role is not None else None
+        previous_profile = user.teacher_profile
+        previous_profile_status = previous_profile.status if previous_profile is not None else None
+        teacher_profile_created = False
 
-        profile: TeacherProfile | None = None
-        if role_name == RoleEnum.TEACHER:
-            profile_payload = teacher_profile or {}
-            profile = TeacherProfile(
-                user_id=user.id,
-                display_name=str(profile_payload.get("display_name", "")),
-                bio=str(profile_payload.get("bio", "")),
-                experience_years=int(profile_payload.get("experience_years", 0)),
-                status=TeacherStatusEnum.PENDING,
-                is_approved=False,
-            )
-            self.session.add(profile)
-            await self.session.flush()
+        user.role_id = role.id
+        user.role = role
+
+        if role.name == RoleEnum.TEACHER:
+            if previous_profile is None:
+                previous_profile = TeacherProfile(
+                    user_id=user.id,
+                    display_name=self._default_teacher_display_name(user.email),
+                    bio="",
+                    experience_years=0,
+                    status=TeacherStatusEnum.ACTIVE,
+                )
+                self.session.add(previous_profile)
+                await self.session.flush()
+                user.teacher_profile = previous_profile
+                teacher_profile_created = True
+            else:
+                previous_profile.status = TeacherStatusEnum.ACTIVE
+        elif previous_profile is not None:
+            previous_profile.status = TeacherStatusEnum.DISABLED
 
         self.session.add(
             AuditLog(
                 actor_id=admin_id,
-                action="admin.user.provision",
+                action="admin.user.role.change",
                 entity_type="user",
                 entity_id=str(user.id),
                 payload={
                     "email": user.email,
-                    "role": str(role_name),
-                    "teacher_profile_id": str(profile.id) if profile is not None else None,
-                    "teacher_profile_created": profile is not None,
+                    "from_role": (
+                        str(previous_role_name) if previous_role_name is not None else None
+                    ),
+                    "to_role": str(role.name),
+                    "teacher_profile_id": (
+                        str(previous_profile.id) if previous_profile is not None else None
+                    ),
+                    "teacher_profile_created": teacher_profile_created,
+                    "teacher_profile_from_status": (
+                        str(previous_profile_status)
+                        if previous_profile_status is not None
+                        else None
+                    ),
+                    "teacher_profile_to_status": (
+                        str(previous_profile.status) if previous_profile is not None else None
+                    ),
                 },
             ),
         )
@@ -220,7 +225,7 @@ class AdminRepository:
                     "is_active": user.is_active,
                     "teacher_profile_display_name": (
                         user.teacher_profile.display_name
-                        if user.teacher_profile is not None
+                        if user.role.name == RoleEnum.TEACHER and user.teacher_profile is not None
                         else None
                     ),
                     "created_at_utc": user.created_at,
@@ -288,7 +293,6 @@ class AdminRepository:
         limit: int,
         offset: int,
         status: TeacherStatusEnum | None,
-        verified: bool | None,
         q: str | None,
         tag: str | None,
     ) -> tuple[list[dict[str, object]], int]:
@@ -306,9 +310,10 @@ class AdminRepository:
         )
 
         if status is not None:
-            base_stmt = base_stmt.where(TeacherProfile.status == status)
-        if verified is not None:
-            base_stmt = base_stmt.where(TeacherProfile.is_approved.is_(verified))
+            if status == TeacherStatusEnum.ACTIVE:
+                base_stmt = base_stmt.where(TeacherProfile.status != TeacherStatusEnum.DISABLED)
+            else:
+                base_stmt = base_stmt.where(TeacherProfile.status == status)
         if normalized_q:
             pattern = f"%{normalized_q}%"
             base_stmt = base_stmt.where(
@@ -372,49 +377,6 @@ class AdminRepository:
 
         return self._serialize_teacher_profile(profile, include_profile_fields=True)
 
-    async def verify_teacher(
-        self,
-        *,
-        teacher_id: UUID,
-        admin_id: UUID,
-    ) -> dict[str, object] | None:
-        """Verify teacher profile and write audit trail."""
-        profile = await self._get_teacher_profile_by_user_id(
-            teacher_id=teacher_id,
-            lock_for_update=True,
-        )
-        if profile is None:
-            return None
-
-        user = profile.user
-        if user is None:
-            return None
-
-        previous_status = profile.status
-        previous_is_approved = profile.is_approved
-
-        profile.status = TeacherStatusEnum.VERIFIED
-        profile.is_approved = True
-
-        self.session.add(
-            AuditLog(
-                actor_id=admin_id,
-                action="admin.teacher.verify",
-                entity_type="teacher_profile",
-                entity_id=str(profile.id),
-                payload={
-                    "teacher_id": str(profile.user_id),
-                    "from_status": str(previous_status),
-                    "to_status": str(profile.status),
-                    "from_is_approved": previous_is_approved,
-                    "to_is_approved": profile.is_approved,
-                    "user_is_active": user.is_active,
-                },
-            ),
-        )
-        await self.session.flush()
-        return self._serialize_teacher_profile(profile, include_profile_fields=True)
-
     async def disable_teacher(
         self,
         *,
@@ -434,11 +396,9 @@ class AdminRepository:
             return None
 
         previous_status = profile.status
-        previous_is_approved = profile.is_approved
         previous_is_active = user.is_active
 
         profile.status = TeacherStatusEnum.DISABLED
-        profile.is_approved = False
         user.is_active = False
 
         self.session.add(
@@ -451,8 +411,6 @@ class AdminRepository:
                     "teacher_id": str(profile.user_id),
                     "from_status": str(previous_status),
                     "to_status": str(profile.status),
-                    "from_is_approved": previous_is_approved,
-                    "to_is_approved": profile.is_approved,
                     "from_user_is_active": previous_is_active,
                     "to_user_is_active": user.is_active,
                 },
@@ -495,13 +453,17 @@ class AdminRepository:
             return None
 
         tags = sorted({tag_row.tag for tag_row in profile.tags}, key=str.lower)
+        serialized_status = (
+            TeacherStatusEnum.DISABLED
+            if profile.status == TeacherStatusEnum.DISABLED
+            else TeacherStatusEnum.ACTIVE
+        )
         data: dict[str, object] = {
             "teacher_id": profile.user_id,
             "profile_id": profile.id,
             "email": user.email,
             "display_name": profile.display_name,
-            "status": profile.status,
-            "verified": profile.is_approved,
+            "status": serialized_status,
             "is_active": user.is_active,
             "tags": tags,
             "created_at_utc": profile.created_at,

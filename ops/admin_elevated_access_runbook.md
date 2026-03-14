@@ -1,54 +1,39 @@
 # Admin Elevated Access Runbook
 
-This runbook defines the controlled invite/approve flow for privileged roles (`teacher`, `admin`)
-and the evidence required for auditability.
+This runbook defines the controlled role reassignment flow for privileged roles
+(`teacher`, `admin`) and the evidence required for auditability.
 
 ## 1) Scope
 
 - Public self-registration must remain limited to `student`.
-- Elevated roles are created only through admin-protected provisioning endpoint:
-  - `POST /api/v1/admin/users/provision`
-- Teacher enablement is a two-step flow:
-  1. Provision account in `pending` profile state.
-  2. Approve explicitly from admin panel/API.
+- Elevated roles are assigned only to existing accounts through admin-protected role change endpoint:
+  - `POST /api/v1/admin/users/${USER_ID}/role`
+- Assigning `teacher` immediately creates or reactivates the teacher profile in active state.
 
-## 2) Invite (Provision) Flow
+## 2) Role Reassignment Flow
 
-1. Authenticate as `admin`.
-2. Call provision endpoint for `teacher` or `admin`.
+1. User completes public registration and is created as `student`.
+2. Authenticate as `admin`.
+3. Call role change endpoint for `teacher` or `admin`.
 
 Teacher example:
 
 ```bash
-curl -X POST "${BASE_URL}/api/v1/admin/users/provision" \
+curl -X POST "${BASE_URL}/api/v1/admin/users/${USER_ID}/role" \
   -H "Authorization: Bearer ${ADMIN_ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "teacher.invite@example.com",
-    "password": "StrongPass123!",
-    "timezone": "UTC",
-    "role": "teacher",
-    "teacher_profile": {
-      "display_name": "Invited Teacher",
-      "bio": "Session invite flow",
-      "experience_years": 5
-    }
+    "role": "teacher"
   }'
 ```
 
 Expected result:
-- HTTP `201`.
-- Teacher profile is created with `status=pending` and `verified=false`.
-- Audit event emitted: `admin.user.provision`.
+- HTTP `200`.
+- Existing account receives role `teacher`.
+- Teacher profile is created if missing and ends up with `status=active`.
+- Audit event emitted: `admin.user.role.change`.
 
-## 3) Approve / Disable Flow
-
-Approve teacher profile:
-
-```bash
-curl -X POST "${BASE_URL}/api/v1/admin/teachers/${TEACHER_USER_ID}/verify" \
-  -H "Authorization: Bearer ${ADMIN_ACCESS_TOKEN}"
-```
+## 3) Disable Flow
 
 Disable teacher profile and account:
 
@@ -58,7 +43,6 @@ curl -X POST "${BASE_URL}/api/v1/admin/teachers/${TEACHER_USER_ID}/disable" \
 ```
 
 Expected audit trail:
-- `admin.teacher.verify` for approval.
 - `admin.teacher.disable` for disable action.
 
 ## 4) Elevated Account Audit Report
@@ -81,10 +65,7 @@ Generate and store report from target host (recommended):
 ## 5) Audit Acceptance Criteria
 
 - Every privileged account in report has one of:
-  - `provision_source=admin.user.provision`, or
-  - `provision_source=legacy_or_unknown` with reviewed remediation owner.
-- Every teacher in active use is either:
-  - `teacher_status=verified`, or
-  - explicitly tracked as `pending`/`disabled`.
+  - `access_source=admin.user.role.change`, or
+  - `access_source=legacy_or_unknown` with reviewed remediation owner.
+- Every teacher in active use has `teacher_status=active`.
 - Latest report artifact link is recorded in `CONTEXT_CHECKPOINT.md`.
-

@@ -19,7 +19,6 @@ from app.core.enums import (
     SlotStatusEnum,
     TeacherStatusEnum,
 )
-from app.core.security import hash_password
 from app.modules.admin.models import AdminAction
 from app.modules.admin.repository import AdminRepository
 from app.modules.admin.schemas import (
@@ -30,14 +29,13 @@ from app.modules.admin.schemas import (
     AdminNotificationListItemRead,
     AdminOperationsOverviewRead,
     AdminPackageListItemRead,
-    AdminProvisionedUserRead,
     AdminSlotBlockRead,
     AdminSlotListItemRead,
     AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
     AdminUserListItemRead,
-    AdminUserProvisionRequest,
+    AdminUserRoleUpdateRequest,
 )
 from app.modules.identity.models import User
 from app.modules.notifications.templates import normalize_template_key
@@ -158,7 +156,6 @@ class AdminService:
         limit: int,
         offset: int,
         status: TeacherStatusEnum | None,
-        verified: bool | None,
         q: str | None,
         tag: str | None,
     ) -> tuple[list[AdminTeacherListItemRead], int]:
@@ -170,7 +167,6 @@ class AdminService:
             limit=limit,
             offset=offset,
             status=status,
-            verified=verified,
             q=q,
             tag=tag,
         )
@@ -192,21 +188,6 @@ class AdminService:
 
         return AdminTeacherDetailRead.model_validate(item)
 
-    async def verify_teacher(
-        self,
-        actor: User,
-        *,
-        teacher_id: UUID,
-    ) -> AdminTeacherDetailRead:
-        """Verify teacher profile and return updated detail."""
-        if actor.role.name != RoleEnum.ADMIN:
-            raise UnauthorizedException("Only admin can verify teachers")
-
-        item = await self.repository.verify_teacher(teacher_id=teacher_id, admin_id=actor.id)
-        if item is None:
-            raise NotFoundException("Teacher profile not found")
-        return AdminTeacherDetailRead.model_validate(item)
-
     async def disable_teacher(
         self,
         actor: User,
@@ -222,60 +203,47 @@ class AdminService:
             raise NotFoundException("Teacher profile not found")
         return AdminTeacherDetailRead.model_validate(item)
 
-    async def provision_user(
+    async def update_user_role(
         self,
         actor: User,
         *,
-        payload: AdminUserProvisionRequest,
-    ) -> AdminProvisionedUserRead:
-        """Provision elevated user role via admin-only flow."""
+        user_id: UUID,
+        payload: AdminUserRoleUpdateRequest,
+    ) -> AdminUserListItemRead:
+        """Reassign existing user role via admin-only flow."""
         if actor.role.name != RoleEnum.ADMIN:
-            raise UnauthorizedException("Only admin can provision users")
-
-        existing_user = await self.repository.get_user_by_email(payload.email)
-        if existing_user is not None:
-            raise ConflictException("User with this email already exists")
+            raise UnauthorizedException("Only admin can change user roles")
 
         role = await self.repository.get_role_by_name(payload.role)
         if role is None:
             raise NotFoundException("Role not found")
 
-        teacher_profile_payload: dict[str, object] | None = None
-        if payload.teacher_profile is not None:
-            teacher_profile_payload = payload.teacher_profile.model_dump()
+        target_user = await self.repository.get_user_by_id(user_id=user_id, lock_for_update=True)
+        if target_user is None:
+            raise NotFoundException("User not found")
+        if target_user.id == actor.id:
+            raise ConflictException("Admin cannot change own role")
+        if target_user.role is None:
+            raise NotFoundException("User role not found")
+        if (
+            target_user.role.name == payload.role
+            and payload.role != RoleEnum.TEACHER
+        ):
+            return self._serialize_admin_user(target_user)
+        if (
+            target_user.role.name == payload.role
+            and payload.role == RoleEnum.TEACHER
+            and target_user.teacher_profile is not None
+            and target_user.teacher_profile.status == TeacherStatusEnum.ACTIVE
+        ):
+            return self._serialize_admin_user(target_user)
 
-        provisioned_user = await self.repository.create_provisioned_user(
-            email=payload.email,
-            password_hash=hash_password(payload.password),
-            timezone=payload.timezone,
-            role_id=role.id,
-            role_name=payload.role,
-            teacher_profile=teacher_profile_payload,
+        updated_user = await self.repository.set_user_role(
+            user=target_user,
+            role=role,
             admin_id=actor.id,
         )
-
-        profile = provisioned_user.teacher_profile
-        teacher_profile = None
-        if profile is not None:
-            teacher_profile = {
-                "profile_id": profile.id,
-                "display_name": profile.display_name,
-                "status": profile.status,
-                "verified": profile.is_approved,
-            }
-
-        return AdminProvisionedUserRead.model_validate(
-            {
-                "user_id": provisioned_user.id,
-                "email": provisioned_user.email,
-                "timezone": provisioned_user.timezone,
-                "role": provisioned_user.role.name,
-                "is_active": provisioned_user.is_active,
-                "created_at_utc": provisioned_user.created_at,
-                "updated_at_utc": provisioned_user.updated_at,
-                "teacher_profile": teacher_profile,
-            },
-        )
+        return self._serialize_admin_user(updated_user)
 
     async def list_users(
         self,
@@ -520,7 +488,7 @@ class AdminService:
                 "is_active": user.is_active,
                 "teacher_profile_display_name": (
                     user.teacher_profile.display_name
-                    if user.teacher_profile is not None
+                    if role.name == RoleEnum.TEACHER and user.teacher_profile is not None
                     else None
                 ),
                 "created_at_utc": user.created_at,

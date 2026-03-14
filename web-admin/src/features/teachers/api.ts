@@ -4,7 +4,7 @@ import type { PageResponse } from "../../shared/api/types";
 import type { TeacherDetail, TeacherListItem } from "./types";
 
 type TeachersFilterParams = {
-  status?: "pending" | "verified" | "disabled";
+  status?: "active" | "disabled";
 };
 
 export async function listTeachers(
@@ -22,12 +22,6 @@ export async function listTeachers(
 
 export async function getTeacherDetail(teacherId: string): Promise<TeacherDetail> {
   return apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}`);
-}
-
-export async function verifyTeacher(teacherId: string): Promise<TeacherDetail> {
-  return apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}/verify`, {
-    method: "POST"
-  });
 }
 
 export async function disableTeacher(teacherId: string): Promise<TeacherDetail> {

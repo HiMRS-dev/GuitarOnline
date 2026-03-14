@@ -100,33 +100,15 @@ def main() -> None:
 
     teacher_email = f"deploy-smoke-teacher-{suffix}@guitaronline.dev"
     student_email = f"deploy-smoke-student-{suffix}@guitaronline.dev"
-    teacher_display_name = f"Deploy Smoke Teacher {suffix}"
+    if not configured_admin_email or not configured_admin_password:
+        raise RuntimeError(
+            "Set DEPLOY_SMOKE_ADMIN_EMAIL and DEPLOY_SMOKE_ADMIN_PASSWORD. "
+            "Public registration no longer creates admin accounts."
+        )
 
-    if configured_admin_email and configured_admin_password:
-        print("Smoke: admin login with configured credentials")
-        admin_email = configured_admin_email
-        admin_password = configured_admin_password
-    else:
-        admin_email = f"deploy-smoke-admin-{suffix}@guitaronline.dev"
-        admin_password = shared_credential
-        print("Smoke: admin bootstrap registration")
-        try:
-            request_json(
-                "/api/v1/identity/auth/register",
-                method="POST",
-                body={
-                    "email": admin_email,
-                    "password": admin_password,
-                    "timezone": "UTC",
-                    "role": "admin",
-                },
-                expected=201,
-            )
-        except RuntimeError as exc:
-            raise RuntimeError(
-                "Admin self-registration failed. Set DEPLOY_SMOKE_ADMIN_EMAIL and "
-                "DEPLOY_SMOKE_ADMIN_PASSWORD for production smoke checks."
-            ) from exc
+    print("Smoke: admin login with configured credentials")
+    admin_email = configured_admin_email
+    admin_password = configured_admin_password
 
     print("Smoke: student registration")
     student_user = request_json(
@@ -136,7 +118,18 @@ def main() -> None:
             "email": student_email,
             "password": shared_credential,
             "timezone": "UTC",
-            "role": "student",
+        },
+        expected=201,
+    )
+
+    print("Smoke: future teacher registration as student")
+    teacher_user = request_json(
+        "/api/v1/identity/auth/register",
+        method="POST",
+        body={
+            "email": teacher_email,
+            "password": shared_credential,
+            "timezone": "UTC",
         },
         expected=201,
     )
@@ -158,25 +151,18 @@ def main() -> None:
     if not isinstance(admin_role, dict) or str(admin_role.get("name")) != "admin":
         raise RuntimeError("Configured smoke admin account does not have admin role")
 
-    print("Smoke: admin provisions teacher")
-    teacher_user = request_json(
-        "/api/v1/admin/users/provision",
+    teacher_user_id = str(teacher_user["id"])
+
+    print("Smoke: admin promotes existing user to teacher")
+    request_json(
+        f"/api/v1/admin/users/{teacher_user_id}/role",
         method="POST",
         headers=auth_headers(admin_token),
         body={
-            "email": teacher_email,
-            "password": shared_credential,
-            "timezone": "UTC",
             "role": "teacher",
-            "teacher_profile": {
-                "display_name": teacher_display_name,
-                "bio": "Smoke test profile",
-                "experience_years": 3,
-            },
         },
-        expected=201,
+        expected=200,
     )
-    teacher_user_id = str(teacher_user["user_id"])
 
     teacher_login = request_json(
         "/api/v1/identity/auth/login",
@@ -207,7 +193,7 @@ def main() -> None:
 
     print("Smoke: admin teacher moderation list")
     teacher_query = urlencode(
-        {"q": teacher_display_name, "limit": 10, "offset": 0},
+        {"q": teacher_email, "limit": 10, "offset": 0},
     )
     admin_teachers = request_json(
         f"/api/v1/admin/teachers?{teacher_query}",

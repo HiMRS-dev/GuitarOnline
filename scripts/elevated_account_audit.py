@@ -29,14 +29,12 @@ def _iso(value: datetime | None) -> str | None:
     return value.astimezone(UTC).isoformat()
 
 
-def _role_key(role: RoleEnum) -> str:
-    return str(role).lower()
-
-
 def _teacher_status_key(status: TeacherStatusEnum | None) -> str:
     if status is None:
         return "missing_profile"
-    return str(status).lower()
+    if status == TeacherStatusEnum.DISABLED:
+        return str(status).lower()
+    return str(TeacherStatusEnum.ACTIVE)
 
 
 @dataclass(frozen=True)
@@ -50,10 +48,9 @@ class ElevatedAccountEntry:
     updated_at: datetime
     teacher_profile_id: UUID | None
     teacher_status: TeacherStatusEnum | None
-    teacher_verified: bool | None
-    provision_source: str
-    provisioned_at: datetime | None
-    provisioned_by_admin_id: UUID | None
+    access_source: str
+    access_assigned_at: datetime | None
+    access_assigned_by_admin_id: UUID | None
 
     def as_json(self) -> dict[str, Any]:
         return {
@@ -68,11 +65,12 @@ class ElevatedAccountEntry:
             "teacher_status": (
                 str(self.teacher_status) if self.teacher_status is not None else "missing_profile"
             ),
-            "teacher_verified": self.teacher_verified,
-            "provision_source": self.provision_source,
-            "provisioned_at_utc": _iso(self.provisioned_at),
-            "provisioned_by_admin_id": (
-                str(self.provisioned_by_admin_id) if self.provisioned_by_admin_id else None
+            "access_source": self.access_source,
+            "access_assigned_at_utc": _iso(self.access_assigned_at),
+            "access_assigned_by_admin_id": (
+                str(self.access_assigned_by_admin_id)
+                if self.access_assigned_by_admin_id
+                else None
             ),
         }
 
@@ -84,10 +82,9 @@ def build_summary(entries: list[ElevatedAccountEntry]) -> dict[str, int]:
         "admins_total": 0,
         "active_accounts": 0,
         "inactive_accounts": 0,
-        "provisioned_via_admin_flow": 0,
+        "assigned_via_admin_role_change": 0,
         "legacy_or_unknown_source": 0,
-        "teacher_status_verified": 0,
-        "teacher_status_pending": 0,
+        "teacher_status_active": 0,
         "teacher_status_disabled": 0,
         "teacher_status_missing_profile": 0,
     }
@@ -97,8 +94,8 @@ def build_summary(entries: list[ElevatedAccountEntry]) -> dict[str, int]:
         else:
             summary["inactive_accounts"] += 1
 
-        if entry.provision_source == "admin.user.provision":
-            summary["provisioned_via_admin_flow"] += 1
+        if entry.access_source == "admin.user.role.change":
+            summary["assigned_via_admin_role_change"] += 1
         else:
             summary["legacy_or_unknown_source"] += 1
 
@@ -131,19 +128,21 @@ def render_markdown(
         f"- Admins: `{summary['admins_total']}`",
         f"- Active: `{summary['active_accounts']}`",
         f"- Inactive: `{summary['inactive_accounts']}`",
-        f"- Provisioned via `admin.user.provision`: `{summary['provisioned_via_admin_flow']}`",
-        f"- Legacy/unknown provisioning source: `{summary['legacy_or_unknown_source']}`",
+        (
+            "- Assigned via `admin.user.role.change`: "
+            f"`{summary['assigned_via_admin_role_change']}`"
+        ),
+        f"- Legacy/unknown source: `{summary['legacy_or_unknown_source']}`",
         "",
         "## Teacher Status",
         "",
-        f"- Verified: `{summary['teacher_status_verified']}`",
-        f"- Pending: `{summary['teacher_status_pending']}`",
+        f"- Active: `{summary['teacher_status_active']}`",
         f"- Disabled: `{summary['teacher_status_disabled']}`",
         f"- Missing profile: `{summary['teacher_status_missing_profile']}`",
         "",
         "## Entries",
         "",
-        "| email | role | active | teacher_status | provision_source | provisioned_at_utc |",
+        "| email | role | active | teacher_status | access_source | access_assigned_at_utc |",
         "| --- | --- | --- | --- | --- | --- |",
     ]
     for row in rows:
@@ -153,18 +152,18 @@ def render_markdown(
             f"{row['role']} | "
             f"{row['is_active']} | "
             f"{row['teacher_status']} | "
-            f"{row['provision_source']} | "
-            f"{row['provisioned_at_utc'] or '-'} |"
+            f"{row['access_source']} | "
+            f"{row['access_assigned_at_utc'] or '-'} |"
         )
     lines.append("")
     return "\n".join(lines)
 
 
 async def load_entries(session: AsyncSession) -> list[ElevatedAccountEntry]:
-    provisioned_at_subquery = (
+    role_change_at_subquery = (
         select(AuditLog.created_at)
         .where(
-            AuditLog.action == "admin.user.provision",
+            AuditLog.action == "admin.user.role.change",
             AuditLog.entity_type == "user",
             AuditLog.entity_id == cast(User.id, String),
         )
@@ -172,10 +171,10 @@ async def load_entries(session: AsyncSession) -> list[ElevatedAccountEntry]:
         .limit(1)
         .scalar_subquery()
     )
-    provisioned_by_subquery = (
+    role_change_by_subquery = (
         select(AuditLog.actor_id)
         .where(
-            AuditLog.action == "admin.user.provision",
+            AuditLog.action == "admin.user.role.change",
             AuditLog.entity_type == "user",
             AuditLog.entity_id == cast(User.id, String),
         )
@@ -183,7 +182,6 @@ async def load_entries(session: AsyncSession) -> list[ElevatedAccountEntry]:
         .limit(1)
         .scalar_subquery()
     )
-
     stmt = (
         select(
             User.id,
@@ -195,9 +193,8 @@ async def load_entries(session: AsyncSession) -> list[ElevatedAccountEntry]:
             cast(Role.name, String).label("role_name_raw"),
             TeacherProfile.id.label("teacher_profile_id"),
             cast(TeacherProfile.status, String).label("teacher_status_raw"),
-            TeacherProfile.is_approved.label("teacher_verified"),
-            provisioned_at_subquery.label("provisioned_at"),
-            provisioned_by_subquery.label("provisioned_by_admin_id"),
+            role_change_at_subquery.label("role_change_at"),
+            role_change_by_subquery.label("role_change_by_admin_id"),
         )
         .join(Role, Role.id == User.role_id)
         .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
@@ -219,8 +216,16 @@ async def load_entries(session: AsyncSession) -> list[ElevatedAccountEntry]:
                 teacher_status = TeacherStatusEnum(str(row.teacher_status_raw).lower())
             except ValueError:
                 teacher_status = None
+            else:
+                if teacher_status != TeacherStatusEnum.DISABLED:
+                    teacher_status = TeacherStatusEnum.ACTIVE
 
-        has_provision_event = row.provisioned_at is not None
+        access_source = "admin.user.role.change"
+        access_assigned_at = row.role_change_at
+        access_assigned_by_admin_id = row.role_change_by_admin_id
+        if access_assigned_at is None:
+            access_source = "legacy_or_unknown"
+
         entries.append(
             ElevatedAccountEntry(
                 user_id=row.id,
@@ -232,14 +237,9 @@ async def load_entries(session: AsyncSession) -> list[ElevatedAccountEntry]:
                 updated_at=row.updated_at,
                 teacher_profile_id=row.teacher_profile_id,
                 teacher_status=teacher_status,
-                teacher_verified=(
-                    bool(row.teacher_verified) if row.teacher_profile_id is not None else None
-                ),
-                provision_source=(
-                    "admin.user.provision" if has_provision_event else "legacy_or_unknown"
-                ),
-                provisioned_at=row.provisioned_at,
-                provisioned_by_admin_id=row.provisioned_by_admin_id,
+                access_source=access_source,
+                access_assigned_at=access_assigned_at,
+                access_assigned_by_admin_id=access_assigned_by_admin_id,
             ),
         )
     return entries

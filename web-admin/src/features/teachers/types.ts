@@ -4,7 +4,6 @@ export type TeacherListItem = {
   email: string;
   display_name: string;
   status: string;
-  verified: boolean;
   is_active: boolean;
   tags: string[];
   created_at_utc: string;

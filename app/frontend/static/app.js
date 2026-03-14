@@ -270,7 +270,6 @@ async function handleRegister(event) {
     email: form.email.value.trim(),
     password: form.password.value,
     timezone: form.timezone.value.trim() || "UTC",
-    role: form.role.value,
   };
 
   try {

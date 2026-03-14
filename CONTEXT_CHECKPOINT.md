@@ -774,28 +774,28 @@
   - `py -m poetry run ruff check scripts/secret_guard.py tests/test_secret_guard.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_secret_guard.py` -> `4 passed`.
   - `python scripts/secret_guard.py --mode repo` -> `Secret scan passed.`.
-- architecture follow-up (2026-03-10): `AR-01` protected elevated-role provisioning flow (teacher/admin) implemented.
+- architecture follow-up (2026-03-10): `AR-01` protected elevated-role reassignment flow (teacher/admin) implemented.
 - implemented:
-  - admin-only provisioning endpoint:
-    - `POST /api/v1/admin/users/provision` in `app/modules/admin/router.py`,
-    - request/response contracts in `app/modules/admin/schemas.py`:
-      - `AdminUserProvisionRequest`,
-      - `AdminProvisionedUserRead`.
+  - admin-only role change endpoint:
+    - `POST /api/v1/admin/users/{user_id}/role` in `app/modules/admin/router.py`,
+    - request contract `AdminUserRoleUpdateRequest` in `app/modules/admin/schemas.py`,
+    - response uses existing `AdminUserListItemRead`.
   - service orchestration in `app/modules/admin/service.py`:
     - explicit admin-role gate,
-    - duplicate-email conflict handling,
+    - self-role-change protection,
     - role existence validation,
-    - password hashing before persistence.
+    - no-op handling when the requested role is already assigned.
   - repository persistence in `app/modules/admin/repository.py`:
-    - creates privileged `users` records for `teacher`/`admin`,
-    - auto-creates `teacher_profiles` in `pending` state for provisioned teachers,
-    - writes audit entry `admin.user.provision` to `audit_logs`.
+    - reassigns role for existing `users` records,
+    - auto-creates or reactivates `teacher_profiles` in active state for users reassigned to `teacher`,
+    - disables `teacher_profiles` when users leave the `teacher` role,
+    - writes audit entry `admin.user.role.change` to `audit_logs`.
   - regression/security tests:
     - new `tests/test_admin_user_provisioning.py`,
-    - extended `tests/test_security_surface.py` with minimized response-model check for provisioning route.
+    - extended `tests/test_security_surface.py` with minimized response-model check for role-change route and removal of legacy provisioning route.
 - conflict handling during implementation:
-  - provisioning for `teacher` now always creates a pending profile to avoid orphan teacher accounts that break moderation/listing flows expecting `teacher_profiles` records.
-  - schema-level role guard blocks provisioning of `student` via this elevated endpoint, preventing bypass of public self-registration policy intent.
+  - role reassignment to `teacher` now always creates or restores an active profile to avoid orphan teacher accounts that break listing flows expecting `teacher_profiles` records.
+  - public self-registration remains restricted to `student`, and elevated roles no longer have any account-creation path through admin API.
 - verification evidence:
   - `py -m poetry run ruff check app/modules/admin/router.py app/modules/admin/service.py app/modules/admin/repository.py app/modules/admin/schemas.py tests/test_admin_user_provisioning.py tests/test_security_surface.py` -> `All checks passed!`.
   - `py -m poetry run pytest -q tests/test_admin_user_provisioning.py tests/test_security_surface.py tests/test_identity_registration_security.py` -> `12 passed`.
@@ -840,7 +840,7 @@
     - `get_package_by_id_for_update` now uses `execution_options(populate_existing=True)` with `FOR UPDATE`,
     - prevents stale in-session package state from bypassing concurrent balance checks.
   - PII security route allowlist updated in `tests/test_pii_field_visibility.py`:
-    - added `/api/v1/admin/users/provision` to approved email-exposing admin routes.
+    - added `/api/v1/admin/users/{user_id}/role` to approved email-exposing admin routes.
 - conflict handling during implementation:
   - CI `integration` failure showed both concurrent confirms returning `200`; root cause was stale ORM identity-map state during locked package read under concurrency.
   - forcing refresh on locked package row preserves race safety while keeping existing booking/service APIs unchanged.
@@ -1023,7 +1023,7 @@
 ## 14) Architecture Remediation Status (Update 2026-03-10)
 | ID | Priority | Status | Implemented | Remaining |
 | --- | --- | --- | --- | --- |
-| `AR-01` | CRITICAL | Done | Public self-registration is restricted by allowlist (`AUTH_REGISTER_ALLOWED_ROLES`, default `student`) and server-side enforcement blocks role escalation in `/identity/auth/register`; admin provisioning flow `POST /api/v1/admin/users/provision` is protected and audited (`admin.user.provision`); elevated-account audit/report chain is live (`scripts/elevated_account_audit.py`, `.github/workflows/elevated-account-audit.yml`, `scripts/run_elevated_account_audit_remote.sh`) with operational invite/approve runbook `ops/admin_elevated_access_runbook.md`. | N/A |
+| `AR-01` | CRITICAL | Done | Public self-registration creates only `student` accounts and server-side enforcement blocks role escalation in `/identity/auth/register`; self-registration can be disabled with `AUTH_SELF_REGISTRATION_ENABLED=false`; admin reassigns elevated roles only for existing accounts through `POST /api/v1/admin/users/{user_id}/role`, and the change is audited as `admin.user.role.change`; elevated-account audit/report chain is live (`scripts/elevated_account_audit.py`, `.github/workflows/elevated-account-audit.yml`, `scripts/run_elevated_account_audit_remote.sh`) with operational role-change/approve runbook `ops/admin_elevated_access_runbook.md`. | N/A |
 | `AR-02` | HIGH | Done | Added pessimistic locks for package/booking balance mutations (`FOR UPDATE`) in booking confirm/cancel/reschedule and lesson completion; added DB guard constraints; corrected constraint semantics via migration `20260309_0020` (`lessons_reserved <= lessons_left`); added concurrent integration regression test `test_concurrent_confirm_on_two_slots_with_last_package_lesson_allows_only_one_success`; hardened locked package read with `populate_existing=True` to prevent stale identity-map race. | N/A |
 | `AR-03` | HIGH | Done | Outbox worker claims pending/retryable events via `FOR UPDATE SKIP LOCKED`, uses idempotency key (`outbox:event:user:template:index`), and now runs with per-event durable commit boundaries (`commit_callback=session.commit` + one-event claim loops) to reduce post-send/pre-commit duplication window. | N/A |
 | `AR-04` | HIGH | Done | Trusted proxy matching supports CIDR in identity rate-limit resolver; proxy compose profile sets trusted proxy CIDR defaults; added explicit production runbook `ops/auth_rate_limit_proxy_runbook.md` and linked it from release/hardening checklists; proxy header handling hardened to overwrite `X-Forwarded-For` with `$remote_addr`. | N/A |

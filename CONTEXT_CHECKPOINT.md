@@ -1257,6 +1257,7 @@
 | `ENV-07` | P1 | Reduce `live` smoke to ops-only probes. | Keep deploy/runtime checks focused on service health, readiness, reachability, metrics, logs, and alerts. | `live` smoke can validate production contour health without mutating business data. |
 | `ENV-08` | P1 | Add cleanup/reset automation for `test DB`. | Post-run reset of smoke pool and nightly cleanup of temporary synthetic artifacts/records. | Synthetic dataset size in `test` stays bounded and deterministic. |
 | `ENV-09` | P1 | Update ops/docs/runbooks to new policy. | Align `README`, release checklist, deploy smoke docs, synthetic retention docs, and checkpoint references. | Documentation consistently states `live != synthetic user flows`, `booking smoke = test DB only`. |
+| `ENV-10` | P1 | Remove post-registration auth visibility lag in backend flow. | Eliminate the current `register -> immediate login` race so integration/smoke helpers no longer need retry loops after registration. | Newly registered users can log in deterministically on the next request without client-side retry; temporary retry workaround is removed from integration helpers. |
 
 ### 18.2) Execution Order
 1. `ENV-01`: restore one emergency `bootstrap-admin` in `live`.
@@ -1268,6 +1269,67 @@
 7. `ENV-07`: simplify `live` smoke to safe ops-only probes.
 8. `ENV-08`: automate reset/cleanup for test synthetic data.
 9. `ENV-09`: finalize docs/runbooks/checkpoint alignment.
+10. `ENV-10`: remove backend post-registration login visibility lag and delete helper retry workaround.
+
+### 18.2.1) ENV-02 Phase 1 Progress (2026-03-14)
+- added isolated compose scaffold:
+  - `docker-compose.test.yml`
+- stack separation guardrails in scaffold:
+  - dedicated compose project name `guitaronline-test`,
+  - dedicated host ports (`18000`, `15432`, `16379` by default),
+  - dedicated DB name `guitaronline_test`,
+  - dedicated limiter namespace `auth_rate_limit_test`,
+  - `APP_ENV=test` by default.
+- added `TEST_*` env template entries to `.env.example` for the isolated test contour.
+- added regression guardrail coverage for test compose asset presence/isolation in:
+  - `tests/test_proxy_rate_limit_config.py`
+- remaining `ENV-02` work:
+  - optional proxy/admin-ui parity for test stack if needed by future smoke scope,
+  - wiring user-flow scripts/tests to consume the new test contour.
+
+### 18.2.2) ENV-02 Phase 2 Progress (2026-03-14)
+- integration user-flow defaults now point to isolated test contour by default:
+  - `INTEGRATION_BASE_URL=http://localhost:18000/api/v1`
+  - `INTEGRATION_HEALTH_URL=http://localhost:18000/health`
+  - `INTEGRATION_DB_DSN=postgresql://postgres:postgres@localhost:15432/guitaronline_test`
+- integration role-reassignment tests no longer default to `DEPLOY_SMOKE_ADMIN_*`;
+  they now use `TEST_BOOTSTRAP_ADMIN_*`.
+- added reusable bootstrap utility:
+  - `scripts/bootstrap_admin.py`
+- `docker-compose.test.yml` app service now wires:
+  - `BOOTSTRAP_ADMIN_EMAIL <- TEST_BOOTSTRAP_ADMIN_EMAIL`
+  - `BOOTSTRAP_ADMIN_PASSWORD <- TEST_BOOTSTRAP_ADMIN_PASSWORD`
+- test contour now uses elevated auth rate-limit defaults so integration user-flow does not
+  trip production-ish `register/login/refresh` caps:
+  - `TEST_AUTH_RATE_LIMIT_REGISTER_REQUESTS=200`
+  - `TEST_AUTH_RATE_LIMIT_LOGIN_REQUESTS=200`
+  - `TEST_AUTH_RATE_LIMIT_REFRESH_REQUESTS=400`
+- remaining `ENV-02` work:
+  - prove full integration path on running test stack,
+  - decide whether admin-ui/proxy parity is needed in test contour before smoke-pool/reset work (`ENV-04`).
+
+### 18.2.3) ENV-02 Phase 3 Progress (2026-03-14)
+- running isolated test contour has now been proven end-to-end:
+  - `docker-compose.test.yml` stack is up on `localhost:18000/15432/16379`,
+  - Alembic head in `test DB` is `20260314_0021`,
+  - `bootstrap-admin@guitaronline.dev` is present in `test DB`,
+  - full integration suite against the isolated contour passed:
+    - `tests/test_portal_auth_flow_integration.py`
+    - `tests/test_rbac_access_integration.py`
+    - `tests/test_booking_billing_integration.py`
+    - `tests/test_admin_slot_bulk_create_integration.py`
+    - result: `41 passed`
+- runtime blockers discovered during proof and resolved:
+  - test-only auth rate limits were raised to avoid synthetic registration/login churn
+    colliding with production-ish defaults,
+  - integration helpers now retry immediate post-registration login to tolerate the current
+    request-transaction visibility lag,
+  - admin teacher list/detail/disable flows now eager-load `user.role` to avoid async
+    `MissingGreenlet` on teacher profile serialization.
+- follow-up deliberately left for later:
+  - `ENV-10`: replace the temporary post-registration login retry workaround with a backend fix
+    so `register -> login` is deterministic without client polling.
+- `ENV-02` can be treated as complete enough to start `ENV-03` guardrails.
 
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.

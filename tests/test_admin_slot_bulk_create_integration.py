@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -13,17 +14,20 @@ import httpx
 import pytest
 import pytest_asyncio
 
-API_BASE_URL = os.getenv("INTEGRATION_BASE_URL", "http://localhost:8000/api/v1").rstrip("/")
-HEALTHCHECK_URL = os.getenv("INTEGRATION_HEALTH_URL", "http://localhost:8000/health")
-DB_DSN = os.getenv("INTEGRATION_DB_DSN", "postgresql://postgres:postgres@localhost:5432/guitaronline")
+API_BASE_URL = os.getenv("INTEGRATION_BASE_URL", "http://localhost:18000/api/v1").rstrip("/")
+HEALTHCHECK_URL = os.getenv("INTEGRATION_HEALTH_URL", "http://localhost:18000/health")
+DB_DSN = os.getenv(
+    "INTEGRATION_DB_DSN",
+    "postgresql://postgres:postgres@localhost:15432/guitaronline_test",
+)
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("INTEGRATION_TIMEOUT_SECONDS", "15"))
 INTEGRATION_ADMIN_EMAIL = os.getenv(
     "INTEGRATION_ADMIN_EMAIL",
-    os.getenv("DEPLOY_SMOKE_ADMIN_EMAIL", "demo-admin@guitaronline.dev"),
+    os.getenv("TEST_BOOTSTRAP_ADMIN_EMAIL", "bootstrap-admin@guitaronline.dev"),
 ).strip()
 INTEGRATION_ADMIN_PASSWORD = os.getenv(
     "INTEGRATION_ADMIN_PASSWORD",
-    os.getenv("DEPLOY_SMOKE_ADMIN_PASSWORD", "DemoPass123!"),
+    os.getenv("TEST_BOOTSTRAP_ADMIN_PASSWORD", ""),
 )
 
 _INTEGRATION_STACK_HEALTHY: bool | None = None
@@ -47,6 +51,30 @@ def _auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
+async def _login_with_retry(
+    client: httpx.AsyncClient,
+    *,
+    email: str,
+    password: str,
+) -> httpx.Response:
+    last_response: httpx.Response | None = None
+
+    for _ in range(6):
+        response = await client.post(
+            "/identity/auth/login",
+            json={"email": email, "password": password},
+        )
+        if response.status_code == 200:
+            return response
+        if response.status_code != 403 or "Invalid credentials" not in response.text:
+            return response
+        last_response = response
+        await asyncio.sleep(0.1)
+
+    assert last_response is not None
+    return last_response
+
+
 async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
     email = f"bulk-overlap-{role}-{uuid4().hex}@guitaronline.dev"
     password = "StrongPass123!"
@@ -62,9 +90,10 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
     _assert_status(register_response, 201)
     user_id = UUID(register_response.json()["id"])
 
-    login_response = await client.post(
-        "/identity/auth/login",
-        json={"email": email, "password": password},
+    login_response = await _login_with_retry(
+        client,
+        email=email,
+        password=password,
     )
     _assert_status(login_response, 200)
     access_token = login_response.json()["access_token"]

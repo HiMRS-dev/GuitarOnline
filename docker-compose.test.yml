@@ -1,0 +1,179 @@
+name: guitaronline-test
+
+services:
+  db:
+    image: postgres:16-alpine
+    pull_policy: if_not_present
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-guitaronline_test}
+    volumes:
+      - test_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${TEST_POSTGRES_USER:-postgres} -d ${TEST_POSTGRES_DB:-guitaronline_test}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "${TEST_POSTGRES_HOST_PORT:-15432}:5432"
+
+  redis:
+    image: redis:7-alpine
+    pull_policy: if_not_present
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "${TEST_REDIS_HOST_PORT:-16379}:6379"
+
+  app:
+    build:
+      context: .
+      args:
+        ADMIN_UI_API_BASE_URL: ${TEST_ADMIN_UI_API_BASE_URL:-/api/v1}
+        ADMIN_UI_BASE_PATH: ${TEST_ADMIN_UI_BASE_PATH:-/admin/}
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${TEST_APP_ENV:-test}
+      DEBUG: ${TEST_DEBUG:-true}
+      SECRET_KEY: ${TEST_SECRET_KEY:-test-stack-secret-key}
+      BOOTSTRAP_ADMIN_EMAIL: ${TEST_BOOTSTRAP_ADMIN_EMAIL:-bootstrap-admin@guitaronline.dev}
+      BOOTSTRAP_ADMIN_PASSWORD: ${TEST_BOOTSTRAP_ADMIN_PASSWORD:-}
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-guitaronline_test}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DATABASE_URL: ${TEST_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@db:5432/guitaronline_test}
+      REDIS_URL: ${TEST_REDIS_URL:-redis://redis:6379/0}
+      AUTH_RATE_LIMIT_BACKEND: ${TEST_AUTH_RATE_LIMIT_BACKEND:-redis}
+      AUTH_RATE_LIMIT_REDIS_NAMESPACE: ${TEST_AUTH_RATE_LIMIT_REDIS_NAMESPACE:-auth_rate_limit_test}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${TEST_AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      AUTH_RATE_LIMIT_REGISTER_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REGISTER_REQUESTS:-200}
+      AUTH_RATE_LIMIT_LOGIN_REQUESTS: ${TEST_AUTH_RATE_LIMIT_LOGIN_REQUESTS:-200}
+      AUTH_RATE_LIMIT_REFRESH_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REFRESH_REQUESTS:-400}
+      AUTH_SELF_REGISTRATION_ENABLED: ${TEST_AUTH_SELF_REGISTRATION_ENABLED:-true}
+      AUTH_REFRESH_COOKIE_SECURE: ${TEST_AUTH_REFRESH_COOKIE_SECURE:-false}
+      FRONTEND_ADMIN_ORIGIN: ${TEST_FRONTEND_ADMIN_ORIGIN:-http://localhost:5174}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "${TEST_APP_HOST_PORT:-18000}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  outbox-worker:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${TEST_APP_ENV:-test}
+      DEBUG: ${TEST_DEBUG:-true}
+      SECRET_KEY: ${TEST_SECRET_KEY:-test-stack-secret-key}
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-guitaronline_test}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DATABASE_URL: ${TEST_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@db:5432/guitaronline_test}
+      REDIS_URL: ${TEST_REDIS_URL:-redis://redis:6379/0}
+      AUTH_RATE_LIMIT_BACKEND: ${TEST_AUTH_RATE_LIMIT_BACKEND:-redis}
+      AUTH_RATE_LIMIT_REDIS_NAMESPACE: ${TEST_AUTH_RATE_LIMIT_REDIS_NAMESPACE:-auth_rate_limit_test}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${TEST_AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      AUTH_RATE_LIMIT_REGISTER_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REGISTER_REQUESTS:-200}
+      AUTH_RATE_LIMIT_LOGIN_REQUESTS: ${TEST_AUTH_RATE_LIMIT_LOGIN_REQUESTS:-200}
+      AUTH_RATE_LIMIT_REFRESH_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REFRESH_REQUESTS:-400}
+      AUTH_SELF_REGISTRATION_ENABLED: ${TEST_AUTH_SELF_REGISTRATION_ENABLED:-true}
+      OUTBOX_WORKER_MODE: loop
+      OUTBOX_WORKER_POLL_SECONDS: 10
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m app.workers.outbox_notifications_worker
+
+  booking-holds-expirer:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${TEST_APP_ENV:-test}
+      DEBUG: ${TEST_DEBUG:-true}
+      SECRET_KEY: ${TEST_SECRET_KEY:-test-stack-secret-key}
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-guitaronline_test}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DATABASE_URL: ${TEST_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@db:5432/guitaronline_test}
+      REDIS_URL: ${TEST_REDIS_URL:-redis://redis:6379/0}
+      AUTH_RATE_LIMIT_BACKEND: ${TEST_AUTH_RATE_LIMIT_BACKEND:-redis}
+      AUTH_RATE_LIMIT_REDIS_NAMESPACE: ${TEST_AUTH_RATE_LIMIT_REDIS_NAMESPACE:-auth_rate_limit_test}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${TEST_AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      AUTH_RATE_LIMIT_REGISTER_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REGISTER_REQUESTS:-200}
+      AUTH_RATE_LIMIT_LOGIN_REQUESTS: ${TEST_AUTH_RATE_LIMIT_LOGIN_REQUESTS:-200}
+      AUTH_RATE_LIMIT_REFRESH_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REFRESH_REQUESTS:-400}
+      AUTH_SELF_REGISTRATION_ENABLED: ${TEST_AUTH_SELF_REGISTRATION_ENABLED:-true}
+      BOOKING_HOLDS_EXPIRER_MODE: loop
+      BOOKING_HOLDS_EXPIRER_POLL_SECONDS: 30
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m app.workers.booking_holds_expirer
+
+  packages-expirer:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${TEST_APP_ENV:-test}
+      DEBUG: ${TEST_DEBUG:-true}
+      SECRET_KEY: ${TEST_SECRET_KEY:-test-stack-secret-key}
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-guitaronline_test}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DATABASE_URL: ${TEST_DATABASE_URL:-postgresql+asyncpg://postgres:postgres@db:5432/guitaronline_test}
+      REDIS_URL: ${TEST_REDIS_URL:-redis://redis:6379/0}
+      AUTH_RATE_LIMIT_BACKEND: ${TEST_AUTH_RATE_LIMIT_BACKEND:-redis}
+      AUTH_RATE_LIMIT_REDIS_NAMESPACE: ${TEST_AUTH_RATE_LIMIT_REDIS_NAMESPACE:-auth_rate_limit_test}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${TEST_AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      AUTH_RATE_LIMIT_REGISTER_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REGISTER_REQUESTS:-200}
+      AUTH_RATE_LIMIT_LOGIN_REQUESTS: ${TEST_AUTH_RATE_LIMIT_LOGIN_REQUESTS:-200}
+      AUTH_RATE_LIMIT_REFRESH_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REFRESH_REQUESTS:-400}
+      AUTH_SELF_REGISTRATION_ENABLED: ${TEST_AUTH_SELF_REGISTRATION_ENABLED:-true}
+      PACKAGES_EXPIRER_MODE: loop
+      PACKAGES_EXPIRER_POLL_SECONDS: 3600
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m app.workers.packages_expirer
+
+volumes:
+  test_pg_data:

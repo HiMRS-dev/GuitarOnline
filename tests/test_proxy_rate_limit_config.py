@@ -49,3 +49,43 @@ def test_deploy_script_fails_closed_on_missing_grafana_credentials() -> None:
     assert "append_env_override" not in deploy_script
     assert "JWT_SECRET" not in deploy_script
     assert "SECRET_KEY" not in deploy_script
+
+
+def test_test_compose_stack_is_isolated_from_live_defaults() -> None:
+    test_compose = Path("docker-compose.test.yml").read_text(encoding="utf-8")
+    env_example = Path(".env.example").read_text(encoding="utf-8")
+
+    assert "name: guitaronline-test" in test_compose
+    assert 'APP_ENV: ${TEST_APP_ENV:-test}' in test_compose
+    assert "${TEST_APP_HOST_PORT:-18000}:8000" in test_compose
+    assert "${TEST_POSTGRES_HOST_PORT:-15432}:5432" in test_compose
+    assert "${TEST_REDIS_HOST_PORT:-16379}:6379" in test_compose
+    assert "guitaronline_test" in test_compose
+    assert "auth_rate_limit_test" in test_compose
+    assert (
+        "BOOTSTRAP_ADMIN_EMAIL: ${TEST_BOOTSTRAP_ADMIN_EMAIL:-bootstrap-admin@guitaronline.dev}"
+        in test_compose
+    )
+    assert (
+        "AUTH_RATE_LIMIT_REGISTER_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REGISTER_REQUESTS:-200}"
+        in test_compose
+    )
+    assert (
+        "AUTH_RATE_LIMIT_LOGIN_REQUESTS: ${TEST_AUTH_RATE_LIMIT_LOGIN_REQUESTS:-200}"
+        in test_compose
+    )
+    assert (
+        "AUTH_RATE_LIMIT_REFRESH_REQUESTS: ${TEST_AUTH_RATE_LIMIT_REFRESH_REQUESTS:-400}"
+        in test_compose
+    )
+    assert "TEST_AUTH_RATE_LIMIT_REGISTER_REQUESTS=200" in env_example
+    assert "TEST_AUTH_RATE_LIMIT_LOGIN_REQUESTS=200" in env_example
+    assert "TEST_AUTH_RATE_LIMIT_REFRESH_REQUESTS=400" in env_example
+
+
+def test_bootstrap_admin_script_requires_env_and_blocks_production_by_default() -> None:
+    bootstrap_script = Path("scripts/bootstrap_admin.py").read_text(encoding="utf-8")
+
+    assert "BOOTSTRAP_ADMIN_EMAIL" in bootstrap_script
+    assert "BOOTSTRAP_ADMIN_PASSWORD" in bootstrap_script
+    assert "Refusing to bootstrap admin in production." in bootstrap_script

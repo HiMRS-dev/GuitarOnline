@@ -404,7 +404,7 @@ class AdminRepository:
             select(TeacherProfile)
             .where(TeacherProfile.id.in_(teacher_profile_ids))
             .options(
-                selectinload(TeacherProfile.user),
+                selectinload(TeacherProfile.user).selectinload(User.role),
                 selectinload(TeacherProfile.tags),
             )
         )
@@ -489,7 +489,7 @@ class AdminRepository:
                 Role.name == RoleEnum.TEACHER,
             )
             .options(
-                selectinload(TeacherProfile.user),
+                selectinload(TeacherProfile.user).selectinload(User.role),
                 selectinload(TeacherProfile.tags),
             )
         )

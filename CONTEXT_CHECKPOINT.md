@@ -1641,6 +1641,23 @@
   - keep static coverage that fails if deprecated action refs reappear,
   - confirm a fresh `ci` / `deploy` run no longer reports the Node 20 deprecation annotation.
 
+### 18.2.13) Supply-Chain Follow-Up: PyJWT Updated After `pip-audit` Finding (2026-03-17)
+- `ci` supply-chain gate failure was traced to a real Python dependency finding, not to the
+  GitHub Actions runtime migration:
+  - `pip-audit` flagged `pyjwt==2.11.0`,
+  - finding: `CVE-2026-32597`,
+  - recommended fixed line from the audit output: `2.12.0+`.
+- with explicit dependency-change approval, the repo was updated minimally:
+  - `pyproject.toml` now requires `pyjwt = "^2.12.0"`,
+  - `poetry.lock` resolved to `pyjwt==2.12.1`.
+- local verification:
+  - `python -m poetry run python scripts/supply_chain_gate.py` now passes the Python part of the
+    gate (`pip-audit` clean, CycloneDX SBOM generated); the local shell still lacks `npm`, so the
+    full npm portion remains CI-only here,
+  - `python -m poetry run pytest -q tests/test_identity_registration_security.py
+    tests/test_identity_refresh_cookie.py` -> `7 passed`,
+  - `python -m poetry run pytest -q tests/test_portal_auth_flow_integration.py` -> `2 passed`.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

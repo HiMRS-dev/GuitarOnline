@@ -26,9 +26,6 @@ on:
   schedule:
     - cron: "10 4 1-7 * 1"
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   drill:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'ROLLBACK' }}
@@ -49,7 +46,7 @@ jobs:
       ALLOW_PRODUCTION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_production || 'false' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.REF_NAME }}
 
@@ -100,7 +97,7 @@ jobs:
           fi
 
       - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
@@ -204,7 +201,7 @@ jobs:
           PY
 
       - name: Upload rollback drill report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rollback-drill-report-${{ github.run_id }}
           path: |

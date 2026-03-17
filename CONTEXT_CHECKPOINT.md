@@ -1629,18 +1629,17 @@
 ### 18.2.12) Ops Follow-Up: GitHub Actions JS Runtime Opt-In Moved To Node 24 (2026-03-17)
 - GitHub Actions started warning that several workflows still ran JavaScript actions on Node 20
   and would be forced to Node 24 by default on 2026-06-02.
-- applied the minimal repo-local mitigation recommended by GitHub:
-  - added top-level `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` to every workflow that uses
-    JavaScript-based actions in this repository,
-  - this keeps the existing action versions and workflow logic intact while forcing the runtime
-    switch early,
-  - covered workflows: `ci`, `deploy`, `synthetic-ops-check`, `synthetic-ops-retention`,
-    `backup-restore-verify`, `backup-schedule-retention`, `rollback-drill`,
-    `elevated-account-audit`, `restore-rehearsal`, `load-sanity`,
-    `secret-rotation-dry-run`.
-- verification completed locally:
-  - static workflow test coverage now asserts the Node 24 opt-in marker across the full affected
-    workflow set.
+- first attempted a workflow-level `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` opt-in, but
+  the warning persisted in real GitHub-hosted runs during the `Set up job` phase.
+- final remediation switched the repository to node24-ready action releases instead:
+  - `actions/checkout@v6`,
+  - `actions/setup-node@v6`,
+  - `actions/setup-python@v6`,
+  - `actions/upload-artifact@v7`,
+  - `webfactory/ssh-agent@v0.10.0`.
+- verification plan:
+  - keep static coverage that fails if deprecated action refs reappear,
+  - confirm a fresh `ci` / `deploy` run no longer reports the Node 20 deprecation annotation.
 
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.

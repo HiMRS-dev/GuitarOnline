@@ -40,9 +40,6 @@ on:
         description: "Type DEPLOY for live deploy or TEST_SMOKE for test smoke"
         required: true
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 concurrency:
   group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
@@ -71,7 +68,7 @@ jobs:
       REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.REF_NAME }}
 
@@ -104,7 +101,7 @@ jobs:
 
       - name: Setup Node.js for web-admin smoke gate
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
 
@@ -156,7 +153,7 @@ jobs:
 
       - name: Setup SSH key
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
@@ -239,7 +236,7 @@ jobs:
 
       - name: Upload deploy evidence artifact
         if: ${{ always() && steps.auto_deploy_guard.outputs.enabled == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deploy-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: .tmp/deploy-evidence
@@ -260,7 +257,7 @@ jobs:
       REF_NAME: ${{ github.event.inputs.ref }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.REF_NAME }}
 
@@ -293,7 +290,7 @@ jobs:
           fi
 
       - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
@@ -323,7 +320,7 @@ jobs:
 
       - name: Upload test deploy-smoke artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-deploy-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: .tmp/test-deploy-smoke

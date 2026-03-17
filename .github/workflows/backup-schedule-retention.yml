@@ -39,9 +39,6 @@ on:
   schedule:
     - cron: "30 2 * * *"
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   backup:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'BACKUP' }}
@@ -63,7 +60,7 @@ jobs:
       BACKUP_FORCE_WEEKLY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force_weekly || 'false' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.REF_NAME }}
 
@@ -115,7 +112,7 @@ jobs:
           fi
 
       - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 

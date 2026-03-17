@@ -17,9 +17,6 @@ on:
   schedule:
     - cron: "20 3 * * *"
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   rehearsal:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'RESTORE' }}
@@ -38,7 +35,7 @@ jobs:
       BACKUP_FILE_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.backup_file || '' }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.REF_NAME }}
 
@@ -79,7 +76,7 @@ jobs:
           fi
 
       - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
@@ -178,7 +175,7 @@ jobs:
           PY
 
       - name: Upload restore rehearsal report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: restore-rehearsal-report-${{ github.run_id }}
           path: .tmp/restore-rehearsal-report.json

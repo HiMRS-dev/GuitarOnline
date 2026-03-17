@@ -126,38 +126,24 @@ def _parse_datetime_utc(raw_value: object, *, field_name: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _ensure_user(
+def _login_existing_user(
     base_url: str,
     *,
-    role: str,
     email: str,
     password: str,
     timeout_seconds: int,
-) -> AuthContext:
-    status, _ = _request_json(
-        base_url,
-        "/api/v1/identity/auth/register",
-        method="POST",
-        expected={201, 409},
-        timeout_seconds=timeout_seconds,
-        body={
-            "email": email,
-            "password": password,
-            "timezone": "UTC",
-            "role": role,
-        },
-    )
-    if status not in {201, 409}:
-        raise RuntimeError(f"Unexpected registration status for {email}: {status}")
-
-    _, login_payload = _request_json(
+) -> AuthContext | None:
+    status, login_payload = _request_json(
         base_url,
         "/api/v1/identity/auth/login",
         method="POST",
-        expected={200},
+        expected={200, 401},
         timeout_seconds=timeout_seconds,
         body={"email": email, "password": password},
     )
+    if status == 401:
+        return None
+
     token = str(login_payload["access_token"])
     _, me_payload = _request_json(
         base_url,
@@ -171,6 +157,79 @@ def _ensure_user(
         access_token=token,
         email=email,
     )
+
+
+def _ensure_existing_elevated_user(
+    base_url: str,
+    *,
+    role: str,
+    email: str,
+    password: str,
+    timeout_seconds: int,
+) -> AuthContext:
+    auth = _login_existing_user(
+        base_url,
+        email=email,
+        password=password,
+        timeout_seconds=timeout_seconds,
+    )
+    if auth is None:
+        raise RuntimeError(
+            f"Expected pre-provisioned {role} account for synthetic ops check: {email}",
+        )
+
+    _, me_payload = _request_json(
+        base_url,
+        "/api/v1/identity/users/me",
+        expected={200},
+        timeout_seconds=timeout_seconds,
+        headers=_auth_headers(auth.access_token),
+    )
+    actual_role = me_payload.get("role")
+    if not isinstance(actual_role, dict) or str(actual_role.get("name")) != role:
+        raise RuntimeError(
+            f"Synthetic ops account {email} does not have required role {role}",
+        )
+    return auth
+
+
+def _ensure_student_user(
+    base_url: str,
+    *,
+    email: str,
+    password: str,
+    timeout_seconds: int,
+) -> AuthContext:
+    existing = _login_existing_user(
+        base_url,
+        email=email,
+        password=password,
+        timeout_seconds=timeout_seconds,
+    )
+    if existing is not None:
+        return existing
+
+    _request_json(
+        base_url,
+        "/api/v1/identity/auth/register",
+        method="POST",
+        expected={201},
+        timeout_seconds=timeout_seconds,
+        body={
+            "email": email,
+            "password": password,
+            "timezone": "UTC",
+        },
+    )
+    created = _login_existing_user(
+        base_url,
+        email=email,
+        password=password,
+        timeout_seconds=timeout_seconds,
+    )
+    if created is None:
+        raise RuntimeError(f"Student account login failed immediately after registration: {email}")
+    return created
 
 
 def _post_alerts_v2(
@@ -404,23 +463,22 @@ def run_synthetic_ops_check(
                 )
 
     try:
-        admin = _ensure_user(
+        admin = _ensure_existing_elevated_user(
             base_url,
             role="admin",
             email=admin_email,
             password=password,
             timeout_seconds=timeout_seconds,
         )
-        teacher = _ensure_user(
+        teacher = _ensure_existing_elevated_user(
             base_url,
             role="teacher",
             email=teacher_email,
             password=password,
             timeout_seconds=timeout_seconds,
         )
-        student = _ensure_user(
+        student = _ensure_student_user(
             base_url,
-            role="student",
             email=student_email,
             password=password,
             timeout_seconds=timeout_seconds,
@@ -447,7 +505,7 @@ def run_synthetic_ops_check(
         raise SyntheticCheckError("teacher_profile", str(exc)) from exc
 
     try:
-        teacher_query = urlencode({"q": "Synthetic Ops Teacher", "limit": 5, "offset": 0})
+        teacher_query = urlencode({"limit": 100, "offset": 0})
         _, teachers_page = _request_json(
             base_url,
             f"/api/v1/admin/teachers?{teacher_query}",
@@ -455,8 +513,9 @@ def run_synthetic_ops_check(
             timeout_seconds=timeout_seconds,
             headers=_auth_headers(admin.access_token),
         )
-        if int(teachers_page.get("total", 0)) < 1:
-            raise RuntimeError("Admin teacher list returned no matching teachers")
+        teacher_items = _extract_page_items(teachers_page, "/api/v1/admin/teachers")
+        if not any(str(item.get("teacher_id")) == teacher.user_id for item in teacher_items):
+            raise RuntimeError("Admin teacher list did not include synthetic teacher")
     except Exception as exc:  # pragma: no cover - operational script
         raise SyntheticCheckError("admin_teachers_list", str(exc)) from exc
 

@@ -20,6 +20,16 @@ WEEKDAYS = [0, 1, 2, 3, 4]
 MAX_BULK_CANDIDATES = 1000
 
 
+def _guard_non_test_execution() -> None:
+    app_env = os.getenv("APP_ENV", "").strip().lower()
+    if app_env in {"test", "testing"}:
+        return
+    raise RuntimeError(
+        "Refusing to run load sanity outside APP_ENV=test "
+        f"(APP_ENV={app_env or 'unset'}, base_url={BASE_URL}).",
+    )
+
+
 def request(
     path: str,
     *,
@@ -86,6 +96,8 @@ def _next_monday(current_date: date) -> date:
 
 
 def main() -> None:
+    _guard_non_test_execution()
+
     if TARGET_SLOTS <= 0:
         raise RuntimeError("LOAD_SANITY_TARGET_SLOTS must be > 0")
 
@@ -224,7 +236,7 @@ def main() -> None:
                         if "-> 422" in str(create_error):
                             skipped_count += 1
                         else:
-                            raise
+                            raise RuntimeError(str(create_error)) from create_error
                     slot_start = slot_end
             start_cursor += timedelta(days=1)
 
@@ -232,7 +244,7 @@ def main() -> None:
             raise RuntimeError(
                 "Legacy slot-create result mismatch: "
                 f"created={created_count}, skipped={skipped_count}, candidates={candidate_slots}",
-            )
+            ) from error
 
     if created_count < TARGET_SLOTS:
         raise RuntimeError(

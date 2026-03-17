@@ -6,6 +6,14 @@ on:
       - main
   workflow_dispatch:
     inputs:
+      operation:
+        description: "Manual operation: deploy live release or run test-contour deploy smoke only"
+        required: true
+        type: choice
+        options:
+          - deploy_live
+          - test_smoke_only
+        default: deploy_live
       ref:
         description: "Git ref to deploy (branch, tag, or commit SHA)"
         required: true
@@ -29,7 +37,7 @@ on:
         type: boolean
         default: true
       confirm:
-        description: "Type DEPLOY to confirm"
+        description: "Type DEPLOY for live deploy or TEST_SMOKE for test smoke"
         required: true
 
 concurrency:
@@ -38,7 +46,7 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'DEPLOY') || github.event_name == 'push' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy_live' && github.event.inputs.confirm == 'DEPLOY') || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,6 +59,7 @@ jobs:
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
       PROD_ENV_FILE_B64: ${{ secrets.PROD_ENV_FILE_B64 }}
       AUTO_DEPLOY_ENABLED: ${{ secrets.AUTO_DEPLOY_ENABLED }}
+      OPERATION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.operation || 'deploy_live' }}
       REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.sha }}
       PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.profile || 'standard' }}
       RUN_BACKUP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_backup || 'true' }}
@@ -80,6 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Trigger source: ${TRIGGER_SOURCE}"
+          echo "Operation: ${OPERATION}"
           echo "Repository URL: ${REPO_URL}"
           echo "Deploy host: ${DEPLOY_HOST}"
           echo "Deploy path: ${DEPLOY_PATH}"
@@ -227,4 +237,88 @@ jobs:
         with:
           name: deploy-evidence-${{ github.run_id }}-${{ github.run_attempt }}
           path: .tmp/deploy-evidence
+          if-no-files-found: warn
+
+  test_smoke:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'test_smoke_only' && github.event.inputs.confirm == 'TEST_SMOKE' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event.inputs.ref }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF_NAME }}
+
+      - name: Print test-smoke context
+        run: |
+          set -euo pipefail
+          echo "Operation: test_smoke_only"
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Requested ref: ${REF_NAME}"
+
+      - name: Validate required secrets
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Run test-contour deploy smoke on target host
+        run: |
+          set -euo pipefail
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          mkdir -p .tmp/test-deploy-smoke
+
+          ssh -p "${port}" "${remote}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' bash -s" \
+            < scripts/run_deploy_smoke_remote.sh | tee .tmp/test-deploy-smoke/deploy_smoke_remote.log
+
+      - name: Upload test deploy-smoke artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-deploy-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .tmp/test-deploy-smoke
           if-no-files-found: warn

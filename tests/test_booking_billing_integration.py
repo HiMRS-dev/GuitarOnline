@@ -5,14 +5,20 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import asyncpg
 import httpx
 import pytest
 import pytest_asyncio
+
+from tests.integration_smoke_pool import (
+    AuthUser,
+    AuthUsers,
+    login_smoke_auth_users,
+    reset_test_smoke_pool,
+)
 
 API_BASE_URL = os.getenv("INTEGRATION_BASE_URL", "http://localhost:18000/api/v1").rstrip("/")
 HEALTHCHECK_URL = os.getenv("INTEGRATION_HEALTH_URL", "http://localhost:18000/health")
@@ -21,30 +27,6 @@ DB_DSN = os.getenv(
     "postgresql://postgres:postgres@localhost:15432/guitaronline_test",
 )
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("INTEGRATION_TIMEOUT_SECONDS", "15"))
-INTEGRATION_ADMIN_EMAIL = os.getenv(
-    "INTEGRATION_ADMIN_EMAIL",
-    os.getenv("TEST_BOOTSTRAP_ADMIN_EMAIL", "bootstrap-admin@guitaronline.dev"),
-).strip()
-INTEGRATION_ADMIN_PASSWORD = os.getenv(
-    "INTEGRATION_ADMIN_PASSWORD",
-    os.getenv("TEST_BOOTSTRAP_ADMIN_PASSWORD", ""),
-)
-
-
-@dataclass(slots=True)
-class AuthUser:
-    id: UUID
-    access_token: str
-
-
-@dataclass(slots=True)
-class AuthUsers:
-    admin: AuthUser
-    teacher: AuthUser
-    student: AuthUser
-
-
-_CACHED_AUTH_USERS: AuthUsers | None = None
 _INTEGRATION_STACK_HEALTHY: bool | None = None
 _INTEGRATION_STACK_ERROR: str | None = None
 _SLOT_WINDOWS: list[tuple[datetime, datetime]] = []
@@ -61,30 +43,6 @@ def _auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
-async def _login_with_retry(
-    client: httpx.AsyncClient,
-    *,
-    email: str,
-    password: str,
-) -> httpx.Response:
-    last_response: httpx.Response | None = None
-
-    for _ in range(6):
-        response = await client.post(
-            "/identity/auth/login",
-            json={"email": email, "password": password},
-        )
-        if response.status_code == 200:
-            return response
-        if response.status_code != 403 or "Invalid credentials" not in response.text:
-            return response
-        last_response = response
-        await asyncio.sleep(0.1)
-
-    assert last_response is not None
-    return last_response
-
-
 def _future_range(hours_from_now: int, duration_minutes: int = 60) -> tuple[str, str]:
     start_at = datetime.now(UTC) + timedelta(hours=hours_from_now)
     duration = timedelta(minutes=duration_minutes)
@@ -99,71 +57,6 @@ def _future_range(hours_from_now: int, duration_minutes: int = 60) -> tuple[str,
 
     _SLOT_WINDOWS.append((start_at, end_at))
     return start_at.isoformat(), end_at.isoformat()
-
-
-async def _register_and_login(client: httpx.AsyncClient, role: str) -> AuthUser:
-    email = f"{role}-{uuid4().hex}@guitaronline.dev"
-    password = "StrongPass123!"
-
-    register_response = await client.post(
-        "/identity/auth/register",
-        json={
-            "email": email,
-            "password": password,
-            "timezone": "UTC",
-        },
-    )
-    _assert_status(register_response, 201)
-    user_id = UUID(register_response.json()["id"])
-
-    login_response = await _login_with_retry(
-        client,
-        email=email,
-        password=password,
-    )
-    _assert_status(login_response, 200)
-    access_token = login_response.json()["access_token"]
-
-    return await _ensure_role(client, AuthUser(id=user_id, access_token=access_token), role=role)
-
-
-async def _login_existing_admin(client: httpx.AsyncClient) -> AuthUser:
-    login_response = await client.post(
-        "/identity/auth/login",
-        json={
-            "email": INTEGRATION_ADMIN_EMAIL,
-            "password": INTEGRATION_ADMIN_PASSWORD,
-        },
-    )
-    if login_response.status_code != 200:
-        pytest.skip(
-            "Bootstrap admin credentials are unavailable for integration role reassignment "
-            f"({INTEGRATION_ADMIN_EMAIL}).",
-        )
-        raise AssertionError("unreachable")
-
-    access_token = login_response.json()["access_token"]
-    me_response = await client.get(
-        "/identity/users/me",
-        headers=_auth_headers(access_token),
-    )
-    _assert_status(me_response, 200)
-    return AuthUser(id=UUID(me_response.json()["id"]), access_token=access_token)
-
-
-async def _ensure_role(client: httpx.AsyncClient, user: AuthUser, *, role: str) -> AuthUser:
-    if role == "student":
-        return user
-
-    bootstrap_admin = await _login_existing_admin(client)
-    role_change_response = await client.post(
-        f"/admin/users/{user.id}/role",
-        headers=_auth_headers(bootstrap_admin.access_token),
-        json={"role": role},
-    )
-    _assert_status(role_change_response, 200)
-    return user
-
 
 async def _create_package(
     client: httpx.AsyncClient,
@@ -370,25 +263,18 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
 
 
 @pytest_asyncio.fixture()
-async def auth_users(api_client: httpx.AsyncClient) -> AuthUsers:
-    global _CACHED_AUTH_USERS  # noqa: PLW0603 - intentional cache for rate-limit-safe integration setup
+async def smoke_pool_reset(api_client: httpx.AsyncClient) -> AsyncIterator[None]:
+    _SLOT_WINDOWS.clear()
+    reset_test_smoke_pool()
+    yield
 
-    if _CACHED_AUTH_USERS is None:
-        _CACHED_AUTH_USERS = AuthUsers(
-            admin=await _ensure_role(
-                api_client,
-                await _register_and_login(api_client, role="admin"),
-                role="admin",
-            ),
-            teacher=await _ensure_role(
-                api_client,
-                await _register_and_login(api_client, role="teacher"),
-                role="teacher",
-            ),
-            student=await _register_and_login(api_client, role="student"),
-        )
 
-    return _CACHED_AUTH_USERS
+@pytest_asyncio.fixture()
+async def auth_users(
+    api_client: httpx.AsyncClient,
+    smoke_pool_reset: None,
+) -> AuthUsers:
+    return await login_smoke_auth_users(api_client)
 
 
 @pytest.mark.asyncio
@@ -723,7 +609,7 @@ async def test_concurrent_hold_attempts_on_same_slot_allow_only_one_success(
     admin = auth_users.admin
     teacher = auth_users.teacher
     student_one = auth_users.student
-    student_two = await _register_and_login(api_client, role="student")
+    student_two = auth_users.student_two
 
     package_one = await _create_package(api_client, admin, student_one, lessons_total=5)
     package_two = await _create_package(api_client, admin, student_two, lessons_total=5)

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import statistics
 import time
@@ -19,6 +20,17 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 DEFAULT_PASSWORD = "StrongPass123!"
+
+
+def _guard_non_test_execution(*, base_url: str, allow_non_test: bool) -> None:
+    app_env = os.getenv("APP_ENV", "").strip().lower()
+    if app_env in {"test", "testing"} or allow_non_test:
+        return
+    raise RuntimeError(
+        "Refusing to run admin perf probe outside APP_ENV=test "
+        f"(APP_ENV={app_env or 'unset'}, base_url={base_url}). "
+        "Re-run with --allow-non-test only if this is intentional.",
+    )
 
 
 def _request(
@@ -180,6 +192,11 @@ def main() -> int:
     parser.add_argument("--slot-to-utc", required=True)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--iterations", type=int, default=30)
+    parser.add_argument(
+        "--allow-non-test",
+        action="store_true",
+        help="Allow execution when APP_ENV is not test.",
+    )
     parser.add_argument("--output-json", required=True)
     args = parser.parse_args()
 
@@ -189,6 +206,8 @@ def main() -> int:
         raise RuntimeError("--iterations must be > 0")
 
     base_url = args.base_url.rstrip("/")
+    _guard_non_test_execution(base_url=base_url, allow_non_test=args.allow_non_test)
+
     suffix = uuid4().hex[:10]
     admin_email = f"perf-probe-admin-{suffix}@guitaronline.dev"
     shared_credential = DEFAULT_PASSWORD

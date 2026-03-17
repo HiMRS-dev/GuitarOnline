@@ -7,11 +7,23 @@ on:
         description: "Git ref to use for remote check runner script"
         required: true
         default: "main"
-      alert_on_failure:
-        description: "Emit Alertmanager critical alert on synthetic-check failure"
+      contour:
+        description: "Run synthetic ops against live or isolated test contour"
         required: true
-        type: boolean
-        default: true
+        type: choice
+        default: "live"
+        options:
+          - live
+          - test
+      alert_on_failure:
+        description: "Alert policy: auto=true for live and false for test, or force true/false"
+        required: true
+        type: choice
+        default: "auto"
+        options:
+          - auto
+          - true
+          - false
       confirm:
         description: "Type SYNTHETIC to confirm"
         required: true
@@ -33,7 +45,8 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
       REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || 'main' }}
-      SYNTHETIC_OPS_ALERT_ON_FAILURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.alert_on_failure || 'true' }}
+      SYNTHETIC_OPS_CONTOUR: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.contour || 'live' }}
+      SYNTHETIC_OPS_ALERT_ON_FAILURE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.alert_on_failure || 'auto' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -46,7 +59,8 @@ jobs:
           echo "Deploy host: ${DEPLOY_HOST}"
           echo "Deploy path: ${DEPLOY_PATH}"
           echo "Ref for runner script: ${REF_NAME}"
-          echo "Alert on failure: ${SYNTHETIC_OPS_ALERT_ON_FAILURE}"
+          echo "Contour: ${SYNTHETIC_OPS_CONTOUR}"
+          echo "Alert policy: ${SYNTHETIC_OPS_ALERT_ON_FAILURE}"
 
       - name: Validate required secrets
         run: |
@@ -92,5 +106,5 @@ jobs:
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
           port="${DEPLOY_PORT:-22}"
           ssh -p "${port}" "${remote}" \
-            "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' SYNTHETIC_OPS_ALERT_ON_FAILURE='${SYNTHETIC_OPS_ALERT_ON_FAILURE}' bash -s" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' REF_NAME='${REF_NAME}' SYNTHETIC_OPS_CONTOUR='${SYNTHETIC_OPS_CONTOUR}' SYNTHETIC_OPS_ALERT_ON_FAILURE='${SYNTHETIC_OPS_ALERT_ON_FAILURE}' bash -s" \
             < scripts/run_synthetic_ops_remote.sh

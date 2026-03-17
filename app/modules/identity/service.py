@@ -34,6 +34,17 @@ class IdentityService:
     def __init__(self, repository: IdentityRepository) -> None:
         self.repository = repository
 
+    async def _commit_if_supported(self) -> None:
+        """Commit within auth flows so the next request sees durable state immediately."""
+        commit = getattr(self.repository, "commit", None)
+        if callable(commit):
+            await commit()
+            return
+
+        session = getattr(self.repository, "session", None)
+        if session is not None:
+            await session.commit()
+
     async def ensure_default_roles(self) -> None:
         """Ensure all default roles exist."""
         for role_name in (RoleEnum.STUDENT, RoleEnum.TEACHER, RoleEnum.ADMIN):
@@ -61,6 +72,7 @@ class IdentityService:
             timezone=payload.timezone,
             role_id=role.id,
         )
+        await self._commit_if_supported()
         return user
 
     async def login(self, payload: LoginRequest) -> TokenPair:
@@ -82,6 +94,7 @@ class IdentityService:
 
         expires_at = utc_now() + timedelta(days=settings.refresh_token_expire_days)
         await self.repository.create_refresh_token(user.id, token_id, expires_at)
+        await self._commit_if_supported()
 
         return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
@@ -115,6 +128,7 @@ class IdentityService:
         )
         expires_at = utc_now() + timedelta(days=settings.refresh_token_expire_days)
         await self.repository.create_refresh_token(user.id, new_token_id, expires_at)
+        await self._commit_if_supported()
 
         return TokenPair(access_token=access_token, refresh_token=refresh_token)
 
@@ -131,6 +145,7 @@ class IdentityService:
         if not token_id:
             return
         await self.repository.revoke_refresh_token(token_id, utc_now())
+        await self._commit_if_supported()
 
     async def get_user_from_access_token(self, token: str) -> User:
         """Resolve user from access token."""

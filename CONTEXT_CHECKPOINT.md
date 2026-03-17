@@ -1331,6 +1331,226 @@
     so `register -> login` is deterministic without client polling.
 - `ENV-02` can be treated as complete enough to start `ENV-03` guardrails.
 
+### 18.2.4) ENV-10 Closure + ENV-04 Start (2026-03-17)
+- `ENV-10` backend closure implemented locally:
+  - `app/modules/identity/service.py` now commits durable auth-state mutations inside
+    `register`, `login`, `refresh`, and refresh-token revoke flows so the next request
+    sees persisted identity state immediately.
+  - removed temporary immediate-post-registration login retry helpers from:
+    - `tests/test_portal_auth_flow_integration.py`,
+    - `tests/test_rbac_access_integration.py`,
+    - `tests/test_booking_billing_integration.py`,
+    - `tests/test_admin_slot_bulk_create_integration.py`.
+- local validation:
+  - `python -m poetry run ruff check app/modules/identity/service.py tests/test_portal_auth_flow_integration.py tests/test_rbac_access_integration.py tests/test_booking_billing_integration.py tests/test_admin_slot_bulk_create_integration.py`
+    -> `All checks passed!`.
+  - `python -m poetry run pytest -q tests/test_identity_registration_security.py tests/test_identity_refresh_cookie.py`
+    -> `7 passed`.
+  - `python -m poetry run pytest -q tests/test_portal_auth_flow_integration.py tests/test_rbac_access_integration.py tests/test_booking_billing_integration.py tests/test_admin_slot_bulk_create_integration.py`
+    -> `41 skipped` (isolated integration contour not running in current shell).
+- `ENV-03` remains split:
+  - full fail-closed guardrails for synthetic/live smoke still need contour migration work
+    because current scheduled synthetic/release smoke assets remain wired to the live path.
+  - partial fail-closed guardrails can now move ahead safely for strictly test-only load/perf
+    scripts before touching live release/synthetic assets.
+- `ENV-04` started:
+  - added reusable smoke-pool reset/bootstrap asset:
+    - `scripts/reset_test_smoke_pool.py`.
+  - current scope of the script:
+    - upsert `smoke-admin-1`, `smoke-teacher-1`, `smoke-student-1`,
+    - reset teacher profile baseline,
+    - clear refresh tokens, notifications, admin actions, lessons, bookings, slots,
+      payments, packages, and directly related outbox events for the smoke pool.
+  - env discovery defaults documented in `.env.example`:
+    - `TEST_SMOKE_ADMIN_EMAIL`,
+    - `TEST_SMOKE_TEACHER_EMAIL`,
+    - `TEST_SMOKE_STUDENT_EMAIL`,
+    - `TEST_SMOKE_STUDENT_TWO_EMAIL`,
+    - `TEST_SMOKE_POOL_PASSWORD`.
+  - local asset validation:
+    - `python -m compileall scripts/reset_test_smoke_pool.py` -> `success`.
+    - `python -m poetry run ruff check scripts/reset_test_smoke_pool.py tests/test_proxy_rate_limit_config.py`
+      -> `All checks passed!`.
+    - `python -m poetry run pytest -q tests/test_proxy_rate_limit_config.py`
+      -> `8 passed`.
+    - `python -m poetry run python scripts/reset_test_smoke_pool.py`
+      -> fail-closed as expected outside `APP_ENV=test`.
+  - isolated contour proof completed:
+    - `docker compose -f docker-compose.test.yml exec -T app python scripts/reset_test_smoke_pool.py`
+      succeeded twice consecutively on the running `test` contour after rebuilding the app image.
+    - both consecutive runs converged to the same baseline:
+      - `Users created: 0`,
+      - baseline reset stayed deterministic,
+      - all artifact deletion counters stayed at `0` on the second clean run.
+  - integration helper migration completed for the current test contour:
+    - added shared helper:
+      - `tests/integration_smoke_pool.py`
+    - moved fixed smoke-pool login/reset flow into:
+      - `tests/test_rbac_access_integration.py`,
+      - `tests/test_booking_billing_integration.py`,
+      - `tests/test_admin_slot_bulk_create_integration.py`,
+      - `tests/test_portal_auth_flow_integration.py`.
+    - intentional exception kept ad-hoc:
+      - portal `register -> login -> refresh` coverage still registers a fresh student because
+        the registration path itself is the subject under test.
+  - validation on the isolated contour:
+    - `python -m poetry run ruff check tests/integration_smoke_pool.py tests/test_rbac_access_integration.py tests/test_booking_billing_integration.py tests/test_admin_slot_bulk_create_integration.py tests/test_portal_auth_flow_integration.py`
+      -> `All checks passed!`.
+    - `python -m poetry run pytest -q tests/test_portal_auth_flow_integration.py tests/test_admin_slot_bulk_create_integration.py`
+      -> `3 passed`.
+    - `python -m poetry run pytest -q tests/test_booking_billing_integration.py tests/test_rbac_access_integration.py`
+      -> `38 passed`.
+    - current isolated contour result across the four integration files:
+      - `41 passed`.
+  - follow-up closure for the last booking-concurrency tail:
+    - smoke pool now includes `smoke-student-2` and the hold-concurrency integration test uses
+      that fixed baseline instead of creating an extra ad-hoc student.
+    - host-side reset verification after adding `smoke-student-2`:
+      - first run created the new user and cleaned the leftover concurrency artifacts,
+      - second consecutive run converged to:
+        - `Users created: 0`,
+        - `Users updated: 4`,
+        - all artifact deletion counters at `0`.
+    - targeted validation:
+      - `python -m poetry run ruff check scripts/reset_test_smoke_pool.py tests/integration_smoke_pool.py tests/test_booking_billing_integration.py tests/test_proxy_rate_limit_config.py`
+        -> `All checks passed!`.
+      - `python -m poetry run pytest -q tests/test_proxy_rate_limit_config.py`
+        -> `8 passed`.
+      - `python -m poetry run pytest -q tests/test_booking_billing_integration.py`
+        -> `11 passed`.
+  - next `ENV-04` follow-up:
+    - keep portal registration coverage ad-hoc by design,
+    - leave broader synthetic cleanup automation for `ENV-08`.
+
+### 18.2.5) ENV-03 Partial Guardrails For Test-Only Perf/Load Scripts (2026-03-17)
+- added fail-closed `APP_ENV=test` guards for scripts that should never touch `live` business
+  data paths:
+  - `scripts/admin_perf_baseline.py`,
+  - `scripts/admin_perf_probe.py`,
+  - `scripts/load_sanity.py`.
+- behavior:
+  - each script now aborts before side effects when `APP_ENV` is not `test`,
+  - perf scripts allow explicit operator override via `--allow-non-test`,
+  - this deliberately does **not** yet change `deploy_smoke_check.py` or scheduled
+    `synthetic_ops_check.py` because those still require contour migration work.
+- static guardrail coverage:
+  - `tests/test_proxy_rate_limit_config.py`.
+- intended scope:
+  - prevent accidental perf/load dataset generation against `live`,
+  - keep current release/synthetic production path stable until `ENV-05`/`ENV-06` migration.
+
+### 18.2.6) ENV-05 Preparation: Synthetic Ops Test-Contour Runner Path (2026-03-17)
+- prepared remote synthetic runner for an isolated `test` contour path without flipping the
+  hourly workflow yet:
+  - `scripts/run_synthetic_ops_remote.sh` now supports `SYNTHETIC_OPS_CONTOUR=test`,
+  - in `test` contour mode it defaults to `docker-compose.test.yml`,
+  - it reuses fixed smoke-pool accounts (`smoke-admin-1`, `smoke-teacher-1`, `smoke-student-1`),
+  - it resets the smoke pool via `scripts/reset_test_smoke_pool.py` before running the
+    synthetic check.
+- important safety boundary:
+  - current scheduled workflow is **not** switched yet, because full remote migration still needs
+    an operational decision for failure-alert delivery from the `test` contour path.
+- intended immediate outcome:
+  - the same `synthetic_ops_check.py` critical-path flow can now be proven against the isolated
+    test contour using existing smoke-pool accounts instead of creating live synthetic users.
+  - runtime bug discovered during local proof:
+    - `scripts/synthetic_ops_check.py` still tried to submit `role` in public registration and
+      now fails with `422 extra_forbidden` against the current API contract.
+- local fix:
+  - synthetic ops check now logs into pre-provisioned elevated accounts (`admin`, `teacher`)
+      instead of attempting self-registration for elevated roles,
+  - only the student account may be self-registered when absent, and that registration no
+      longer submits a forbidden `role` field.
+  - admin teacher-list verification now checks by stable `teacher_id` instead of assuming a
+    newly written synthetic display name, so the script works with reusable smoke-pool profiles.
+- local validation:
+  - `python -m poetry run ruff check scripts/synthetic_ops_check.py tests/test_proxy_rate_limit_config.py`
+    -> `All checks passed!`.
+  - `docker run --rm -v "${PWD}:/repo" bash:5.2 bash -n /repo/scripts/run_synthetic_ops_remote.sh`
+    -> `success`.
+  - `python -m poetry run pytest -q tests/test_proxy_rate_limit_config.py`
+    -> `11 passed`.
+  - `docker compose -f docker-compose.test.yml up -d --build app`
+    -> `success`.
+  - `docker compose -f docker-compose.test.yml exec -T app python scripts/reset_test_smoke_pool.py`
+    -> `success` (`Users updated: 4` on the current clean baseline).
+  - `Get-Content scripts/synthetic_ops_check.py -Raw | docker compose -f docker-compose.test.yml exec -T app python - --admin-email smoke-admin-1@guitaronline.dev --teacher-email smoke-teacher-1@guitaronline.dev --student-email smoke-student-1@guitaronline.dev --password StrongPass123! --no-alert-on-failure`
+    -> `Created new synthetic slot ...`, `Created new synthetic package ...`, `Synthetic ops check passed.`.
+- remaining migration boundary:
+  - scheduled `.github/workflows/synthetic-ops-check.yml` is still not flipped to `test`
+    automatically, because failure-alert delivery from the isolated contour still needs an ops
+    decision before changing the hourly remote path.
+  - runner hardening follow-up completed locally:
+    - `scripts/reset_test_smoke_pool.py` now supports stdin execution by falling back to the
+      current working directory when `__file__` is unavailable,
+    - `scripts/run_synthetic_ops_remote.sh` now auto-starts the `test` app service when
+      `SYNTHETIC_OPS_CONTOUR=test` and the app container is not yet reachable,
+    - test-contour smoke-pool reset is now executed from the current checkout via stdin
+      (`python - < scripts/reset_test_smoke_pool.py`) instead of relying on a potentially stale
+      script copy inside the container filesystem,
+    - manual workflow dispatch now supports `contour=live|test` without changing the scheduled
+      default path.
+  - local proof after runner hardening:
+    - `Get-Content scripts/reset_test_smoke_pool.py -Raw | docker compose -f docker-compose.test.yml exec -T app python -`
+      completed successfully and reset the fixed four-user smoke pool from the current checkout,
+    - `Get-Content scripts/synthetic_ops_check.py -Raw | docker compose -f docker-compose.test.yml exec -T app python - ... --no-alert-on-failure`
+      completed successfully immediately after the stdin reset (`Synthetic ops check passed.`).
+  - manual workflow alert-policy hardening completed locally:
+    - `.github/workflows/synthetic-ops-check.yml` now exposes `alert_on_failure=auto|true|false`
+      instead of a boolean,
+    - `auto` now means "alert for `live`, stay quiet for `test`",
+    - `scripts/run_synthetic_ops_remote.sh` resolves that policy on the target host, so a
+      manual `contour=test` run no longer sends a production-like alert unless explicitly forced.
+
+### 18.2.7) ENV-06 Preparation: Deploy Smoke Supports Fixed Test Smoke Pool (2026-03-17)
+- prepared `scripts/deploy_smoke_check.py` for isolated `test` contour execution without
+  changing the production deploy path yet:
+  - when `APP_ENV=test`, the script now reuses the fixed smoke pool instead of registering
+    ad-hoc `teacher`/`student` users,
+  - `smoke-student-1` is used as the booking/package student,
+  - `smoke-student-2` is used as the future-teacher candidate and still exercises the admin
+    role-reassignment flow before teacher login,
+  - `live` / production-like behavior remains unchanged: deploy smoke still requires
+    `DEPLOY_SMOKE_ADMIN_EMAIL` and `DEPLOY_SMOKE_ADMIN_PASSWORD` and still creates temporary
+    student/teacher identities there.
+- local proof completed:
+  - `Get-Content scripts/reset_test_smoke_pool.py -Raw | docker compose -f docker-compose.test.yml exec -T app python -`
+    reset the fixed four-user smoke pool successfully,
+  - `Get-Content scripts/deploy_smoke_check.py -Raw | docker compose -f docker-compose.test.yml exec -T app python -`
+    completed successfully in `APP_ENV=test`,
+  - markers present:
+    - `Role-based release gate passed.`
+    - `Smoke checks passed.`
+
+### 18.2.8) ENV-06 Preparation: Manual Remote Test-Contour Deploy Smoke Path (2026-03-17)
+- prepared a manual external-contour path for deploy smoke against the isolated `test` stack
+  without changing the existing production deploy flow:
+  - added `scripts/run_deploy_smoke_remote.sh`,
+  - the remote runner is `test`-only and reuses the current checkout via stdin for both
+    `scripts/reset_test_smoke_pool.py` and `scripts/deploy_smoke_check.py`,
+  - the remote runner auto-starts the `app` service in `docker-compose.test.yml` when needed,
+  - `.github/workflows/deploy.yml` now supports manual `operation=test_smoke_only`,
+  - the existing `push` / live deploy path remains gated under `operation=deploy_live`.
+- smoke-pool cleanup follow-up completed during proof:
+  - repeated `deploy_smoke_check.py` runs revealed that `smoke-student-2` could retain
+    teacher-owned slot artifacts after temporary role promotion,
+  - `scripts/reset_test_smoke_pool.py` now clears teacher-owned slots/bookings/lessons for all
+    non-admin smoke users, not just the dedicated `smoke-teacher-1` account.
+- intended use:
+  - run `workflow_dispatch` for `.github/workflows/deploy.yml`,
+  - choose `operation=test_smoke_only`,
+  - set `confirm=TEST_SMOKE`,
+  - inspect uploaded artifact `test-deploy-smoke-<run_id>-<run_attempt>`.
+- local proof:
+  - two consecutive cycles of
+    `Get-Content scripts/reset_test_smoke_pool.py -Raw | docker compose -f docker-compose.test.yml exec -T app python -`
+    followed by
+    `Get-Content scripts/deploy_smoke_check.py -Raw | docker compose -f docker-compose.test.yml exec -T app python -`
+    both completed successfully,
+  - markers present on each deploy-smoke run:
+    - `Role-based release gate passed.`
+    - `Smoke checks passed.`
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

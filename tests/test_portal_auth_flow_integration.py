@@ -2,37 +2,26 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
 
+from tests.integration_smoke_pool import (
+    PortalAuthSession,
+    login_smoke_portal_session,
+    reset_test_smoke_pool,
+)
+
 API_BASE_URL = os.getenv("INTEGRATION_BASE_URL", "http://localhost:18000/api/v1").rstrip("/")
 HEALTHCHECK_URL = os.getenv("INTEGRATION_HEALTH_URL", "http://localhost:18000/health")
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("INTEGRATION_TIMEOUT_SECONDS", "15"))
-INTEGRATION_ADMIN_EMAIL = os.getenv(
-    "INTEGRATION_ADMIN_EMAIL",
-    os.getenv("TEST_BOOTSTRAP_ADMIN_EMAIL", "bootstrap-admin@guitaronline.dev"),
-).strip()
-INTEGRATION_ADMIN_PASSWORD = os.getenv(
-    "INTEGRATION_ADMIN_PASSWORD",
-    os.getenv("TEST_BOOTSTRAP_ADMIN_PASSWORD", ""),
-)
 
 _INTEGRATION_STACK_HEALTHY: bool | None = None
 _INTEGRATION_STACK_ERROR: str | None = None
-
-
-@dataclass(slots=True)
-class PortalAuthSession:
-    user_id: UUID
-    access_token: str
-    refresh_token: str
 
 
 def _assert_status(response: httpx.Response, expected_status: int) -> None:
@@ -44,30 +33,6 @@ def _assert_status(response: httpx.Response, expected_status: int) -> None:
 
 def _auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
-
-
-async def _login_with_retry(
-    client: httpx.AsyncClient,
-    *,
-    email: str,
-    password: str,
-) -> httpx.Response:
-    last_response: httpx.Response | None = None
-
-    for _ in range(6):
-        response = await client.post(
-            "/identity/auth/login",
-            json={"email": email, "password": password},
-        )
-        if response.status_code == 200:
-            return response
-        if response.status_code != 403 or "Invalid credentials" not in response.text:
-            return response
-        last_response = response
-        await asyncio.sleep(0.1)
-
-    assert last_response is not None
-    return last_response
 
 
 async def _register_and_login(client: httpx.AsyncClient, role: str) -> PortalAuthSession:
@@ -85,67 +50,18 @@ async def _register_and_login(client: httpx.AsyncClient, role: str) -> PortalAut
     _assert_status(register_response, 201)
     user_id = UUID(register_response.json()["id"])
 
-    login_response = await _login_with_retry(
-        client,
-        email=email,
-        password=password,
+    login_response = await client.post(
+        "/identity/auth/login",
+        json={"email": email, "password": password},
     )
     _assert_status(login_response, 200)
     token_pair = login_response.json()
 
-    session = PortalAuthSession(
+    return PortalAuthSession(
         user_id=user_id,
         access_token=token_pair["access_token"],
         refresh_token=token_pair["refresh_token"],
     )
-    return await _ensure_role(client, session, role=role)
-
-
-async def _login_existing_admin(client: httpx.AsyncClient) -> PortalAuthSession:
-    login_response = await client.post(
-        "/identity/auth/login",
-        json={
-            "email": INTEGRATION_ADMIN_EMAIL,
-            "password": INTEGRATION_ADMIN_PASSWORD,
-        },
-    )
-    if login_response.status_code != 200:
-        pytest.skip(
-            "Bootstrap admin credentials are unavailable for integration role reassignment "
-            f"({INTEGRATION_ADMIN_EMAIL}).",
-        )
-        raise AssertionError("unreachable")
-
-    token_pair = login_response.json()
-    me_response = await client.get(
-        "/identity/users/me",
-        headers=_auth_headers(token_pair["access_token"]),
-    )
-    _assert_status(me_response, 200)
-    return PortalAuthSession(
-        user_id=UUID(me_response.json()["id"]),
-        access_token=token_pair["access_token"],
-        refresh_token=token_pair["refresh_token"],
-    )
-
-
-async def _ensure_role(
-    client: httpx.AsyncClient,
-    session: PortalAuthSession,
-    *,
-    role: str,
-) -> PortalAuthSession:
-    if role == "student":
-        return session
-
-    bootstrap_admin = await _login_existing_admin(client)
-    role_change_response = await client.post(
-        f"/admin/users/{session.user_id}/role",
-        headers=_auth_headers(bootstrap_admin.access_token),
-        json={"role": role},
-    )
-    _assert_status(role_change_response, 200)
-    return session
 
 
 @pytest_asyncio.fixture()
@@ -179,6 +95,12 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
 
     async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS) as client:
         yield client
+
+
+@pytest_asyncio.fixture()
+async def smoke_pool_reset(api_client: httpx.AsyncClient) -> AsyncIterator[None]:
+    reset_test_smoke_pool()
+    yield
 
 
 @pytest.mark.asyncio
@@ -237,17 +159,10 @@ async def test_portal_student_sequence_register_login_refresh_and_data_endpoints
 @pytest.mark.asyncio
 async def test_portal_teacher_and_admin_sequences_for_role_specific_endpoints(
     api_client: httpx.AsyncClient,
+    smoke_pool_reset: None,
 ) -> None:
-    teacher = await _ensure_role(
-        api_client,
-        await _register_and_login(api_client, "teacher"),
-        role="teacher",
-    )
-    admin = await _ensure_role(
-        api_client,
-        await _register_and_login(api_client, "admin"),
-        role="admin",
-    )
+    teacher = await login_smoke_portal_session(api_client, role="teacher")
+    admin = await login_smoke_portal_session(api_client, role="admin")
 
     lessons_response = await api_client.get(
         "/teacher/lessons",

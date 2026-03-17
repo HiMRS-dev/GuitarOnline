@@ -26,6 +26,9 @@ on:
   schedule:
     - cron: "10 4 1-7 * 1"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   drill:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'ROLLBACK' }}

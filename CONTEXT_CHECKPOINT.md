@@ -1626,6 +1626,22 @@
   - conclusion: isolated remote `test` contour can now auto-start, migrate, reset the fixed smoke
     pool, and complete the deploy-smoke business path end-to-end.
 
+### 18.2.12) Ops Follow-Up: GitHub Actions JS Runtime Opt-In Moved To Node 24 (2026-03-17)
+- GitHub Actions started warning that several workflows still ran JavaScript actions on Node 20
+  and would be forced to Node 24 by default on 2026-06-02.
+- applied the minimal repo-local mitigation recommended by GitHub:
+  - added top-level `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` to every workflow that uses
+    JavaScript-based actions in this repository,
+  - this keeps the existing action versions and workflow logic intact while forcing the runtime
+    switch early,
+  - covered workflows: `ci`, `deploy`, `synthetic-ops-check`, `synthetic-ops-retention`,
+    `backup-restore-verify`, `backup-schedule-retention`, `rollback-drill`,
+    `elevated-account-audit`, `restore-rehearsal`, `load-sanity`,
+    `secret-rotation-dry-run`.
+- verification completed locally:
+  - static workflow test coverage now asserts the Node 24 opt-in marker across the full affected
+    workflow set.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

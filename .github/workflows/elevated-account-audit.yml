@@ -13,6 +13,9 @@ on:
   schedule:
     - cron: "35 4 2 * *"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   audit:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'AUDIT' }}
@@ -188,4 +191,3 @@ jobs:
             .tmp/elevated-account-audit-report.md
             .tmp/elevated-account-audit.log
           if-no-files-found: error
-

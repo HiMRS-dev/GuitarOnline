@@ -26,6 +26,9 @@ on:
   schedule:
     - cron: "45 3 * * *"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   retention:
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.confirm == 'RETENTION' }}

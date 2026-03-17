@@ -15,6 +15,9 @@ on:
         description: "Type SANITY to confirm"
         required: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   load-sanity:
     if: ${{ github.event.inputs.confirm == 'SANITY' }}

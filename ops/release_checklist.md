@@ -80,7 +80,9 @@ Use this checklist before promoting a build to a target environment.
 
 - Preferred one-click path (GitHub Actions):
   - run `.github/workflows/deploy.yml` (`workflow_dispatch`, confirm=`DEPLOY`).
-  - choose runtime profile (`standard` or `proxy`) and optional backup/smoke toggles.
+  - choose `operation=deploy_live` for production deploys,
+    or `operation=test_smoke_only` for isolated business-path smoke only.
+  - for live deploys, choose runtime profile (`standard` or `proxy`) and optional backup/smoke toggles.
   - workflow includes pre-deploy `web-admin` smoke e2e gate before remote SSH/deploy stages.
 - Optional auto-deploy mode:
   - set repository secret `AUTO_DEPLOY_ENABLED=true` to deploy automatically on push to `main`.
@@ -107,12 +109,26 @@ Use this checklist before promoting a build to a target environment.
 - Required scripted smoke run:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
   - release must be blocked when `scripts/deploy_smoke_check.py` is absent in selected deploy ref.
-  - deploy path must verify smoke markers in output:
-    - `Role-based release gate passed.`
+  - live deploy path must verify smoke markers in output:
+    - `Ops-only live smoke passed.`
     - `Smoke checks passed.`
   - deploy workflow artifact `deploy-evidence-<run_id>-<attempt>` must contain:
     - `deploy_remote.log`,
     - `summary.txt` with marker statuses.
+  - current workflow also records `live_ops_marker`; older refs may still report the legacy
+    `role_gate_marker` during rollback/replay scenarios.
+- Live smoke scope is ops-only:
+  - `/health`, `/ready`, `/docs`, `/metrics`, `/portal`, `/admin/`, static assets.
+  - do not treat `live` deploy smoke as business-flow evidence.
+- Isolated business-path deploy smoke:
+  - run `.github/workflows/deploy.yml` manually with:
+    - `operation=test_smoke_only`
+    - `confirm=TEST_SMOKE`
+  - inspect uploaded artifact:
+    - `test-deploy-smoke-<run_id>-<run_attempt>`
+  - expected markers:
+    - `Role-based release gate passed.`
+    - `Smoke checks passed.`
 - Load sanity scenario (~1000 slots + admin slots envelope checks):
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - expected output includes `Load sanity passed`.
@@ -137,7 +153,7 @@ Use this checklist before promoting a build to a target environment.
   - `GET /portal` returns `200`.
   - `GET /portal/static/app.js` returns `200`.
   - `GET /portal/static/styles.css` returns `200`.
-- Role-based critical-path flow (covered by `scripts/deploy_smoke_check.py`):
+- Role-based critical-path flow (isolated `test` contour only, covered by `scripts/deploy_smoke_check.py`):
   - `admin` creates teacher slot + student package,
   - `student` completes hold -> confirm booking and sees booking/package in own views,
   - `teacher` sees booking in `/api/v1/booking/my`,

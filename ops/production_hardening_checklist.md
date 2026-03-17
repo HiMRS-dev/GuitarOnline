@@ -17,8 +17,14 @@ Use this checklist to move from "working deploy" to repeatable reliability.
   - `curl -k -I https://127.0.0.1:${PROXY_TLS_PUBLIC_PORT:-8443}/health | grep -i strict-transport-security`
   - `curl -I http://127.0.0.1:${PROXY_PUBLIC_PORT:-8080}/health | grep -E "308|301"`
 - Keep `run_smoke=true` in deploy workflow for production releases.
-- Confirm deploy smoke logs include role gate marker:
-  - `Role-based release gate passed.`
+- Confirm deploy smoke logs include the live ops-only marker:
+  - `Ops-only live smoke passed.`
+- When business-path evidence is required, run the isolated manual smoke path instead of using
+  `live`:
+  - `.github/workflows/deploy.yml`
+  - `operation=test_smoke_only`
+  - `confirm=TEST_SMOKE`
+  - expected markers: `Role-based release gate passed.` then `Smoke checks passed.`
 
 ## 2) Log Rotation Baseline
 

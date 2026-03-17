@@ -49,12 +49,19 @@
 
 - Deploy workflow run URL:
   - `<fill>`
-- Deploy evidence artifact:
+- Live deploy evidence artifact:
   - `deploy-evidence-<run_id>-<run_attempt>`
-- Required markers:
-  - `Role-based release gate passed.` -> `<present/missing>`
+- Required live markers:
+  - `Ops-only live smoke passed.` -> `<present/missing>`
   - `Smoke checks passed.` -> `<present/missing>`
   - `Smoke markers verified.` -> `<present/missing>`
+- Optional isolated business-smoke workflow run URL:
+  - `<fill or n/a>`
+- Optional isolated business-smoke artifact:
+  - `test-deploy-smoke-<run_id>-<run_attempt>` or `<n/a>`
+- Optional isolated business markers:
+  - `Role-based release gate passed.` -> `<present/missing or n/a>`
+  - `Smoke checks passed.` -> `<present/missing or n/a>`
 
 ## Post-Rotation Validation
 

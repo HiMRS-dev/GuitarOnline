@@ -15,7 +15,8 @@ This document tracks approved production key-rotation windows.
 - Scope:
   - rotate active runtime signing key (`JWT_SECRET` when present, otherwise `SECRET_KEY`),
   - sync GitHub deploy env bundle secret (`PROD_ENV_FILE_B64`),
-  - run deploy with role-based smoke gate enabled.
+  - run deploy with live ops-only smoke enabled,
+  - optionally collect isolated business-smoke evidence via manual `test_smoke_only` run.
 
 ## Preconditions (Must Be Green Before Start)
 
@@ -35,11 +36,14 @@ This document tracks approved production key-rotation windows.
 ## Success Criteria
 
 1. Deploy workflow completes with `run_smoke=true`.
-2. Smoke output includes:
+2. Live smoke output includes:
+   - `Ops-only live smoke passed.`
+   - `Smoke checks passed.`
+3. If isolated business smoke is executed, its artifact includes:
    - `Role-based release gate passed.`
    - `Smoke checks passed.`
-3. Auth flow works with newly issued tokens; old tokens are invalidated.
-4. `/health`, `/ready`, `/metrics` return healthy responses.
+4. Auth flow works with newly issued tokens; old tokens are invalidated.
+5. `/health`, `/ready`, `/metrics` return healthy responses.
 
 ## Rollback Trigger
 

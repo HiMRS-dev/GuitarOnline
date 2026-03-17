@@ -97,8 +97,11 @@ Production-ready modular monolith backend for an online guitar school.
   - `docker compose -f docker-compose.prod.yml exec -T app alembic upgrade head`
 - Run post-deploy smoke script:
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/deploy_smoke_check.py`
-  - set `DEPLOY_SMOKE_ADMIN_EMAIL` and `DEPLOY_SMOKE_ADMIN_PASSWORD` in runtime `.env`,
-    because admin self-registration is not supported.
+  - in `live` / production contour this now performs ops-only checks only
+    (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets),
+    and does not create synthetic business users or records.
+  - for full business-path deploy smoke, run the isolated `test` contour path via
+    `.github/workflows/deploy.yml` with `operation=test_smoke_only`.
 - Run load sanity scenario (~1000 weekly slots + admin list envelope checks):
   - `docker compose -f docker-compose.prod.yml exec -T app python scripts/load_sanity.py`
   - optional custom target (must stay within bulk-create cap):
@@ -143,8 +146,6 @@ Production-ready modular monolith backend for an online guitar school.
 | `SYNTHETIC_RETENTION_DRY_RUN` | No | ops scripts | Default dry-run mode for synthetic retention script (`true`/`false`, default: `false`). |
 | `ADMIN_UI_API_BASE_URL` | No | admin-ui profile | Build-time API base for `web-admin` Docker profile. |
 | `ADMIN_UI_BASE_PATH` | No | admin-ui profile | Build-time base path for `web-admin` (`/admin/` by default). |
-| `DEPLOY_SMOKE_ADMIN_EMAIL` | Conditionally yes | deploy smoke | Existing admin email used by `scripts/deploy_smoke_check.py` when elevated self-registration is disabled. |
-| `DEPLOY_SMOKE_ADMIN_PASSWORD` | Conditionally yes | deploy smoke | Existing admin password used by `scripts/deploy_smoke_check.py` when elevated self-registration is disabled. |
 | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | Yes | monitoring | Required by production compose; unsafe `admin/admin` fallback is removed. |
 
 ### CI/CD secrets
@@ -178,7 +179,9 @@ Production-ready modular monolith backend for an online guitar school.
 - GitHub Actions workflow:
   - `.github/workflows/deploy.yml`
 - Trigger:
-  - `workflow_dispatch` with required confirmation input `DEPLOY`.
+  - `workflow_dispatch` with:
+    - `operation=deploy_live` + required confirmation input `DEPLOY`, or
+    - `operation=test_smoke_only` + required confirmation input `TEST_SMOKE`.
   - `push` to `main` when repository secret `AUTO_DEPLOY_ENABLED=true`.
 - Required GitHub repository secrets:
   - `DEPLOY_HOST`
@@ -203,6 +206,7 @@ Production-ready modular monolith backend for an online guitar school.
   - auth requirements:
     - either run `gh auth login` once, or set `GH_TOKEN`/`GITHUB_TOKEN` for current shell.
 - Runtime options:
+  - `operation` (`deploy_live` or `test_smoke_only`),
   - `ref` (branch/tag/SHA),
   - `profile` (`standard` or `proxy`),
   - `run_backup` (`true/false`),
@@ -222,9 +226,12 @@ Production-ready modular monolith backend for an online guitar school.
   - runs `web-admin` smoke e2e preflight on the runner (`npm run build` + Playwright),
     and blocks release before any remote SSH/deploy step if frontend gate fails,
   - performs compose deploy and DB migrations,
-  - runs post-deploy role-based smoke gate (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets, `admin/teacher/student` critical flow),
-  - verifies smoke output markers `Role-based release gate passed.` and `Smoke checks passed.`,
+  - runs post-deploy ops-only live smoke (`/health`, `/ready`, `/docs`, `/metrics`, `/portal`, static assets),
+  - verifies live smoke output markers `Ops-only live smoke passed.` and `Smoke checks passed.`,
+  - supports manual isolated business smoke via `operation=test_smoke_only`,
+    reusing the fixed smoke pool in `docker-compose.test.yml`,
   - uploads workflow artifact `deploy-evidence-<run_id>-<attempt>` with deploy log and marker summary,
+  - uploads workflow artifact `test-deploy-smoke-<run_id>-<attempt>` for manual isolated business-smoke runs,
   - fails closed when `scripts/deploy_smoke_check.py` is missing in deployed ref,
   - performs automatic rollback to previous git SHA when deploy/migrate/smoke fails.
 - Secret safety controls:

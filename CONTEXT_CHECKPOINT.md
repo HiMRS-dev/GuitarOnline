@@ -1658,6 +1658,23 @@
     tests/test_identity_refresh_cookie.py` -> `7 passed`,
   - `python -m poetry run pytest -q tests/test_portal_auth_flow_integration.py` -> `2 passed`.
 
+### 18.2.14) CI Follow-Up: Booking/Billing Integration No Longer Hits Login Rate Limit (2026-03-17)
+- after `supply-chain` was fixed, the next failing `ci` job was `integration`, but the root cause
+  was separate:
+  - `tests/test_booking_billing_integration.py` reused the same API process for the entire file,
+  - the smoke helper logged in fixed `admin` / `teacher` / `student` users before each test,
+  - repeated `/identity/auth/login` calls from `127.0.0.1` eventually tripped the default
+    in-memory login limiter and produced `429 rate_limited`.
+- fixed this in test helpers without weakening runtime limits:
+  - `tests/integration_smoke_pool.py` now caches fixed smoke login sessions per `(base_url, role)`,
+  - before reuse it probes `/identity/users/me`; if the cached token no longer works, it performs a
+    fresh login automatically,
+  - this keeps integration traffic realistic while avoiding dozens of unnecessary repeated logins
+    in one CI file run.
+- local verification:
+  - `python -m poetry run pytest -q tests/test_integration_smoke_pool.py` -> `2 passed`,
+  - `python -m poetry run pytest -q tests/test_booking_billing_integration.py` -> `11 passed`.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

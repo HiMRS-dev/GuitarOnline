@@ -30,6 +30,7 @@ _SMOKE_EMAILS: dict[RoleName, str] = {
         "smoke-student-2@guitaronline.dev",
     ).strip(),
 }
+_PORTAL_SESSION_CACHE: dict[tuple[str, RoleName], PortalAuthSession] = {}
 
 
 @dataclass(slots=True)
@@ -122,6 +123,16 @@ async def login_smoke_portal_session(
     *,
     role: RoleName,
 ) -> PortalAuthSession:
+    cache_key = (str(client.base_url).rstrip("/"), role)
+    cached_session = _PORTAL_SESSION_CACHE.get(cache_key)
+    if cached_session is not None:
+        me_response = await client.get(
+            "/identity/users/me",
+            headers=_auth_headers(cached_session.access_token),
+        )
+        if me_response.status_code == 200:
+            return cached_session
+
     login_response = await client.post(
         "/identity/auth/login",
         json={
@@ -137,8 +148,10 @@ async def login_smoke_portal_session(
         headers=_auth_headers(token_pair["access_token"]),
     )
     _assert_status(me_response, 200)
-    return PortalAuthSession(
+    session = PortalAuthSession(
         user_id=UUID(me_response.json()["id"]),
         access_token=token_pair["access_token"],
         refresh_token=token_pair["refresh_token"],
     )
+    _PORTAL_SESSION_CACHE[cache_key] = session
+    return session

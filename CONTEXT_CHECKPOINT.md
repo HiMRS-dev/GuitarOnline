@@ -1615,6 +1615,16 @@
   - push this runner fix to a non-`main` branch,
   - rerun `.github/workflows/deploy.yml` with `operation=test_smoke_only` against that branch,
   - confirm artifact `test-deploy-smoke-<run_id>-<run_attempt>` contains a successful remote log.
+- external proof completed after the fix:
+  - branch: `env06-remote-test-smoke-migrations`,
+  - workflow run `23190445038` passed,
+  - uploaded artifact: `test-deploy-smoke-23190445038-1`,
+  - confirmed remote markers in the log:
+    - `Applying test contour database migrations`
+    - `Role-based release gate passed.`
+    - `Smoke checks passed.`
+  - conclusion: isolated remote `test` contour can now auto-start, migrate, reset the fixed smoke
+    pool, and complete the deploy-smoke business path end-to-end.
 
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.

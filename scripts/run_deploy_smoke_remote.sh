@@ -80,6 +80,26 @@ ensure_app_container_reachable() {
   fi
 }
 
+run_test_db_migrations() {
+  local max_attempts=15
+  local attempt=1
+
+  log "Applying test contour database migrations"
+  while [ "${attempt}" -le "${max_attempts}" ]; do
+    if docker compose -f "${compose_file}" exec -T app alembic upgrade head </dev/null; then
+      return
+    fi
+
+    if [ "${attempt}" -eq "${max_attempts}" ]; then
+      die "Test contour migrations failed after ${max_attempts} attempts."
+    fi
+
+    log "Migration attempt ${attempt}/${max_attempts} failed; waiting for services to become ready"
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+}
+
 compose_file="${COMPOSE_FILE:-docker-compose.test.yml}"
 auto_start_test_stack="$(normalize_boolean DEPLOY_SMOKE_AUTO_START_TEST_STACK "${DEPLOY_SMOKE_AUTO_START_TEST_STACK:-true}")"
 ref_name="${REF_NAME:-main}"
@@ -112,6 +132,7 @@ if [ ! -f "scripts/deploy_smoke_check.py" ]; then
 fi
 
 ensure_app_container_reachable
+run_test_db_migrations
 
 log "Resetting reusable smoke pool in test contour"
 if ! docker compose -f "${compose_file}" exec -T app python - < scripts/reset_test_smoke_pool.py; then

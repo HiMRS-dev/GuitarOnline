@@ -1595,6 +1595,27 @@
   - legacy `Role-based release gate passed.` references remain only where they intentionally
     describe isolated `test` business smoke or historical checkpoint evidence.
 
+### 18.2.11) ENV-06 Follow-Up: Remote Test Deploy Smoke Applies Migrations Before Reset (2026-03-17)
+- first real external proof for manual `operation=test_smoke_only` reached the target host but
+  failed before smoke execution:
+  - workflow run `23190284183`,
+  - remote runner auto-started `docker-compose.test.yml`,
+  - reusable smoke-pool reset then failed with `asyncpg.exceptions.UndefinedTableError:
+    relation "roles" does not exist`.
+- interpretation:
+  - the isolated `test` contour app/db/redis stack was reachable,
+  - the blocker was an unmigrated remote `test` database, not the deploy-smoke business flow.
+- follow-up hardening completed locally:
+  - `scripts/run_deploy_smoke_remote.sh` now runs `alembic upgrade head` inside the `app`
+    container before `scripts/reset_test_smoke_pool.py`,
+  - the migration step retries until the freshly started services are ready enough to accept the
+    schema upgrade,
+  - reset + deploy smoke still execute from the current checkout via stdin after migrations.
+- intended next proof:
+  - push this runner fix to a non-`main` branch,
+  - rerun `.github/workflows/deploy.yml` with `operation=test_smoke_only` against that branch,
+  - confirm artifact `test-deploy-smoke-<run_id>-<run_attempt>` contains a successful remote log.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

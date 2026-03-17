@@ -55,6 +55,8 @@ def test_test_contour_deploy_smoke_remote_runner_uses_reset_and_stdin_scripts() 
     assert "test contour only" in script
     assert 'docker-compose.test.yml' in script
     assert 'DEPLOY_SMOKE_AUTO_START_TEST_STACK' in script
+    assert 'Applying test contour database migrations' in script
+    assert 'alembic upgrade head' in script
     assert 'scripts/reset_test_smoke_pool.py' in script
     assert 'python - < scripts/reset_test_smoke_pool.py' in script
     assert 'python - < scripts/deploy_smoke_check.py' in script

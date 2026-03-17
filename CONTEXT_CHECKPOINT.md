@@ -1575,6 +1575,26 @@
     - `Role-based release gate passed.`
     - `Smoke checks passed.`
 
+### 18.2.10) ENV-09 Progress: Ops Docs Aligned With Live Ops-Only Smoke (2026-03-17)
+- updated key operator-facing docs to match the new contour policy:
+  - `README.md`,
+  - `ops/release_checklist.md`,
+  - `ops/production_hardening_checklist.md`,
+  - `ops/secret_rotation_schedule.md`,
+  - `ops/secret_rotation_execution_report_2026-03-11.md`.
+- docs now consistently state:
+  - `live` deploy smoke is ops-only and expects `Ops-only live smoke passed.` +
+    `Smoke checks passed.`,
+  - full business-path deploy smoke belongs to isolated `test` contour via
+    `operation=test_smoke_only`,
+  - secret-rotation and production-hardening evidence should treat isolated business smoke as
+    optional separate proof, not as part of the `live` deploy marker contract.
+- verification:
+  - grep across `README.md` and `ops/*` shows updated `Ops-only live smoke passed.` guidance in
+    the main operator-facing docs,
+  - legacy `Role-based release gate passed.` references remain only where they intentionally
+    describe isolated `test` business smoke or historical checkpoint evidence.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

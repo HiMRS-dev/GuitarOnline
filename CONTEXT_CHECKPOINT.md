@@ -1055,6 +1055,9 @@
      - prior failures remain as expected guard evidence (`deploy` runs `22895676451`, `22895863827`),
      - manual verification run `22896469703` (`workflow_dispatch`, `ref=main`) -> `success`.
    - in progress `2026-03-10`: monitor secret-scan signal quality and adjust heuristics only when new false-positive patterns are evidenced.
+   - new follow-up `2026-03-17`: investigate/fix `deploy` workflow failure on step `Configure known hosts`
+     (run `23193651430`, `main` @ `bc689c9`) so the live ops-only deploy path is green again before
+     the smoke-marker validation stage.
    - Done when: 7 consecutive days of green scheduled runs for `synthetic-ops-check`, `synthetic-ops-retention`, `restore-rehearsal`, plus at least one green `rollback-drill` run with report artifact.
 
 ## 16) Validation Snapshot For This Update
@@ -1707,6 +1710,25 @@
     -d --no-deps --force-recreate admin-ui reverse-proxy` recreated only the two nginx-based
     services,
   - both containers flipped from `unhealthy` to `healthy` after the healthcheck update.
+
+### 18.2.17) OPS-01 Follow-Up: Deploy Workflow Failed Before Remote Smoke On `Configure known hosts` (2026-03-17)
+- after commit `bc689c9` the new `ci` run stayed green, but the matching push-triggered `deploy`
+  run failed before any remote deploy/smoke logic could execute:
+  - workflow run: `23193651430`,
+  - failing step: `Configure known hosts`,
+  - the step reached `ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts` and then
+    exited `1`,
+  - subsequent `deploy_remote.sh` marker checks reported all smoke markers missing because the
+    workflow never reached the remote deploy step.
+- interpretation:
+  - this is a separate deploy-transport / SSH host-key acquisition issue,
+  - it is not evidence of a regression in the nginx healthcheck fix or in the live ops-only smoke
+    logic, because those steps did not run in GitHub Actions for this failed deploy attempt.
+- next task:
+  - inspect the `Configure known hosts` step and harden it so `deploy` can reliably proceed even
+    when `DEPLOY_KNOWN_HOSTS` is empty and the workflow must rely on `ssh-keyscan`,
+  - rerun a real `deploy` workflow after the fix and confirm the log again reaches live smoke
+    markers (`Ops-only live smoke passed.`, `Smoke checks passed.`, `Smoke markers verified.`).
 
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.

@@ -1551,6 +1551,30 @@
     - `Role-based release gate passed.`
     - `Smoke checks passed.`
 
+### 18.2.9) ENV-07 Progress: Live Deploy Smoke Reduced To Ops-Only (2026-03-17)
+- `scripts/deploy_smoke_check.py` now splits behavior by runtime contour:
+  - `APP_ENV=test` keeps the full fixed-smoke-pool business path,
+  - non-`test` / live contour now stops after health/readiness/static checks and emits:
+    - `Ops-only live smoke passed.`
+    - `Smoke checks passed.`
+- deploy marker validation remains rollback-safe:
+  - `scripts/deploy_remote.sh` now accepts either `Ops-only live smoke passed.` or the legacy
+    `Role-based release gate passed.` marker,
+  - `.github/workflows/deploy.yml` now records both `live_ops_marker` and
+    `role_gate_marker` in deploy evidence summary and accepts either one together with
+    `Smoke checks passed.` and `Smoke markers verified.`.
+- local proof:
+  - `Get-Content scripts/deploy_smoke_check.py -Raw | docker compose -f docker-compose.test.yml exec -T -e APP_ENV=production app python -`
+    completed successfully with ops-only markers only,
+  - an immediate follow-up reset via
+    `Get-Content scripts/reset_test_smoke_pool.py -Raw | docker compose -f docker-compose.test.yml exec -T app python -`
+    reported zero business cleanup counters, confirming that simulated live smoke created no
+    slots/bookings/packages/lessons/admin actions,
+  - `Get-Content scripts/deploy_smoke_check.py -Raw | docker compose -f docker-compose.test.yml exec -T app python -`
+    still completed successfully in `APP_ENV=test` with:
+    - `Role-based release gate passed.`
+    - `Smoke checks passed.`
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

@@ -8,7 +8,6 @@ import urllib.error
 import urllib.request
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
-from uuid import uuid4
 
 BASE_URL = os.getenv("DEPLOY_SMOKE_BASE_URL", "http://localhost:8000").rstrip("/")
 DEFAULT_SHARED_CREDENTIAL = "StrongPass123!"
@@ -85,7 +84,7 @@ def extract_page_items(payload: dict[str, object], endpoint: str) -> list[dict[s
     return [item for item in items if isinstance(item, dict)]
 
 
-def main() -> None:
+def run_basic_ops_checks() -> None:
     print("Smoke: health/readiness/static checks")
     for endpoint in [
         "/health",
@@ -99,103 +98,79 @@ def main() -> None:
     ]:
         request(endpoint, expected=200)
 
+
+def run_live_ops_only_smoke() -> None:
+    print("Smoke: live contour limited to ops-only checks")
+    print("Ops-only live smoke passed.")
+    print("Smoke checks passed.")
+
+
+def main() -> None:
+    run_basic_ops_checks()
     contour = resolve_runtime_contour()
     print(f"Smoke contour: {contour}")
-    suffix = uuid4().hex[:10]
+    if contour == "live":
+        run_live_ops_only_smoke()
+        return
+
     shared_credential = os.getenv("TEST_SMOKE_POOL_PASSWORD", DEFAULT_SHARED_CREDENTIAL)
     now_utc = datetime.now(UTC)
 
     configured_admin_email = os.getenv("DEPLOY_SMOKE_ADMIN_EMAIL", "").strip()
     configured_admin_password = os.getenv("DEPLOY_SMOKE_ADMIN_PASSWORD", "")
 
-    if contour == "test":
-        admin_email = configured_admin_email or os.getenv(
-            "TEST_SMOKE_ADMIN_EMAIL",
-            DEFAULT_TEST_SMOKE_ADMIN_EMAIL,
-        ).strip()
-        admin_password = configured_admin_password or os.getenv(
-            "TEST_SMOKE_POOL_PASSWORD",
-            shared_credential,
-        )
-        student_email = os.getenv(
-            "TEST_SMOKE_STUDENT_EMAIL",
-            DEFAULT_TEST_SMOKE_STUDENT_EMAIL,
-        ).strip()
-        teacher_email = os.getenv(
-            "TEST_SMOKE_STUDENT_TWO_EMAIL",
-            DEFAULT_TEST_SMOKE_STUDENT_TWO_EMAIL,
-        ).strip()
+    admin_email = configured_admin_email or os.getenv(
+        "TEST_SMOKE_ADMIN_EMAIL",
+        DEFAULT_TEST_SMOKE_ADMIN_EMAIL,
+    ).strip()
+    admin_password = configured_admin_password or os.getenv(
+        "TEST_SMOKE_POOL_PASSWORD",
+        shared_credential,
+    )
+    student_email = os.getenv(
+        "TEST_SMOKE_STUDENT_EMAIL",
+        DEFAULT_TEST_SMOKE_STUDENT_EMAIL,
+    ).strip()
+    teacher_email = os.getenv(
+        "TEST_SMOKE_STUDENT_TWO_EMAIL",
+        DEFAULT_TEST_SMOKE_STUDENT_TWO_EMAIL,
+    ).strip()
 
-        ensure(
-            bool(admin_email) and bool(admin_password),
-            "Test contour smoke pool requires admin credentials.",
-        )
-        ensure(
-            student_email != teacher_email,
-            "Test contour smoke pool requires distinct student and teacher-candidate emails.",
-        )
+    ensure(
+        bool(admin_email) and bool(admin_password),
+        "Test contour smoke pool requires admin credentials.",
+    )
+    ensure(
+        student_email != teacher_email,
+        "Test contour smoke pool requires distinct student and teacher-candidate emails.",
+    )
 
-        print("Smoke: fixed test-contour identities")
-        student_login = request_json(
-            "/api/v1/identity/auth/login",
-            method="POST",
-            body={"email": student_email, "password": shared_credential},
-            expected=200,
-        )
-        student_token = str(student_login["access_token"])
-        student_user = request_json(
-            "/api/v1/identity/users/me",
-            headers=auth_headers(student_token),
-            expected=200,
-        )
+    print("Smoke: fixed test-contour identities")
+    student_login = request_json(
+        "/api/v1/identity/auth/login",
+        method="POST",
+        body={"email": student_email, "password": shared_credential},
+        expected=200,
+    )
+    student_token = str(student_login["access_token"])
+    student_user = request_json(
+        "/api/v1/identity/users/me",
+        headers=auth_headers(student_token),
+        expected=200,
+    )
 
-        teacher_candidate_login = request_json(
-            "/api/v1/identity/auth/login",
-            method="POST",
-            body={"email": teacher_email, "password": shared_credential},
-            expected=200,
-        )
-        teacher_candidate_token = str(teacher_candidate_login["access_token"])
-        teacher_user = request_json(
-            "/api/v1/identity/users/me",
-            headers=auth_headers(teacher_candidate_token),
-            expected=200,
-        )
-    else:
-        teacher_email = f"deploy-smoke-teacher-{suffix}@guitaronline.dev"
-        student_email = f"deploy-smoke-student-{suffix}@guitaronline.dev"
-        if not configured_admin_email or not configured_admin_password:
-            raise RuntimeError(
-                "Set DEPLOY_SMOKE_ADMIN_EMAIL and DEPLOY_SMOKE_ADMIN_PASSWORD. "
-                "Public registration no longer creates admin accounts."
-            )
-
-        print("Smoke: student registration")
-        student_user = request_json(
-            "/api/v1/identity/auth/register",
-            method="POST",
-            body={
-                "email": student_email,
-                "password": shared_credential,
-                "timezone": "UTC",
-            },
-            expected=201,
-        )
-
-        print("Smoke: future teacher registration as student")
-        teacher_user = request_json(
-            "/api/v1/identity/auth/register",
-            method="POST",
-            body={
-                "email": teacher_email,
-                "password": shared_credential,
-                "timezone": "UTC",
-            },
-            expected=201,
-        )
-
-        admin_email = configured_admin_email
-        admin_password = configured_admin_password
+    teacher_candidate_login = request_json(
+        "/api/v1/identity/auth/login",
+        method="POST",
+        body={"email": teacher_email, "password": shared_credential},
+        expected=200,
+    )
+    teacher_candidate_token = str(teacher_candidate_login["access_token"])
+    teacher_user = request_json(
+        "/api/v1/identity/users/me",
+        headers=auth_headers(teacher_candidate_token),
+        expected=200,
+    )
 
     print("Smoke: role login")
     admin_login = request_json(
@@ -233,13 +208,6 @@ def main() -> None:
         body={"email": teacher_email, "password": shared_credential},
         expected=200,
     )
-    if contour != "test":
-        student_login = request_json(
-            "/api/v1/identity/auth/login",
-            method="POST",
-            body={"email": student_email, "password": shared_credential},
-            expected=200,
-        )
 
     teacher_token = str(teacher_login["access_token"])
     student_token = str(student_login["access_token"])

@@ -203,10 +203,12 @@ jobs:
           set -euo pipefail
           mkdir -p .tmp/deploy-evidence
           log_file=".tmp/deploy-evidence/deploy_remote.log"
+          live_ops_marker="missing"
           role_marker="missing"
           smoke_marker="missing"
           verified_marker="missing"
           if [ -f "${log_file}" ]; then
+            if grep -Fq "Ops-only live smoke passed." "${log_file}"; then live_ops_marker="present"; fi
             if grep -Fq "Role-based release gate passed." "${log_file}"; then role_marker="present"; fi
             if grep -Fq "Smoke checks passed." "${log_file}"; then smoke_marker="present"; fi
             if grep -Fq "Smoke markers verified." "${log_file}"; then verified_marker="present"; fi
@@ -218,6 +220,7 @@ jobs:
             echo "profile=${PROFILE}"
             echo "run_backup=${RUN_BACKUP}"
             echo "run_smoke=${RUN_SMOKE}"
+            echo "live_ops_marker=${live_ops_marker}"
             echo "role_gate_marker=${role_marker}"
             echo "smoke_passed_marker=${smoke_marker}"
             echo "smoke_verified_marker=${verified_marker}"
@@ -225,8 +228,8 @@ jobs:
 
           run_smoke_normalized="$(printf '%s' "${RUN_SMOKE:-true}" | tr '[:upper:]' '[:lower:]')"
           if [ "${run_smoke_normalized}" = "true" ]; then
-            if [ "${role_marker}" != "present" ] || [ "${smoke_marker}" != "present" ] || [ "${verified_marker}" != "present" ]; then
-              echo "::error::Deploy smoke markers are missing in deploy_remote.log. role_gate_marker=${role_marker}, smoke_passed_marker=${smoke_marker}, smoke_verified_marker=${verified_marker}"
+            if { [ "${live_ops_marker}" != "present" ] && [ "${role_marker}" != "present" ]; } || [ "${smoke_marker}" != "present" ] || [ "${verified_marker}" != "present" ]; then
+              echo "::error::Deploy smoke markers are missing in deploy_remote.log. live_ops_marker=${live_ops_marker}, role_gate_marker=${role_marker}, smoke_passed_marker=${smoke_marker}, smoke_verified_marker=${verified_marker}"
               exit 1
             fi
           fi

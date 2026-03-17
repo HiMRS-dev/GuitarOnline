@@ -39,7 +39,15 @@ def test_deploy_smoke_check_supports_fixed_smoke_pool_in_test_env() -> None:
     assert 'TEST_SMOKE_STUDENT_EMAIL' in script
     assert 'TEST_SMOKE_STUDENT_TWO_EMAIL' in script
     assert 'Smoke: fixed test-contour identities' in script
-    assert '"/api/v1/identity/auth/register"' in script
+    assert 'student_login = request_json(' in script
+
+
+def test_deploy_smoke_check_limits_live_contour_to_ops_only() -> None:
+    script = Path("scripts/deploy_smoke_check.py").read_text(encoding="utf-8")
+    assert "run_live_ops_only_smoke()" in script
+    assert "Smoke: live contour limited to ops-only checks" in script
+    assert "Ops-only live smoke passed." in script
+    assert "Smoke: student registration" not in script
 
 
 def test_test_contour_deploy_smoke_remote_runner_uses_reset_and_stdin_scripts() -> None:
@@ -63,3 +71,14 @@ def test_deploy_workflow_supports_manual_test_smoke_operation() -> None:
     assert "github.event.inputs.operation == 'test_smoke_only'" in workflow
     assert "scripts/run_deploy_smoke_remote.sh" in workflow
     assert "test-deploy-smoke-" in workflow
+
+
+def test_deploy_live_smoke_markers_accept_ops_only_or_legacy_role_gate() -> None:
+    deploy_script = Path("scripts/deploy_remote.sh").read_text(encoding="utf-8")
+    workflow = Path(".github/workflows/deploy.yml").read_text(encoding="utf-8")
+
+    assert "Ops-only live smoke passed." in deploy_script
+    assert "Role-based release gate passed." in deploy_script
+    assert "live_ops_marker=" in workflow
+    assert "role_gate_marker=" in workflow
+    assert 'live_ops_marker=${live_ops_marker}' in workflow

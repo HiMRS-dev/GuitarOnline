@@ -318,9 +318,9 @@ if [ "${RUN_SMOKE:-true}" = "true" ]; then
       rm -f "${smoke_log}"
       die "Smoke script failed before completion."
     fi
-    if ! grep -Fq "Role-based release gate passed." "${smoke_log}"; then
+    if ! grep -Fq "Ops-only live smoke passed." "${smoke_log}" && ! grep -Fq "Role-based release gate passed." "${smoke_log}"; then
       rm -f "${smoke_log}"
-      die "Smoke script output missing marker: Role-based release gate passed."
+      die "Smoke script output missing expected marker: Ops-only live smoke passed. or Role-based release gate passed."
     fi
     if ! grep -Fq "Smoke checks passed." "${smoke_log}"; then
       rm -f "${smoke_log}"

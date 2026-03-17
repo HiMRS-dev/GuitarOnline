@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getKpiOverview } from "../../features/kpi/api";
 import type { KpiOverview } from "../../features/kpi/types";
@@ -123,7 +123,7 @@ export function UsersPage() {
   const [activeToggleUserId, setActiveToggleUserId] = useState<string | null>(null);
   const [activeRoleUserId, setActiveRoleUserId] = useState<string | null>(null);
 
-  async function loadPageData() {
+  const loadPageData = useCallback(async () => {
     setLoading(true);
     setError(null);
     setUsersError(null);
@@ -183,11 +183,11 @@ export function UsersPage() {
     }
 
     setLoading(false);
-  }
+  }, [userRoleFilter, userActiveFilter, userQuery]);
 
   useEffect(() => {
     void loadPageData();
-  }, [userRoleFilter, userActiveFilter, userQuery]);
+  }, [loadPageData]);
 
   const latestTeachers = useMemo(
     () =>

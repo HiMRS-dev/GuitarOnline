@@ -1675,6 +1675,18 @@
   - `python -m poetry run pytest -q tests/test_integration_smoke_pool.py` -> `2 passed`,
   - `python -m poetry run pytest -q tests/test_booking_billing_integration.py` -> `11 passed`.
 
+### 18.2.15) CI Follow-Up: UsersPage Hook Warning Removed (2026-03-17)
+- the final remaining non-blocking annotation after the CI stabilization work came from
+  `web-admin/src/admin/pages/UsersPage.tsx`:
+  - React Hooks lint warned that `useEffect` referenced `loadPageData` without a stable
+    dependency.
+- fixed locally with a minimal frontend-only change:
+  - `loadPageData` is now wrapped in `useCallback(...)` with explicit filter dependencies,
+  - the corresponding `useEffect` now depends on `loadPageData`.
+- local limitation:
+  - this shell does not have `npm` / `npx`, so frontend lint could not be rerun locally here,
+  - confirmation is expected from the next GitHub Actions `web-admin` / `deploy` run.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

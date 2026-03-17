@@ -29,6 +29,16 @@ def test_proxy_profile_closes_internal_service_ports_and_exposes_tls() -> None:
     assert "${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}:/etc/nginx/certs:ro" in proxy_compose
 
 
+def test_nginx_healthchecks_pin_ipv4_loopback_instead_of_localhost() -> None:
+    prod_compose = Path("docker-compose.prod.yml").read_text(encoding="utf-8")
+    proxy_compose = Path("docker-compose.proxy.yml").read_text(encoding="utf-8")
+
+    assert "http://127.0.0.1/" in prod_compose
+    assert "http://localhost/" not in prod_compose
+    assert "https://127.0.0.1/health" in proxy_compose
+    assert "https://localhost/health" not in proxy_compose
+
+
 def test_grafana_credentials_require_explicit_env_values() -> None:
     prod_compose = Path("docker-compose.prod.yml").read_text(encoding="utf-8")
     assert (

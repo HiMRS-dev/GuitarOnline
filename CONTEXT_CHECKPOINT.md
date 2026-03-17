@@ -1687,6 +1687,27 @@
   - this shell does not have `npm` / `npx`, so frontend lint could not be rerun locally here,
   - confirmation is expected from the next GitHub Actions `web-admin` / `deploy` run.
 
+### 18.2.16) Local Ops Follow-Up: Admin UI / Reverse Proxy Healthchecks No Longer False-Fail On IPv6 Loopback (2026-03-17)
+- local Docker diagnostics showed that both `guitaronline-admin-ui-1` and
+  `guitaronline-reverse-proxy-1` were serving traffic correctly, but their healthchecks still
+  reported `unhealthy`:
+  - the failing command in both cases used `localhost`,
+  - inside these Alpine containers, `wget` resolved `localhost` to IPv6 loopback `::1`,
+  - both nginx instances were only listening on IPv4 (`listen 80;` / `listen 443 ssl;`), so the
+    healthcheck got `Connection refused` even while `127.0.0.1` answered `200 OK`.
+- minimal infrastructure fix:
+  - `docker-compose.prod.yml` healthcheck for `admin-ui` now probes `http://127.0.0.1/`,
+  - `docker-compose.proxy.yml` healthcheck for `reverse-proxy` now probes
+    `https://127.0.0.1/health`.
+- local verification:
+  - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml --profile admin-ui
+    config` passed after providing temporary dummy values for the unrelated required Grafana envs
+    (`GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`) in the shell,
+  - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml --profile admin-ui up
+    -d --no-deps --force-recreate admin-ui reverse-proxy` recreated only the two nginx-based
+    services,
+  - both containers flipped from `unhealthy` to `healthy` after the healthcheck update.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

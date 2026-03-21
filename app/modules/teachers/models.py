@@ -8,12 +8,44 @@ from uuid import UUID
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from app.core.database import Base, BaseModelMixin
 from app.core.enums import TeacherStatusEnum
 
 if TYPE_CHECKING:
     from app.modules.identity.models import User
+
+
+class TeacherStatusType(TypeDecorator[TeacherStatusEnum]):
+    """Persist lowercase teacher-status values while tolerating legacy casing on read."""
+
+    impl = SAEnum("active", "disabled", name="teacher_status_enum", native_enum=False)
+    cache_ok = True
+
+    @staticmethod
+    def _coerce(value: TeacherStatusEnum | str) -> TeacherStatusEnum:
+        if isinstance(value, TeacherStatusEnum):
+            return value
+
+        normalized = str(value).strip()
+        if not normalized:
+            raise ValueError("Teacher status cannot be empty.")
+        return TeacherStatusEnum(normalized.lower())
+
+    def process_bind_param(
+        self,
+        value: TeacherStatusEnum | str | None,
+        dialect,
+    ) -> str | None:
+        if value is None:
+            return None
+        return self._coerce(value).value
+
+    def process_result_value(self, value: str | None, dialect) -> TeacherStatusEnum | None:
+        if value is None:
+            return None
+        return self._coerce(value)
 
 
 class TeacherProfile(BaseModelMixin, Base):
@@ -33,7 +65,7 @@ class TeacherProfile(BaseModelMixin, Base):
     bio: Mapped[str] = mapped_column(Text, default="", nullable=False)
     experience_years: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[TeacherStatusEnum] = mapped_column(
-        SAEnum(TeacherStatusEnum, name="teacher_status_enum", native_enum=False),
+        TeacherStatusType(),
         default=TeacherStatusEnum.ACTIVE,
         nullable=False,
         index=True,

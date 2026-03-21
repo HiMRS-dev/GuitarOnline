@@ -189,3 +189,11 @@ def test_synthetic_ops_workflow_uses_auto_alert_policy_for_manual_runs() -> None
     assert "- false" in workflow
     assert "Alert policy:" in workflow
     assert "github.event.inputs.alert_on_failure || 'auto'" in workflow
+
+
+def test_ci_integration_api_uses_test_auth_rate_limits() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "AUTH_RATE_LIMIT_REGISTER_REQUESTS: 200" in workflow
+    assert "AUTH_RATE_LIMIT_LOGIN_REQUESTS: 200" in workflow
+    assert "AUTH_RATE_LIMIT_REFRESH_REQUESTS: 400" in workflow

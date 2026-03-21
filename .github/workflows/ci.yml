@@ -232,6 +232,10 @@ jobs:
           APP_ENV: development
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline
           AUTH_RATE_LIMIT_TRUSTED_PROXY_IPS: 127.0.0.1,::1
+          AUTH_RATE_LIMIT_WINDOW_SECONDS: 60
+          AUTH_RATE_LIMIT_REGISTER_REQUESTS: 200
+          AUTH_RATE_LIMIT_LOGIN_REQUESTS: 200
+          AUTH_RATE_LIMIT_REFRESH_REQUESTS: 400
           AUTH_REGISTER_ALLOWED_ROLES: student,teacher,admin
         run: |
           poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 > api.log 2>&1 &

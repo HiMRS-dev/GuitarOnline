@@ -1730,6 +1730,35 @@
   - rerun a real `deploy` workflow after the fix and confirm the log again reaches live smoke
     markers (`Ops-only live smoke passed.`, `Smoke checks passed.`, `Smoke markers verified.`).
 
+### 18.2.18) Live User-Baseline Checkpoint After Operator-Approved Cleanup (2026-03-21)
+- operator-approved live cleanup was executed with explicit pre-cleanup backup and post-cleanup
+  synthetic verification:
+  - `backup-schedule-retention` run `23372831723` -> `success`,
+  - cleanup run `23372891078` -> `success`,
+  - manual `synthetic-ops-check` run `23372907968` (`live`, `alert_on_failure=false`) -> `success`,
+  - repeat read-only confirmation run `23372926236` -> `success`.
+- current confirmed `live` user baseline (`2026-03-21T05:27:14.106224+00:00`):
+  - `users=4`,
+  - `student=1`,
+  - `teacher=1`,
+  - `admin=2`,
+  - origin split:
+    - `synthetic_ops=3`,
+    - `legacy_or_unknown_elevated=1`.
+- preserved primary admin:
+  - `user_id=d697da0c-3e23-457e-81bf-10c37b0c0090`,
+  - selected as the earliest non-service active `admin` by `created_at`,
+  - confirmation source: cleanup report + repeat read-only audit.
+- cleanup effect summary:
+  - deleted users: `37`,
+  - deleted bookings: `8`,
+  - deleted availability slots: `2008`,
+  - slot reassignments to preserved admin required: `0`.
+- operational note:
+  - this is the current confirmed runtime baseline,
+  - it differs from the stricter long-term target policy above because the synthetic trio was
+    intentionally retained for the current live synthetic path.
+
 ### 18.3) Explicit Non-Goals
 - Do not keep automatic smoke users in `live`.
 - Do not run booking smoke in `live`.

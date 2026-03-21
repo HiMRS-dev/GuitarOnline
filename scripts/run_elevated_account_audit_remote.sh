@@ -87,7 +87,9 @@ sync_ref "${ref_name}"
 if [ ! -f "${compose_file}" ]; then
   die "Compose file not found: ${compose_file}"
 fi
-if [ -f "scripts/user_origin_audit.py" ]; then
+if [ -f "scripts/test_user_cleanup.py" ]; then
+  audit_script_path="scripts/test_user_cleanup.py"
+elif [ -f "scripts/user_origin_audit.py" ]; then
   audit_script_path="scripts/user_origin_audit.py"
 elif [ -f "scripts/elevated_account_audit.py" ]; then
   audit_script_path="scripts/elevated_account_audit.py"

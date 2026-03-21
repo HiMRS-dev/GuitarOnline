@@ -187,6 +187,20 @@ def _build_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         key: by_origin_and_role[key]
         for key in sorted(by_origin_and_role)
     }
+    summary["total_elevated_accounts"] = (
+        summary["by_role_total"][str(RoleEnum.TEACHER)]
+        + summary["by_role_total"][str(RoleEnum.ADMIN)]
+    )
+    summary["teachers_total"] = summary["by_role_total"][str(RoleEnum.TEACHER)]
+    summary["admins_total"] = summary["by_role_total"][str(RoleEnum.ADMIN)]
+    summary["provisioned_via_admin_flow"] = by_origin_counter.get(
+        "elevated_via_admin_role_change",
+        0,
+    )
+    summary["legacy_or_unknown_source"] = by_origin_counter.get(
+        "legacy_or_unknown_elevated",
+        0,
+    )
     return summary
 
 
@@ -302,6 +316,9 @@ async def async_main(args: argparse.Namespace) -> int:
     print(f"user_origin_audit_json={json_path}")
     print(f"user_origin_audit_markdown={md_path}")
     print("user_origin_audit_status=success")
+    print(f"elevated_account_audit_json={json_path}")
+    print(f"elevated_account_audit_markdown={md_path}")
+    print("elevated_account_audit_status=success")
     return 0
 
 

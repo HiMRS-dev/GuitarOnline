@@ -87,8 +87,12 @@ sync_ref "${ref_name}"
 if [ ! -f "${compose_file}" ]; then
   die "Compose file not found: ${compose_file}"
 fi
-if [ ! -f "scripts/elevated_account_audit.py" ]; then
-  die "Audit script not found in repository checkout: scripts/elevated_account_audit.py"
+if [ -f "scripts/user_origin_audit.py" ]; then
+  audit_script_path="scripts/user_origin_audit.py"
+elif [ -f "scripts/elevated_account_audit.py" ]; then
+  audit_script_path="scripts/elevated_account_audit.py"
+else
+  die "Audit script not found in repository checkout."
 fi
 if ! docker compose -f "${compose_file}" exec -T app true </dev/null >/dev/null 2>&1; then
   die "App container is not reachable via docker compose exec."
@@ -102,7 +106,7 @@ log "Running elevated-account audit script in app container"
 set +e
 docker compose -f "${compose_file}" exec -T app python - \
   --output-dir "${container_output_dir}" \
-  < scripts/elevated_account_audit.py 2>&1 | tee "${audit_log}"
+  < "${audit_script_path}" 2>&1 | tee "${audit_log}"
 audit_exit="${PIPESTATUS[0]}"
 set -e
 if [ "${audit_exit}" -ne 0 ]; then
@@ -160,4 +164,3 @@ log "Elevated-account audit completed."
 echo "elevated_account_audit_host_json=${host_json_path}"
 echo "elevated_account_audit_host_markdown=${host_md_path}"
 echo "elevated_account_audit_status=success"
-

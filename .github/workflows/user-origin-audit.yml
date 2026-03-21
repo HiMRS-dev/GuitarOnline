@@ -1,0 +1,194 @@
+name: user-origin-audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to use for remote user-origin audit runner script"
+        required: true
+        default: "main"
+      confirm:
+        description: "Type USER_AUDIT to confirm"
+        required: true
+
+jobs:
+  audit:
+    if: ${{ github.event.inputs.confirm == 'USER_AUDIT' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      REF_NAME: ${{ github.event.inputs.ref || 'main' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.REF_NAME }}
+
+      - name: Print audit context
+        run: |
+          set -euo pipefail
+          echo "Deploy host: ${DEPLOY_HOST}"
+          echo "Deploy path: ${DEPLOY_PATH}"
+          echo "Ref for runner script: ${REF_NAME}"
+
+      - name: Validate required secrets and inputs
+        run: |
+          set -euo pipefail
+          required=(
+            DEPLOY_HOST
+            DEPLOY_USER
+            DEPLOY_PATH
+            DEPLOY_SSH_PRIVATE_KEY
+          )
+          for name in "${required[@]}"; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing required repository secret: ${name}"
+              exit 1
+            fi
+          done
+          if [[ "${DEPLOY_PATH}" != /* ]]; then
+            echo "::error::DEPLOY_PATH must be an absolute path. Got: ${DEPLOY_PATH}"
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Configure known hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          port="${DEPLOY_PORT:-22}"
+          if [ -n "${DEPLOY_KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            ssh-keyscan -p "${port}" -H "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Run user-origin audit on target host
+        id: run_audit
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp
+          log_file=".tmp/user-origin-audit.log"
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          remote_script="/tmp/guitaronline-run-user-origin-audit-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.sh"
+          scp -P "${port}" "scripts/run_user_origin_audit_remote.sh" "${remote}:${remote_script}"
+
+          remote_cmd="$(printf 'DEPLOY_PATH=%q REF_NAME=%q bash %q' "${DEPLOY_PATH}" "${REF_NAME}" "${remote_script}")"
+
+          set +e
+          ssh -p "${port}" "${remote}" "${remote_cmd}" 2>&1 | tee "${log_file}"
+          ssh_exit="${PIPESTATUS[0]}"
+          set -e
+          ssh -p "${port}" "${remote}" "$(printf 'rm -f %q' "${remote_script}")" >/dev/null 2>&1 || true
+          if [ "${ssh_exit}" -ne 0 ]; then
+            echo "::error::Remote user-origin audit runner exited with status ${ssh_exit}."
+            echo "::group::user-origin-audit remote log tail"
+            tail -n 120 "${log_file}" || true
+            echo "::endgroup::"
+            exit "${ssh_exit}"
+          fi
+
+          if [ ! -s "${log_file}" ]; then
+            echo "::error::Remote user-origin audit runner produced no output."
+            exit 1
+          fi
+
+          host_json_path="$(
+            awk -F= '
+              {
+                marker = "user_origin_audit_host_json="
+                idx = index($0, marker)
+                if (idx <= 0) {
+                  next
+                }
+                value = substr($0, idx + length(marker))
+                print value
+              }
+            ' "${log_file}" | tail -n 1 || true
+          )"
+          host_json_path="$(printf '%s' "${host_json_path}" | tr -d '\r')"
+          if [ -z "${host_json_path}" ]; then
+            echo "::error::Failed to parse JSON report path from remote output."
+            exit 1
+          fi
+
+          host_md_path="$(
+            awk -F= '
+              {
+                marker = "user_origin_audit_host_markdown="
+                idx = index($0, marker)
+                if (idx <= 0) {
+                  next
+                }
+                value = substr($0, idx + length(marker))
+                print value
+              }
+            ' "${log_file}" | tail -n 1 || true
+          )"
+          host_md_path="$(printf '%s' "${host_md_path}" | tr -d '\r')"
+          if [ -z "${host_md_path}" ]; then
+            echo "::error::Failed to parse Markdown report path from remote output."
+            exit 1
+          fi
+
+          echo "host_json_path=${host_json_path}" >> "$GITHUB_OUTPUT"
+          echo "host_md_path=${host_md_path}" >> "$GITHUB_OUTPUT"
+
+      - name: Download user-origin audit report
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          port="${DEPLOY_PORT:-22}"
+          report_json="${{ steps.run_audit.outputs.host_json_path }}"
+          report_md="${{ steps.run_audit.outputs.host_md_path }}"
+          scp -P "${port}" "${remote}:${report_json}" ".tmp/user-origin-audit-report.json"
+          scp -P "${port}" "${remote}:${report_md}" ".tmp/user-origin-audit-report.md"
+
+      - name: Print user-origin audit summary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path(".tmp/user-origin-audit-report.json").read_text(encoding="utf-8"))
+          summary = report["summary"]
+          print(f"Generated at: {report['generated_at_utc']}")
+          print(f"App env: {report['app_env']}")
+          print(f"Users total: {summary['users_total']}")
+          print(f"Active / inactive: {summary['users_active']} / {summary['users_inactive']}")
+          print(
+              "Service/test / non-service: "
+              f"{summary['service_accounts_total']} / {summary['non_service_accounts_total']}"
+          )
+          for role_name, count in summary["by_role_total"].items():
+              print(f"Role {role_name}: {count}")
+          for origin_name, count in summary["by_origin_total"].items():
+              print(f"Origin {origin_name}: {count}")
+          PY
+
+      - name: Upload user-origin audit artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: user-origin-audit-report-${{ github.run_id }}
+          path: |
+            .tmp/user-origin-audit-report.json
+            .tmp/user-origin-audit-report.md
+            .tmp/user-origin-audit.log
+          if-no-files-found: error

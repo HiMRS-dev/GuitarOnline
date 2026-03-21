@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 class TeacherStatusType(TypeDecorator[TeacherStatusEnum]):
     """Persist lowercase teacher-status values while tolerating legacy casing on read."""
 
-    impl = SAEnum("active", "disabled", name="teacher_status_enum", native_enum=False)
+    impl = String(16)
     cache_ok = True
 
     @staticmethod

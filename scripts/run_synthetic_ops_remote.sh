@@ -112,11 +112,66 @@ ensure_app_container_reachable() {
   fi
 }
 
+ensure_test_db_container_reachable() {
+  if [ "${contour}" != "test" ]; then
+    return
+  fi
+
+  if docker compose -f "${compose_file}" exec -T db true </dev/null >/dev/null 2>&1; then
+    return
+  fi
+
+  if [ "${auto_start_test_stack}" != "true" ]; then
+    die "Test contour db container is not reachable via docker compose exec."
+  fi
+
+  log "Test contour db container is not reachable; starting db service"
+  if ! docker compose -f "${compose_file}" up -d db; then
+    die "Failed to start test contour db service."
+  fi
+
+  if ! docker compose -f "${compose_file}" exec -T db true </dev/null >/dev/null 2>&1; then
+    die "Test contour db container is not reachable via docker compose exec after startup."
+  fi
+}
+
+sync_test_app_database_env() {
+  local db_env_output
+  local -a db_env_lines
+
+  if [ "${contour}" != "test" ]; then
+    return
+  fi
+
+  ensure_test_db_container_reachable
+  db_env_output="$(
+    docker compose -f "${compose_file}" exec -T db sh -c \
+      'printf "%s\n%s\n%s\n" "$POSTGRES_USER" "$POSTGRES_PASSWORD" "$POSTGRES_DB"' \
+      | tr -d '\r'
+  )" || die "Unable to read test contour database env from db container."
+  mapfile -t db_env_lines <<<"${db_env_output}"
+
+  test_db_user="${db_env_lines[0]:-}"
+  test_db_password="${db_env_lines[1]:-}"
+  test_db_name="${db_env_lines[2]:-}"
+
+  if [ -z "${test_db_user}" ] || [ -z "${test_db_password}" ] || [ -z "${test_db_name}" ]; then
+    die "Incomplete database env returned from test contour db container."
+  fi
+
+  export TEST_POSTGRES_USER="${test_db_user}"
+  export TEST_POSTGRES_PASSWORD="${test_db_password}"
+  export TEST_POSTGRES_DB="${test_db_name}"
+  export TEST_DATABASE_URL="postgresql+asyncpg://${test_db_user}:${test_db_password}@db:5432/${test_db_name}"
+  log "Synced test contour app database env from running db service"
+}
+
 refresh_test_app_service() {
   if [ "${contour}" != "test" ] || [ "${auto_start_test_stack}" != "true" ]; then
     return
   fi
 
+  sync_test_app_database_env
   log "Refreshing test contour app service from current checkout"
   if ! docker compose -f "${compose_file}" up -d --build --force-recreate app; then
     die "Failed to refresh test contour app service."

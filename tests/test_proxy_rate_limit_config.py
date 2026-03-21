@@ -158,6 +158,9 @@ def test_synthetic_ops_remote_runner_supports_test_contour_smoke_pool() -> None:
         'log "Test contour app container is not reachable; starting app service"'
         in runner_script
     )
+    assert 'log "Test contour db container is not reachable; starting db service"' in runner_script
+    assert 'log "Synced test contour app database env from running db service"' in runner_script
+    assert 'TEST_DATABASE_URL="postgresql+asyncpg://${test_db_user}:${test_db_password}@db:5432/${test_db_name}"' in runner_script
     assert 'log "Refreshing test contour app service from current checkout"' in runner_script
     assert "up -d --build --force-recreate app" in runner_script
     assert 'log "Applying test contour database migrations"' in runner_script

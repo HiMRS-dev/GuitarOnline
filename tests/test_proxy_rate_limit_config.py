@@ -158,6 +158,10 @@ def test_synthetic_ops_remote_runner_supports_test_contour_smoke_pool() -> None:
         'log "Test contour app container is not reachable; starting app service"'
         in runner_script
     )
+    assert 'log "Refreshing test contour app service from current checkout"' in runner_script
+    assert "up -d --build --force-recreate app" in runner_script
+    assert 'log "Applying test contour database migrations"' in runner_script
+    assert "alembic upgrade head" in runner_script
 
 
 def test_synthetic_ops_check_uses_existing_elevated_accounts_and_registers_student_without_role(

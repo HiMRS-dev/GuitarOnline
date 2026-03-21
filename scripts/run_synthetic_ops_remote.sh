@@ -112,6 +112,41 @@ ensure_app_container_reachable() {
   fi
 }
 
+refresh_test_app_service() {
+  if [ "${contour}" != "test" ] || [ "${auto_start_test_stack}" != "true" ]; then
+    return
+  fi
+
+  log "Refreshing test contour app service from current checkout"
+  if ! docker compose -f "${compose_file}" up -d --build --force-recreate app; then
+    die "Failed to refresh test contour app service."
+  fi
+
+  if ! docker compose -f "${compose_file}" exec -T app true </dev/null >/dev/null 2>&1; then
+    die "App container is not reachable via docker compose exec after test contour refresh."
+  fi
+}
+
+run_test_db_migrations() {
+  local max_attempts=15
+  local attempt=1
+
+  log "Applying test contour database migrations"
+  while [ "${attempt}" -le "${max_attempts}" ]; do
+    if docker compose -f "${compose_file}" exec -T app alembic upgrade head </dev/null; then
+      return
+    fi
+
+    if [ "${attempt}" -eq "${max_attempts}" ]; then
+      die "Test contour migrations failed after ${max_attempts} attempts."
+    fi
+
+    log "Migration attempt ${attempt}/${max_attempts} failed; waiting for services to become ready"
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+}
+
 contour="$(normalize_contour "${SYNTHETIC_OPS_CONTOUR:-live}")"
 compose_file="${COMPOSE_FILE:-docker-compose.prod.yml}"
 base_url="${SYNTHETIC_OPS_BASE_URL:-http://localhost:8000}"
@@ -163,8 +198,10 @@ if [ "${contour}" = "test" ] && [ ! -f "scripts/reset_test_smoke_pool.py" ]; the
   die "Smoke-pool reset script not found in repository checkout: scripts/reset_test_smoke_pool.py"
 fi
 ensure_app_container_reachable
+refresh_test_app_service
 
 if [ "${contour}" = "test" ]; then
+  run_test_db_migrations
   log "Resetting reusable smoke pool in test contour"
   if ! docker compose -f "${compose_file}" exec -T app python - < scripts/reset_test_smoke_pool.py; then
     die "Smoke-pool reset command failed."

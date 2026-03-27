@@ -370,14 +370,15 @@ async def _async_main() -> int:
     return 0
 
 
-def main() -> int:
+async def _run_main() -> int:
     try:
-        return asyncio.run(_async_main())
+        return await _async_main()
     finally:
-        try:
-            asyncio.run(close_engine())
-        except RuntimeError:
-            pass
+        await close_engine()
+
+
+def main() -> int:
+    return asyncio.run(_run_main())
 
 
 if __name__ == "__main__":

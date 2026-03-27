@@ -374,20 +374,23 @@ def _print_summary(stats: SeedStats) -> None:
         print(f"  - {email} / {DEMO_PASSWORD}")
 
 
-def main() -> int:
-    parser = _build_parser()
-    args = parser.parse_args()
-
+async def _run_main(*, allow_production: bool) -> int:
     try:
-        stats = asyncio.run(_run_seed(allow_production=args.allow_production))
+        stats = await _run_seed(allow_production=allow_production)
     except Exception as exc:
         print(f"Demo seed failed: {exc}")
         return 1
     finally:
-        asyncio.run(close_engine())
+        await close_engine()
 
     _print_summary(stats)
     return 0
+
+
+def main() -> int:
+    parser = _build_parser()
+    args = parser.parse_args()
+    return asyncio.run(_run_main(allow_production=args.allow_production))
 
 
 if __name__ == "__main__":

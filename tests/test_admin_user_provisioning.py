@@ -196,8 +196,23 @@ class FakeAdminRepository:
         return user
 
 
-def make_actor(role: RoleEnum, *, user_id: UUID | None = None) -> SimpleNamespace:
-    return SimpleNamespace(id=user_id or uuid4(), role=SimpleNamespace(name=role))
+def make_actor(
+    role: RoleEnum,
+    *,
+    user_id: UUID | None = None,
+    email: str | None = None,
+) -> SimpleNamespace:
+    resolved_email = email
+    if resolved_email is None:
+        if role == RoleEnum.ADMIN:
+            resolved_email = "bootstrap-admin@guitaronline.dev"
+        else:
+            resolved_email = f"{role.value}@guitaronline.dev"
+    return SimpleNamespace(
+        id=user_id or uuid4(),
+        email=resolved_email,
+        role=SimpleNamespace(name=role),
+    )
 
 
 def make_user(
@@ -302,6 +317,23 @@ async def test_admin_can_promote_student_to_admin_without_teacher_profile() -> N
 
 
 @pytest.mark.asyncio
+async def test_non_privileged_admin_cannot_promote_student_to_admin() -> None:
+    target_user = make_user(email="student-admin@guitaronline.dev", role=RoleEnum.STUDENT)
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN, email="regular-admin@guitaronline.dev")
+
+    with pytest.raises(UnauthorizedException, match="privileged admin can manage admin roles"):
+        await service.update_user_role(
+            admin,
+            user_id=target_user.id,
+            payload=AdminUserRoleUpdateRequest(role=RoleEnum.ADMIN),
+        )
+
+    assert repository.set_role_calls == []
+
+
+@pytest.mark.asyncio
 async def test_admin_can_demote_teacher_and_hide_teacher_profile_from_user_list() -> None:
     target_user = make_user(
         email="teacher@guitaronline.dev",
@@ -323,6 +355,23 @@ async def test_admin_can_demote_teacher_and_hide_teacher_profile_from_user_list(
     assert result.teacher_profile_display_name is None
     assert target_user.teacher_profile is not None
     assert target_user.teacher_profile.status == TeacherStatusEnum.DISABLED
+
+
+@pytest.mark.asyncio
+async def test_non_privileged_admin_cannot_demote_other_admin() -> None:
+    target_user = make_user(email="other-admin@guitaronline.dev", role=RoleEnum.ADMIN)
+    repository = FakeAdminRepository(users=[target_user])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN, email="regular-admin@guitaronline.dev")
+
+    with pytest.raises(UnauthorizedException, match="privileged admin can manage admin roles"):
+        await service.update_user_role(
+            admin,
+            user_id=target_user.id,
+            payload=AdminUserRoleUpdateRequest(role=RoleEnum.STUDENT),
+        )
+
+    assert repository.set_role_calls == []
 
 
 @pytest.mark.asyncio

@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.database import get_db_session
 from app.core.enums import (
     BookingStatusEnum,
@@ -225,6 +226,10 @@ class AdminService:
             raise ConflictException("Admin cannot change own role")
         if target_user.role is None:
             raise NotFoundException("User role not found")
+        if self._is_admin_role_change(target_user=target_user, next_role=payload.role) and (
+            not self._can_manage_admin_roles(actor)
+        ):
+            raise UnauthorizedException("Only privileged admin can manage admin roles")
         if (
             target_user.role.name == payload.role
             and payload.role != RoleEnum.TEACHER
@@ -497,6 +502,18 @@ class AdminService:
                 "updated_at_utc": user.updated_at,
             },
         )
+
+    @staticmethod
+    def _is_admin_role_change(*, target_user: User, next_role: RoleEnum) -> bool:
+        current_role = target_user.role
+        if current_role is None:
+            return next_role == RoleEnum.ADMIN
+        return current_role.name == RoleEnum.ADMIN or next_role == RoleEnum.ADMIN
+
+    @staticmethod
+    def _can_manage_admin_roles(actor: User) -> bool:
+        actor_email = actor.email.strip().lower()
+        return actor_email in get_settings().admin_role_manager_emails
 
     async def delete_slot(
         self,

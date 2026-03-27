@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { getCurrentUser } from "../../features/auth/api";
 import { getKpiOverview } from "../../features/kpi/api";
 import type { KpiOverview } from "../../features/kpi/types";
 import { listTeachers } from "../../features/teachers/api";
@@ -8,6 +9,7 @@ import { ApiClientError, apiClient } from "../../shared/api/client";
 import type { PageResponse } from "../../shared/api/types";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
+const PRIVILEGED_ADMIN_EMAIL = "bootstrap-admin@guitaronline.dev";
 
 type UserRole = "student" | "teacher" | "admin";
 type UserRoleFilter = "all" | UserRole;
@@ -104,10 +106,15 @@ function buildRoleDrafts(items: AdminUserListItem[]): Record<string, UserRole> {
   return drafts;
 }
 
+function normalizeEmail(value: string | null): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
 export function UsersPage() {
   const [overview, setOverview] = useState<KpiOverview | null>(null);
   const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
+  const [currentAdminEmail, setCurrentAdminEmail] = useState<string | null>(null);
   const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, UserRole>>({});
   const [usersTotal, setUsersTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -133,10 +140,11 @@ export function UsersPage() {
     setUsersUnavailable(false);
 
     const usersPath = `/admin/users?${buildUsersQuery(userRoleFilter, userActiveFilter, userQuery)}`;
-    const [overviewResult, teachersResult, usersResult] = await Promise.allSettled([
+    const [overviewResult, teachersResult, usersResult, currentUserResult] = await Promise.allSettled([
       getKpiOverview(),
       listTeachers(),
-      apiClient.request<PageResponse<AdminUserListItem>>(usersPath)
+      apiClient.request<PageResponse<AdminUserListItem>>(usersPath),
+      getCurrentUser()
     ]);
 
     if (overviewResult.status === "fulfilled") {
@@ -183,6 +191,12 @@ export function UsersPage() {
       }
     }
 
+    if (currentUserResult.status === "fulfilled") {
+      setCurrentAdminEmail(currentUserResult.value.email);
+    } else {
+      setCurrentAdminEmail(null);
+    }
+
     setLoading(false);
   }, [userRoleFilter, userActiveFilter, userQuery]);
 
@@ -200,6 +214,8 @@ export function UsersPage() {
         .slice(0, 12),
     [teachers]
   );
+  const canManageAdminRoles =
+    normalizeEmail(currentAdminEmail) === normalizeEmail(PRIVILEGED_ADMIN_EMAIL);
 
   function handleRoleDraftChange(userId: string, role: UserRole) {
     setUserRoleDrafts((current) => ({
@@ -277,6 +293,12 @@ export function UsersPage() {
           При переводе пользователя в `teacher` backend автоматически создаёт или возвращает его
           профиль преподавателя в активное состояние.
         </p>
+        {canManageAdminRoles ? null : (
+          <p className="summary">
+            Назначать и снимать роль администратора может только{" "}
+            <code>{PRIVILEGED_ADMIN_EMAIL}</code>.
+          </p>
+        )}
         {error ? <p className="error-text">{error}</p> : null}
       </article>
 
@@ -373,6 +395,8 @@ export function UsersPage() {
               <tbody>
                 {users.map((user) => {
                   const draftRole = userRoleDrafts[user.user_id] ?? user.role;
+                  const touchesAdminRole = user.role === "admin" || draftRole === "admin";
+                  const canEditRole = canManageAdminRoles || !touchesAdminRole;
                   const roleChanged = draftRole !== user.role;
                   const toggleInProgress = activeToggleUserId === user.user_id;
                   const roleInProgress = activeRoleUserId === user.user_id;
@@ -392,20 +416,22 @@ export function UsersPage() {
                             <span>Новая роль</span>
                             <select
                               value={draftRole}
-                              disabled={roleInProgress || toggleInProgress}
+                              disabled={roleInProgress || toggleInProgress || !canEditRole}
                               onChange={(event) =>
                                 handleRoleDraftChange(user.user_id, event.target.value as UserRole)
                               }
                             >
                               <option value="student">студент</option>
                               <option value="teacher">преподаватель</option>
-                              <option value="admin">администратор</option>
+                              {canManageAdminRoles || user.role === "admin" ? (
+                                <option value="admin">администратор</option>
+                              ) : null}
                             </select>
                           </label>
 
                           <button
                             type="button"
-                            disabled={!roleChanged || roleInProgress || toggleInProgress}
+                            disabled={!roleChanged || roleInProgress || toggleInProgress || !canEditRole}
                             onClick={() => void handleChangeUserRole(user)}
                           >
                             {roleInProgress ? "Сохраняю..." : "Сменить роль"}

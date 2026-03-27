@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/guitaronline"
     frontend_admin_origin: Annotated[tuple[str, ...], NoDecode] = ("http://localhost:5173",)
+    admin_role_manager_emails: Annotated[tuple[str, ...], NoDecode] = (
+        "bootstrap-admin@guitaronline.dev",
+    )
     kpi_excluded_email_prefixes: Annotated[tuple[str, ...], NoDecode] = ("synthetic-ops-",)
 
     booking_hold_minutes: int = 10
@@ -138,6 +141,23 @@ class Settings(BaseSettings):
             return origins or ("http://localhost:5173",)
         raise TypeError(
             "FRONTEND_ADMIN_ORIGIN must be a comma-separated string or list",
+        )
+
+    @field_validator("admin_role_manager_emails", mode="before")
+    @classmethod
+    def parse_admin_role_manager_emails(cls, value: object) -> tuple[str, ...]:
+        """Parse privileged admin emails allowed to manage admin roles."""
+        default_value = ("bootstrap-admin@guitaronline.dev",)
+        if value is None:
+            return default_value
+        if isinstance(value, str):
+            emails = tuple(item.strip().lower() for item in value.split(",") if item.strip())
+            return emails or default_value
+        if isinstance(value, Sequence):
+            emails = tuple(str(item).strip().lower() for item in value if str(item).strip())
+            return emails or default_value
+        raise TypeError(
+            "ADMIN_ROLE_MANAGER_EMAILS must be a comma-separated string or list",
         )
 
     @field_validator("kpi_excluded_email_prefixes", mode="before")

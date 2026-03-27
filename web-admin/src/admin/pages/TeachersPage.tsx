@@ -4,6 +4,7 @@ import {
   activateTeacher,
   disableTeacher,
   getTeacherDetail,
+  invalidateTeachersCache,
   listTeachers
 } from "../../features/teachers/api";
 import type { TeacherDetail, TeacherListItem } from "../../features/teachers/types";
@@ -178,6 +179,7 @@ export function TeachersPage() {
     setActionSuccess(null);
 
     try {
+      invalidateTeachersCache();
       const updatedDetail = await disableTeacher(selectedTeacherId);
       setTeacherDetail(updatedDetail);
       await refreshTeachersAndSelection(updatedDetail.teacher_id);
@@ -206,6 +208,7 @@ export function TeachersPage() {
     setActionSuccess(null);
 
     try {
+      invalidateTeachersCache();
       await activateTeacher(selectedTeacherId);
       const updatedDetail = await getTeacherDetail(selectedTeacherId);
       setTeacherDetail(updatedDetail);

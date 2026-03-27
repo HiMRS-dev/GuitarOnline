@@ -1,22 +1,38 @@
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 
 import { AdminLayout } from "./admin/AdminLayout";
-import { AuditPage } from "./admin/pages/AuditPage";
-import { CalendarPage } from "./admin/pages/CalendarPage";
-import { KpiPage } from "./admin/pages/KpiPage";
-import { PackagesPage } from "./admin/pages/PackagesPage";
-import { StudentsPage } from "./admin/pages/StudentsPage";
-import { TeachersPage } from "./admin/pages/TeachersPage";
-import { UsersPage } from "./admin/pages/UsersPage";
 import { getCurrentUser, login, logout } from "./features/auth/api";
+import { CurrentUserProvider } from "./features/auth/currentUser";
 import {
   clearAccessSession,
   loadAccessSession,
   saveTokenPair,
   subscribeAccessSession
 } from "./features/auth/storage";
-import type { AccessSession, TokenPair } from "./features/auth/types";
+import type { AccessSession, CurrentUser, TokenPair } from "./features/auth/types";
+
+const AuditPage = lazy(() =>
+  import("./admin/pages/AuditPage").then((module) => ({ default: module.AuditPage }))
+);
+const CalendarPage = lazy(() =>
+  import("./admin/pages/CalendarPage").then((module) => ({ default: module.CalendarPage }))
+);
+const KpiPage = lazy(() =>
+  import("./admin/pages/KpiPage").then((module) => ({ default: module.KpiPage }))
+);
+const PackagesPage = lazy(() =>
+  import("./admin/pages/PackagesPage").then((module) => ({ default: module.PackagesPage }))
+);
+const StudentsPage = lazy(() =>
+  import("./admin/pages/StudentsPage").then((module) => ({ default: module.StudentsPage }))
+);
+const TeachersPage = lazy(() =>
+  import("./admin/pages/TeachersPage").then((module) => ({ default: module.TeachersPage }))
+);
+const UsersPage = lazy(() =>
+  import("./admin/pages/UsersPage").then((module) => ({ default: module.UsersPage }))
+);
 
 function maskToken(token: string): string {
   if (token.length <= 12) {
@@ -34,14 +50,14 @@ export function App() {
     });
   }, []);
 
-  function handleSignedIn(tokenPair: TokenPair) {
+  const handleSignedIn = useCallback((tokenPair: TokenPair) => {
     saveTokenPair(tokenPair);
-  }
+  }, []);
 
-  function handleSignOut() {
+  const handleSignOut = useCallback(() => {
     void logout().catch(() => undefined);
     clearAccessSession();
-  }
+  }, []);
 
   return (
     <Routes>
@@ -60,16 +76,36 @@ export function App() {
         }
       >
         <Route index element={<Navigate to="kpi" replace />} />
-        <Route path="users" element={<UsersPage />} />
-        <Route path="teachers" element={<TeachersPage />} />
-        <Route path="calendar" element={<CalendarPage />} />
-        <Route path="audit" element={<AuditPage />} />
-        <Route path="students" element={<StudentsPage />} />
-        <Route path="packages" element={<PackagesPage />} />
-        <Route path="kpi" element={<KpiPage />} />
+        <Route path="users" element={<LazyAdminSection><UsersPage /></LazyAdminSection>} />
+        <Route path="teachers" element={<LazyAdminSection><TeachersPage /></LazyAdminSection>} />
+        <Route path="calendar" element={<LazyAdminSection><CalendarPage /></LazyAdminSection>} />
+        <Route path="audit" element={<LazyAdminSection><AuditPage /></LazyAdminSection>} />
+        <Route path="students" element={<LazyAdminSection><StudentsPage /></LazyAdminSection>} />
+        <Route path="packages" element={<LazyAdminSection><PackagesPage /></LazyAdminSection>} />
+        <Route path="kpi" element={<LazyAdminSection><KpiPage /></LazyAdminSection>} />
       </Route>
       <Route path="*" element={<Navigate to={tokens ? "/admin" : "/login"} replace />} />
     </Routes>
+  );
+}
+
+type LazyAdminSectionProps = {
+  children: ReactNode;
+};
+
+function LazyAdminSection({ children }: LazyAdminSectionProps) {
+  return (
+    <Suspense
+      fallback={
+        <article className="card section-page">
+          <p className="eyebrow">Админка</p>
+          <h1>Загрузка раздела...</h1>
+          <p className="summary">Подгружаем код и данные выбранного раздела.</p>
+        </article>
+      }
+    >
+      {children}
+    </Suspense>
   );
 }
 
@@ -179,9 +215,19 @@ type ProtectedAdminRouteProps = {
 
 function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAdminRouteProps) {
   const [state, setState] = useState<"pending" | "granted" | "denied">("pending");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
   useEffect(() => {
     let active = true;
+
+    if (!tokens?.access_token) {
+      setCurrentUser(null);
+      setState("denied");
+      return () => {
+        active = false;
+      };
+    }
+
     setState("pending");
     getCurrentUser()
       .then((currentUser) => {
@@ -189,16 +235,19 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
           return;
         }
         if (currentUser.role.name !== "admin") {
+          setCurrentUser(null);
           onInvalidSession();
           setState("denied");
           return;
         }
+        setCurrentUser(currentUser);
         setState("granted");
       })
       .catch(() => {
         if (!active) {
           return;
         }
+        setCurrentUser(null);
         onInvalidSession();
         setState("denied");
       });
@@ -222,5 +271,5 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
     );
   }
 
-  return <>{children}</>;
+  return <CurrentUserProvider user={currentUser}>{children}</CurrentUserProvider>;
 }

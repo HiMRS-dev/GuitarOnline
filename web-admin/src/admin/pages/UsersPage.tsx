@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { getCurrentUser } from "../../features/auth/api";
-import { getKpiOverview } from "../../features/kpi/api";
+import { getKpiOverview, invalidateKpiOverviewCache } from "../../features/kpi/api";
 import type { KpiOverview } from "../../features/kpi/types";
-import { listTeachers } from "../../features/teachers/api";
+import { invalidateTeachersCache, listTeachers } from "../../features/teachers/api";
 import type { TeacherListItem } from "../../features/teachers/types";
 import { ApiClientError, apiClient } from "../../shared/api/client";
 import type { PageResponse } from "../../shared/api/types";
@@ -358,6 +358,8 @@ export function UsersPage() {
     setActionError(null);
 
     try {
+      invalidateKpiOverviewCache();
+      invalidateTeachersCache();
       await apiClient.request<AdminUserListItem>(`/admin/users/${user.user_id}/role`, {
         method: "POST",
         body: { role: nextRole }
@@ -376,6 +378,8 @@ export function UsersPage() {
     const nextAction = user.is_active ? "deactivate" : "activate";
 
     try {
+      invalidateKpiOverviewCache();
+      invalidateTeachersCache();
       await apiClient.request<AdminUserListItem>(`/admin/users/${user.user_id}/${nextAction}`, {
         method: "POST"
       });

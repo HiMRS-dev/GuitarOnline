@@ -4,6 +4,7 @@ import type { PageResponse } from "../../shared/api/types";
 import type { TeacherDetail, TeacherListItem } from "./types";
 
 const TEACHERS_LIST_CACHE_TTL_MS = 15_000;
+const TEACHER_DETAIL_CACHE_TTL_MS = 15_000;
 
 type TeachersFilterParams = {
   status?: "active" | "disabled";
@@ -15,7 +16,14 @@ type TeachersListCacheEntry = {
   promise?: Promise<PageResponse<TeacherListItem>>;
 };
 
+type TeacherDetailCacheEntry = {
+  expiresAt: number;
+  detail?: TeacherDetail;
+  promise?: Promise<TeacherDetail>;
+};
+
 const teachersListCache = new Map<string, TeachersListCacheEntry>();
+const teacherDetailCache = new Map<string, TeacherDetailCacheEntry>();
 
 function buildTeachersCacheKey(filters: TeachersFilterParams): string {
   return filters.status ?? "all";
@@ -23,6 +31,7 @@ function buildTeachersCacheKey(filters: TeachersFilterParams): string {
 
 export function invalidateTeachersCache(): void {
   teachersListCache.clear();
+  teacherDetailCache.clear();
 }
 
 export async function listTeachers(
@@ -70,13 +79,47 @@ export async function listTeachers(
 }
 
 export async function getTeacherDetail(teacherId: string): Promise<TeacherDetail> {
-  return apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}`);
+  const now = Date.now();
+  const cached = teacherDetailCache.get(teacherId);
+
+  if (cached?.detail && cached.expiresAt > now) {
+    return cached.detail;
+  }
+  if (cached?.promise && cached.expiresAt > now) {
+    return cached.promise;
+  }
+
+  const request = apiClient
+    .request<TeacherDetail>(`/admin/teachers/${teacherId}`)
+    .then((detail) => {
+      teacherDetailCache.set(teacherId, {
+        detail,
+        expiresAt: Date.now() + TEACHER_DETAIL_CACHE_TTL_MS
+      });
+      return detail;
+    })
+    .catch((error) => {
+      teacherDetailCache.delete(teacherId);
+      throw error;
+    });
+
+  teacherDetailCache.set(teacherId, {
+    promise: request,
+    expiresAt: now + TEACHER_DETAIL_CACHE_TTL_MS
+  });
+
+  return request;
 }
 
 export async function disableTeacher(teacherId: string): Promise<TeacherDetail> {
-  return apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}/disable`, {
+  const detail = await apiClient.request<TeacherDetail>(`/admin/teachers/${teacherId}/disable`, {
     method: "POST"
   });
+  teacherDetailCache.set(teacherId, {
+    detail,
+    expiresAt: Date.now() + TEACHER_DETAIL_CACHE_TTL_MS
+  });
+  return detail;
 }
 
 export async function activateTeacher(teacherId: string): Promise<void> {

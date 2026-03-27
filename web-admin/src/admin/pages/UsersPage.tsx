@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { getCurrentUser } from "../../features/auth/api";
+import { useCurrentUser } from "../../features/auth/currentUser";
 import { getKpiOverview, invalidateKpiOverviewCache } from "../../features/kpi/api";
 import type { KpiOverview } from "../../features/kpi/types";
 import { invalidateTeachersCache, listTeachers } from "../../features/teachers/api";
@@ -141,10 +141,10 @@ async function copyTextToClipboard(value: string): Promise<void> {
 }
 
 export function UsersPage() {
+  const currentAdmin = useCurrentUser();
   const [overview, setOverview] = useState<KpiOverview | null>(null);
   const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
-  const [currentAdminEmail, setCurrentAdminEmail] = useState<string | null>(null);
   const [revealedValueKey, setRevealedValueKey] = useState<string | null>(null);
   const [copyNotice, setCopyNotice] = useState<{
     key: string;
@@ -154,6 +154,8 @@ export function UsersPage() {
   const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, UserRole>>({});
   const [usersTotal, setUsersTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [teachersLoading, setTeachersLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [teachersUnavailable, setTeachersUnavailable] = useState(false);
@@ -167,79 +169,87 @@ export function UsersPage() {
   const [activeToggleUserId, setActiveToggleUserId] = useState<string | null>(null);
   const [activeRoleUserId, setActiveRoleUserId] = useState<string | null>(null);
 
-  const loadPageData = useCallback(async () => {
+  const loadUsersData = useCallback(async () => {
     setLoading(true);
-    setError(null);
     setUsersError(null);
     setActionError(null);
     setRevealedValueKey(null);
-    setTeachersUnavailable(false);
     setUsersUnavailable(false);
 
     const usersPath = `/admin/users?${buildUsersQuery(userRoleFilter, userActiveFilter, userQuery)}`;
-    const [overviewResult, teachersResult, usersResult, currentUserResult] = await Promise.allSettled([
-      getKpiOverview(),
-      listTeachers(),
-      apiClient.request<PageResponse<AdminUserListItem>>(usersPath),
-      getCurrentUser()
-    ]);
 
-    if (overviewResult.status === "fulfilled") {
-      setOverview(overviewResult.value);
-    } else {
-      setOverview(null);
-      setError(toLocalizedError(overviewResult.reason, "Не удалось загрузить сводку по ролям"));
+    try {
+      const page = await apiClient.request<PageResponse<AdminUserListItem>>(usersPath);
+      setUsers(page.items);
+      setUserRoleDrafts(buildRoleDrafts(page.items));
+      setUsersTotal(page.total);
+    } catch (requestError) {
+      setUsers([]);
+      setUserRoleDrafts({});
+      setUsersTotal(0);
+
+      if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
+        setUsersUnavailable(true);
+      } else {
+        setUsersError(
+          toLocalizedError(requestError, "Не удалось загрузить список пользователей")
+        );
+      }
+    } finally {
+      setLoading(false);
     }
+  }, [userRoleFilter, userActiveFilter, userQuery]);
 
-    if (teachersResult.status === "fulfilled") {
-      setTeachers(teachersResult.value.items);
-    } else {
-      setTeachers([]);
-      if (
+  const loadSecondaryData = useCallback(
+    async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
+      if (showLoading) {
+        setOverviewLoading(true);
+        setTeachersLoading(true);
+      }
+      setError(null);
+      setTeachersUnavailable(false);
+
+      const [overviewResult, teachersResult] = await Promise.allSettled([
+        getKpiOverview(),
+        listTeachers()
+      ]);
+
+      let nextError: string | null = null;
+
+      if (overviewResult.status === "fulfilled") {
+        setOverview(overviewResult.value);
+      } else {
+        nextError = toLocalizedError(overviewResult.reason, "Не удалось загрузить сводку по ролям");
+      }
+      setOverviewLoading(false);
+
+      if (teachersResult.status === "fulfilled") {
+        setTeachers(teachersResult.value.items);
+      } else if (
         teachersResult.reason instanceof ApiClientError &&
         UNAVAILABLE_STATUSES.has(teachersResult.reason.status)
       ) {
         setTeachersUnavailable(true);
+        setTeachers([]);
       } else {
-        setError((current) =>
-          current ??
-          toLocalizedError(teachersResult.reason, "Не удалось загрузить список преподавателей")
-        );
+        setTeachers([]);
+        nextError =
+          nextError ??
+          toLocalizedError(teachersResult.reason, "Не удалось загрузить список преподавателей");
       }
-    }
-
-    if (usersResult.status === "fulfilled") {
-      setUsers(usersResult.value.items);
-      setUserRoleDrafts(buildRoleDrafts(usersResult.value.items));
-      setUsersTotal(usersResult.value.total);
-    } else {
-      setUsers([]);
-      setUserRoleDrafts({});
-      setUsersTotal(0);
-      if (
-        usersResult.reason instanceof ApiClientError &&
-        UNAVAILABLE_STATUSES.has(usersResult.reason.status)
-      ) {
-        setUsersUnavailable(true);
-      } else {
-        setUsersError(
-          toLocalizedError(usersResult.reason, "Не удалось загрузить список пользователей")
-        );
-      }
-    }
-
-    if (currentUserResult.status === "fulfilled") {
-      setCurrentAdminEmail(currentUserResult.value.email);
-    } else {
-      setCurrentAdminEmail(null);
-    }
-
-    setLoading(false);
-  }, [userRoleFilter, userActiveFilter, userQuery]);
+      setTeachersLoading(false);
+      setError(nextError);
+    },
+    []
+  );
 
   useEffect(() => {
-    void loadPageData();
-  }, [loadPageData]);
+    void loadUsersData();
+  }, [loadUsersData]);
+
+  useEffect(() => {
+    void loadSecondaryData({ showLoading: true });
+  }, [loadSecondaryData]);
 
   useEffect(() => {
     if (copyNotice === null) {
@@ -264,7 +274,7 @@ export function UsersPage() {
     [teachers]
   );
   const canManageAdminRoles =
-    normalizeEmail(currentAdminEmail) === normalizeEmail(PRIVILEGED_ADMIN_EMAIL);
+    normalizeEmail(currentAdmin?.email ?? null) === normalizeEmail(PRIVILEGED_ADMIN_EMAIL);
 
   function handleRoleDraftChange(userId: string, role: UserRole) {
     setUserRoleDrafts((current) => ({
@@ -364,7 +374,8 @@ export function UsersPage() {
         method: "POST",
         body: { role: nextRole }
       });
-      await loadPageData();
+      await loadUsersData();
+      void loadSecondaryData();
     } catch (requestError) {
       setActionError(toLocalizedError(requestError, "Не удалось изменить роль пользователя"));
     } finally {
@@ -383,7 +394,8 @@ export function UsersPage() {
       await apiClient.request<AdminUserListItem>(`/admin/users/${user.user_id}/${nextAction}`, {
         method: "POST"
       });
-      await loadPageData();
+      await loadUsersData();
+      void loadSecondaryData();
     } catch (requestError) {
       setActionError(
         toLocalizedError(
@@ -398,7 +410,7 @@ export function UsersPage() {
     }
   }
 
-  if (loading && overview === null && users.length === 0 && teachers.length === 0) {
+  if (loading && users.length === 0) {
     return (
       <article className="card section-page">
         <p className="eyebrow">Пользователи</p>
@@ -423,8 +435,7 @@ export function UsersPage() {
         </p>
         {canManageAdminRoles ? null : (
           <p className="summary">
-            Назначать и снимать роль админа может только{" "}
-            <code>{PRIVILEGED_ADMIN_EMAIL}</code>.
+            Назначать и снимать роль админа может только <code>{PRIVILEGED_ADMIN_EMAIL}</code>.
           </p>
         )}
         {error ? <p className="error-text">{error}</p> : null}
@@ -451,6 +462,8 @@ export function UsersPage() {
               <p>{overview.users_admins}</p>
             </div>
           </div>
+        ) : overviewLoading ? (
+          <p className="summary">Загружаем сводку...</p>
         ) : (
           <p className="summary">Сводка по ролям недоступна.</p>
         )}
@@ -639,6 +652,8 @@ export function UsersPage() {
         <h2>Преподаватели (последние обновления)</h2>
         {teachersUnavailable ? (
           <p className="summary">`GET /admin/teachers` пока недоступен в текущем backend-контракте.</p>
+        ) : teachersLoading ? (
+          <p className="summary">Загружаем последние обновления...</p>
         ) : latestTeachers.length === 0 ? (
           <p className="summary">Список преподавателей пуст.</p>
         ) : (

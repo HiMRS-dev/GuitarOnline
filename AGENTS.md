@@ -41,7 +41,9 @@ Files to modify
 Risk level  
 Checks to run
 
-For non-trivial tasks the agent must wait for confirmation.
+For non-trivial tasks the agent should provide a short plan first.
+
+Confirmation is required only for high-risk changes or restricted areas.
 
 ---
 
@@ -252,10 +254,10 @@ global pattern replacement
 
 Default limits per task:
 
-maximum 5 modified files  
-maximum 1 new file  
+maximum 8 modified files  
+maximum 2 new files  
 
-If more changes are needed the agent must propose splitting the task.
+If more changes are needed the agent should keep the change scoped and explain why the extra files are necessary.
 
 ---
 
@@ -325,6 +327,17 @@ private credentials
 
 Secrets must never appear in logs or code.
 
+Exception:
+
+The agent may provide secrets in chat only if the user gives explicit and direct permission in the current message.
+
+In such cases, the agent must:
+
+- confirm that the user explicitly requested the secret
+- avoid storing the secret in files or code
+- avoid repeating the secret unnecessarily
+- clearly warn that sharing secrets in chat may be unsafe
+
 ---
 
 # 16. Sensitive Business Logic
@@ -382,8 +395,8 @@ database changes
 infrastructure changes  
 API breaking changes  
 auth or billing logic  
-more than 5 files  
 dependency changes  
+more than 8 files across multiple modules  
 
 the agent must escalate before editing.
 
@@ -429,7 +442,16 @@ enterprise patterns without need
 
 # 22. Ambiguity Rule
 
-If anything is unclear the agent must stop and ask.
+If something is unclear, the agent should make the safest reasonable assumption and continue when the ambiguity is minor and low-risk.
+
+The agent must stop and ask only if the ambiguity affects:
+
+database design  
+auth behavior  
+deployment configuration  
+payment flows  
+API semantics  
+or could cause unsafe or breaking changes
 
 Never guess:
 

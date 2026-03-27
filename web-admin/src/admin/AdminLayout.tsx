@@ -9,9 +9,11 @@ type AdminLayoutProps = {
 export function AdminLayout({ onSignOut }: AdminLayoutProps) {
   return (
     <main className="admin-shell">
-      <aside className="admin-nav">
-        <p className="eyebrow">GuitarOnline</p>
-        <h2>Админка</h2>
+      <header className="admin-nav">
+        <div className="admin-nav-brand">
+          <p className="eyebrow">GuitarOnline</p>
+          <h2>Админка</h2>
+        </div>
         <nav className="admin-nav-list">
           {ADMIN_SECTIONS.map((section) => (
             <NavLink
@@ -23,10 +25,10 @@ export function AdminLayout({ onSignOut }: AdminLayoutProps) {
             </NavLink>
           ))}
         </nav>
-        <button type="button" onClick={onSignOut}>
+        <button type="button" className="admin-signout-btn" onClick={onSignOut}>
           Выйти
         </button>
-      </aside>
+      </header>
 
       <section className="admin-content">
         <Outlet />

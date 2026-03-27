@@ -125,18 +125,27 @@ button[disabled] {
   margin: 0 auto;
   padding: 1.2rem 1rem;
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr);
   gap: 1rem;
 }
 
 .admin-nav {
-  align-self: start;
+  position: sticky;
+  top: 1rem;
+  z-index: 10;
   background: #fff;
   border: 1px solid #d8e2ec;
   border-radius: 1rem;
   padding: 1rem;
   display: grid;
-  gap: 0.75rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  box-shadow: 0 12px 28px rgba(15, 75, 132, 0.08);
+}
+
+.admin-nav-brand {
+  display: grid;
+  gap: 0.2rem;
 }
 
 .admin-nav h2 {
@@ -144,15 +153,21 @@ button[disabled] {
 }
 
 .admin-nav-list {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.35rem;
+  min-width: 0;
 }
 
 .nav-link {
+  display: inline-flex;
+  align-items: center;
   border-radius: 0.55rem;
   text-decoration: none;
   color: #1b2d3f;
-  padding: 0.45rem 0.6rem;
+  padding: 0.5rem 0.8rem;
+  white-space: nowrap;
 }
 
 .nav-link:hover {
@@ -162,6 +177,10 @@ button[disabled] {
 .nav-link.active {
   background: #d9e8fa;
   color: #0f4476;
+}
+
+.admin-signout-btn {
+  white-space: nowrap;
 }
 
 .admin-content {
@@ -338,8 +357,139 @@ button[disabled] {
   text-align: left;
   padding: 0.4rem 0.45rem;
   border-bottom: 1px solid #dde5ef;
-  white-space: nowrap;
   font-size: 0.9rem;
+}
+
+.bookings-table th {
+  white-space: normal;
+  line-height: 1.25;
+}
+
+.bookings-table td {
+  white-space: nowrap;
+}
+
+.users-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+.users-table th,
+.users-table td {
+  vertical-align: top;
+}
+
+.users-table th:nth-child(1),
+.users-table td:nth-child(1) {
+  width: 8%;
+}
+
+.users-table th:nth-child(2),
+.users-table td:nth-child(2) {
+  width: 16%;
+}
+
+.users-table th:nth-child(3),
+.users-table td:nth-child(3) {
+  width: 8%;
+}
+
+.users-table th:nth-child(4),
+.users-table td:nth-child(4) {
+  width: 8%;
+}
+
+.users-table th:nth-child(5),
+.users-table td:nth-child(5) {
+  width: 8%;
+}
+
+.users-table th:nth-child(6),
+.users-table td:nth-child(6) {
+  width: 12%;
+}
+
+.users-table th:nth-child(7),
+.users-table td:nth-child(7) {
+  width: 14%;
+}
+
+.users-table th:nth-child(8),
+.users-table td:nth-child(8) {
+  width: 26%;
+}
+
+.users-table td:last-child {
+  white-space: normal;
+}
+
+.users-table-cell-compact {
+  min-width: 0;
+  vertical-align: top;
+}
+
+.users-reveal {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.users-reveal-trigger {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: #17354d;
+  text-align: left;
+  font: inherit;
+}
+
+.users-reveal-trigger:hover {
+  color: #0f4b84;
+}
+
+.users-reveal-trigger:focus-visible {
+  outline: 2px solid #7aa6d1;
+  outline-offset: 2px;
+}
+
+.users-reveal-trigger.is-expanded {
+  padding: 0.25rem 0.35rem;
+  background: #f5f9ff;
+}
+
+.users-reveal-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.users-reveal-text.is-expanded {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.users-inline-notice {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: #e9f7ee;
+  color: #1f7a39;
+  font-size: 0.74rem;
+  line-height: 1.2;
+}
+
+.users-inline-notice.is-error {
+  background: #ffeaea;
+  color: #9d1f1f;
 }
 
 .inline-filter {
@@ -548,8 +698,14 @@ button[disabled] {
 }
 
 @media (max-width: 900px) {
-  .admin-shell {
+  .admin-nav {
+    position: static;
     grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .admin-nav-list {
+    justify-content: flex-start;
   }
 
   .teachers-grid {

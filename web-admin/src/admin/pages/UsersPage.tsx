@@ -30,7 +30,7 @@ type AdminUserListItem = {
 const ROLE_LABELS: Record<UserRole, string> = {
   student: "студент",
   teacher: "преподаватель",
-  admin: "администратор"
+  admin: "админ"
 };
 
 const TEACHER_STATUS_LABELS: Record<string, string> = {
@@ -110,11 +110,47 @@ function normalizeEmail(value: string | null): string {
   return value?.trim().toLowerCase() ?? "";
 }
 
+async function copyTextToClipboard(value: string): Promise<void> {
+  if (typeof window !== "undefined" && window.isSecureContext && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard API is unavailable");
+  }
+
+  const fallbackInput = document.createElement("textarea");
+  fallbackInput.value = value;
+  fallbackInput.setAttribute("readonly", "true");
+  fallbackInput.style.position = "fixed";
+  fallbackInput.style.left = "-9999px";
+  fallbackInput.style.top = "0";
+  fallbackInput.style.opacity = "0";
+
+  document.body.appendChild(fallbackInput);
+  fallbackInput.focus();
+  fallbackInput.select();
+
+  const copied = document.execCommand("copy");
+  document.body.removeChild(fallbackInput);
+
+  if (!copied) {
+    throw new Error("Clipboard fallback failed");
+  }
+}
+
 export function UsersPage() {
   const [overview, setOverview] = useState<KpiOverview | null>(null);
   const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
   const [users, setUsers] = useState<AdminUserListItem[]>([]);
   const [currentAdminEmail, setCurrentAdminEmail] = useState<string | null>(null);
+  const [revealedValueKey, setRevealedValueKey] = useState<string | null>(null);
+  const [copyNotice, setCopyNotice] = useState<{
+    key: string;
+    message: string;
+    tone: "success" | "error";
+  } | null>(null);
   const [userRoleDrafts, setUserRoleDrafts] = useState<Record<string, UserRole>>({});
   const [usersTotal, setUsersTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -136,6 +172,7 @@ export function UsersPage() {
     setError(null);
     setUsersError(null);
     setActionError(null);
+    setRevealedValueKey(null);
     setTeachersUnavailable(false);
     setUsersUnavailable(false);
 
@@ -204,6 +241,18 @@ export function UsersPage() {
     void loadPageData();
   }, [loadPageData]);
 
+  useEffect(() => {
+    if (copyNotice === null) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCopyNotice(null);
+    }, 1600);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [copyNotice]);
+
   const latestTeachers = useMemo(
     () =>
       [...teachers]
@@ -222,6 +271,81 @@ export function UsersPage() {
       ...current,
       [userId]: role
     }));
+  }
+
+  async function handleCopyEmail(email: string, noticeKey: string) {
+    try {
+      await copyTextToClipboard(email);
+      setCopyNotice({
+        key: noticeKey,
+        message: "Почта скопирована",
+        tone: "success"
+      });
+    } catch {
+      setCopyNotice({
+        key: noticeKey,
+        message: "Не удалось скопировать почту",
+        tone: "error"
+      });
+    }
+  }
+
+  async function handleCopyFullName(fullName: string, noticeKey: string) {
+    try {
+      await copyTextToClipboard(fullName);
+      setCopyNotice({
+        key: noticeKey,
+        message: "ФИО скопировано",
+        tone: "success"
+      });
+    } catch {
+      setCopyNotice({
+        key: noticeKey,
+        message: "Не удалось скопировать ФИО",
+        tone: "error"
+      });
+    }
+  }
+
+  function renderRevealableValue(
+    value: string,
+    label: string,
+    valueKey: string,
+    options?: {
+      onClick?: () => void;
+      notice?: { message: string; tone: "success" | "error" } | null;
+    }
+  ) {
+    const isExpanded = revealedValueKey === valueKey;
+    const normalizedValue = value || "-";
+
+    return (
+      <div className="users-reveal">
+        <button
+          type="button"
+          className={`users-reveal-trigger${isExpanded ? " is-expanded" : ""}`}
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? `Скрыть ${label}` : `Показать ${label} полностью`}
+          onClick={() => {
+            options?.onClick?.();
+            setRevealedValueKey((current) => (current === valueKey ? null : valueKey));
+          }}
+        >
+          <span className={`users-reveal-text${isExpanded ? " is-expanded" : ""}`}>
+            {normalizedValue}
+          </span>
+        </button>
+        {options?.notice ? (
+          <span
+            className={`users-inline-notice${options.notice.tone === "error" ? " is-error" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            {options.notice.message}
+          </span>
+        ) : null}
+      </div>
+    );
   }
 
   async function handleChangeUserRole(user: AdminUserListItem) {
@@ -295,7 +419,7 @@ export function UsersPage() {
         </p>
         {canManageAdminRoles ? null : (
           <p className="summary">
-            Назначать и снимать роль администратора может только{" "}
+            Назначать и снимать роль админа может только{" "}
             <code>{PRIVILEGED_ADMIN_EMAIL}</code>.
           </p>
         )}
@@ -340,7 +464,7 @@ export function UsersPage() {
               <option value="all">Все роли</option>
               <option value="student">студент</option>
               <option value="teacher">преподаватель</option>
-              <option value="admin">администратор</option>
+              <option value="admin">админ</option>
             </select>
           </label>
 
@@ -379,7 +503,7 @@ export function UsersPage() {
           <p className="summary">Пользователи не найдены по выбранным фильтрам.</p>
         ) : (
           <div className="bookings-table-wrap">
-            <table className="bookings-table">
+            <table className="bookings-table users-table">
               <thead>
                 <tr>
                   <th>Почта</th>
@@ -403,13 +527,61 @@ export function UsersPage() {
 
                   return (
                     <tr key={user.user_id}>
-                      <td>{user.email}</td>
-                      <td>{user.full_name}</td>
-                      <td>{formatRole(user.role)}</td>
-                      <td>{user.is_active ? "Активен" : "Отключен"}</td>
-                      <td>{user.timezone}</td>
-                      <td>{user.teacher_profile_display_name || "-"}</td>
-                      <td>{formatDateTime(user.updated_at_utc)}</td>
+                      <td className="users-table-cell-compact">
+                        {renderRevealableValue(user.email, "почту", `email:${user.user_id}`, {
+                          onClick: () => {
+                            void handleCopyEmail(user.email, `email:${user.user_id}`);
+                          },
+                          notice:
+                            copyNotice?.key === `email:${user.user_id}`
+                              ? {
+                                  message: copyNotice.message,
+                                  tone: copyNotice.tone
+                                }
+                              : null
+                        })}
+                      </td>
+                      <td className="users-table-cell-compact">
+                        {renderRevealableValue(user.full_name, "ФИО", `full-name:${user.user_id}`, {
+                          onClick: () => {
+                            void handleCopyFullName(user.full_name, `full-name:${user.user_id}`);
+                          },
+                          notice:
+                            copyNotice?.key === `full-name:${user.user_id}`
+                              ? {
+                                  message: copyNotice.message,
+                                  tone: copyNotice.tone
+                                }
+                              : null
+                        })}
+                      </td>
+                      <td className="users-table-cell-compact">
+                        {renderRevealableValue(formatRole(user.role), "роль", `role:${user.user_id}`)}
+                      </td>
+                      <td className="users-table-cell-compact">
+                        {renderRevealableValue(
+                          user.is_active ? "Активен" : "Отключен",
+                          "статус",
+                          `status:${user.user_id}`
+                        )}
+                      </td>
+                      <td className="users-table-cell-compact">
+                        {renderRevealableValue(user.timezone, "таймзону", `timezone:${user.user_id}`)}
+                      </td>
+                      <td className="users-table-cell-compact">
+                        {renderRevealableValue(
+                          user.teacher_profile_display_name || "-",
+                          "профиль преподавателя",
+                          `teacher-profile:${user.user_id}`
+                        )}
+                      </td>
+                      <td className="users-table-cell-compact">
+                        {renderRevealableValue(
+                          formatDateTime(user.updated_at_utc),
+                          "дату обновления",
+                          `updated-at:${user.user_id}`
+                        )}
+                      </td>
                       <td>
                         <div className="users-teacher-fields">
                           <label>
@@ -424,7 +596,7 @@ export function UsersPage() {
                               <option value="student">студент</option>
                               <option value="teacher">преподаватель</option>
                               {canManageAdminRoles || user.role === "admin" ? (
-                                <option value="admin">администратор</option>
+                                <option value="admin">админ</option>
                               ) : null}
                             </select>
                           </label>

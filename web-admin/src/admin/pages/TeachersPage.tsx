@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   activateTeacher,
@@ -60,6 +60,11 @@ export function TeachersPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionPending, setActionPending] = useState<"disable" | "activate" | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const selectedTeacherIdRef = useRef<string | null>(selectedTeacherId);
+
+  useEffect(() => {
+    selectedTeacherIdRef.current = selectedTeacherId;
+  }, [selectedTeacherId]);
 
   useEffect(() => {
     let active = true;
@@ -73,13 +78,15 @@ export function TeachersPage() {
           return;
         }
         setTeachers(page.items);
-        setSelectedTeacherId((currentSelectedTeacherId) => {
-          const preferredTeacherId = currentSelectedTeacherId ?? page.items[0]?.teacher_id ?? null;
-          const hasPreferredTeacher = page.items.some(
-            (teacher) => teacher.teacher_id === preferredTeacherId
-          );
-          return hasPreferredTeacher ? preferredTeacherId : page.items[0]?.teacher_id ?? null;
-        });
+        const preferredTeacherId = selectedTeacherIdRef.current ?? page.items[0]?.teacher_id ?? null;
+        const hasPreferredTeacher = page.items.some(
+          (teacher) => teacher.teacher_id === preferredTeacherId
+        );
+        const nextSelectedId = hasPreferredTeacher ? preferredTeacherId : page.items[0]?.teacher_id ?? null;
+        setSelectedTeacherId(nextSelectedId);
+        if (nextSelectedId) {
+          void getTeacherDetail(nextSelectedId);
+        }
       })
       .catch((requestError) => {
         if (!active) {
@@ -164,6 +171,9 @@ export function TeachersPage() {
       : page.items[0]?.teacher_id ?? null;
 
     setSelectedTeacherId(nextSelectedId);
+    if (nextSelectedId) {
+      void getTeacherDetail(nextSelectedId);
+    }
     if (!nextSelectedId) {
       setTeacherDetail(null);
     }

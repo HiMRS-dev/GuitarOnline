@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { useCurrentUser } from "../../features/auth/currentUser";
 import { getKpiOverview, invalidateKpiOverviewCache } from "../../features/kpi/api";
@@ -164,6 +164,8 @@ export function UsersPage() {
   const [userRoleFilter, setUserRoleFilter] = useState<UserRoleFilter>("all");
   const [userActiveFilter, setUserActiveFilter] = useState<UserActiveFilter>("all");
   const [userQuery, setUserQuery] = useState("");
+  const deferredUserQuery = useDeferredValue(userQuery);
+  const [secondaryBootstrapped, setSecondaryBootstrapped] = useState(false);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [activeToggleUserId, setActiveToggleUserId] = useState<string | null>(null);
@@ -176,7 +178,7 @@ export function UsersPage() {
     setRevealedValueKey(null);
     setUsersUnavailable(false);
 
-    const usersPath = `/admin/users?${buildUsersQuery(userRoleFilter, userActiveFilter, userQuery)}`;
+    const usersPath = `/admin/users?${buildUsersQuery(userRoleFilter, userActiveFilter, deferredUserQuery)}`;
 
     try {
       const page = await apiClient.request<PageResponse<AdminUserListItem>>(usersPath);
@@ -198,7 +200,7 @@ export function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [userRoleFilter, userActiveFilter, userQuery]);
+  }, [userRoleFilter, userActiveFilter, deferredUserQuery]);
 
   const loadSecondaryData = useCallback(
     async ({ showLoading = false }: { showLoading?: boolean } = {}) => {
@@ -248,8 +250,12 @@ export function UsersPage() {
   }, [loadUsersData]);
 
   useEffect(() => {
+    if (secondaryBootstrapped || loading) {
+      return;
+    }
+    setSecondaryBootstrapped(true);
     void loadSecondaryData({ showLoading: true });
-  }, [loadSecondaryData]);
+  }, [secondaryBootstrapped, loading, loadSecondaryData]);
 
   useEffect(() => {
     if (copyNotice === null) {

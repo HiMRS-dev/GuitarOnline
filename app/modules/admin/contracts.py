@@ -27,6 +27,7 @@ class AdminTeacherDTO(BaseModel):
     id: UUID
     user_id: UUID
     email: EmailStr
+    full_name: str
     display_name: str
     bio: str
     experience_years: int
@@ -110,6 +111,7 @@ class AdminStudentDTO(BaseModel):
 
     id: UUID
     email: EmailStr
+    full_name: str
     timezone: str
     is_active: bool
     role: RoleEnum

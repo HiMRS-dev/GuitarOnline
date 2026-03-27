@@ -16,6 +16,7 @@ type UserActiveFilter = "all" | "active" | "inactive";
 type AdminUserListItem = {
   user_id: string;
   email: string;
+  full_name: string;
   timezone: string;
   role: UserRole;
   is_active: boolean;
@@ -334,12 +335,12 @@ export function UsersPage() {
           </label>
 
           <label>
-            <span>Поиск (почта / имя)</span>
+            <span>Поиск (почта / ФИО / имя)</span>
             <input
               type="search"
               value={userQuery}
               onChange={(event) => setUserQuery(event.target.value)}
-              placeholder="например, teacher@..."
+              placeholder="например, teacher@... или Иванов"
             />
           </label>
         </div>
@@ -360,6 +361,7 @@ export function UsersPage() {
               <thead>
                 <tr>
                   <th>Почта</th>
+                  <th>ФИО</th>
                   <th>Роль</th>
                   <th>Статус</th>
                   <th>Таймзона</th>
@@ -378,6 +380,7 @@ export function UsersPage() {
                   return (
                     <tr key={user.user_id}>
                       <td>{user.email}</td>
+                      <td>{user.full_name}</td>
                       <td>{formatRole(user.role)}</td>
                       <td>{user.is_active ? "Активен" : "Отключен"}</td>
                       <td>{user.timezone}</td>
@@ -443,6 +446,7 @@ export function UsersPage() {
                 <p>
                   <strong>{teacher.display_name}</strong>
                 </p>
+                <p>{teacher.full_name}</p>
                 <p>{teacher.email}</p>
                 <p>{formatTeacherStatus(teacher.status)}</p>
                 <p>{formatDateTime(teacher.updated_at_utc)}</p>

@@ -31,6 +31,7 @@ body {
   border: 1px solid #d8e2ec;
   border-radius: 1rem;
   padding: 1.25rem;
+  min-width: 0;
 }
 
 .eyebrow {
@@ -167,6 +168,11 @@ button[disabled] {
   display: grid;
   align-content: start;
   gap: 1rem;
+  min-width: 0;
+}
+
+.admin-content > * {
+  min-width: 0;
 }
 
 .section-page {
@@ -317,6 +323,8 @@ button[disabled] {
 }
 
 .bookings-table-wrap {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -383,6 +391,11 @@ button[disabled] {
 .users-page {
   display: grid;
   gap: 1rem;
+  min-width: 0;
+}
+
+.users-page > * {
+  min-width: 0;
 }
 
 .users-metrics-grid {

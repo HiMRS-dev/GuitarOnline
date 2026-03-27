@@ -484,6 +484,7 @@ class AdminService:
             {
                 "user_id": user.id,
                 "email": user.email,
+                "full_name": user.full_name,
                 "timezone": user.timezone,
                 "role": role.name,
                 "is_active": user.is_active,

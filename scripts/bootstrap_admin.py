@@ -17,7 +17,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal, close_engine
 from app.core.enums import AppEnvEnum, RoleEnum
 from app.core.security import hash_password
-from app.modules.identity.models import Role, User
+from app.modules.identity.models import Role, User, build_default_full_name
 
 
 async def _ensure_roles() -> None:
@@ -46,6 +46,7 @@ async def _bootstrap_admin(*, email: str, password: str, timezone: str) -> str:
             if user is None:
                 user = User(
                     email=email,
+                    full_name=build_default_full_name(email),
                     password_hash=hash_password(password),
                     timezone=timezone,
                     is_active=True,
@@ -54,6 +55,8 @@ async def _bootstrap_admin(*, email: str, password: str, timezone: str) -> str:
                 session.add(user)
                 result = "created"
             else:
+                if not user.full_name.strip():
+                    user.full_name = build_default_full_name(email)
                 user.password_hash = hash_password(password)
                 user.timezone = timezone
                 user.is_active = True

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { disableTeacher, getTeacherDetail, listTeachers } from "../../features/teachers/api";
+import {
+  activateTeacher,
+  disableTeacher,
+  getTeacherDetail,
+  listTeachers
+} from "../../features/teachers/api";
 import type { TeacherDetail, TeacherListItem } from "../../features/teachers/types";
 import { ApiClientError } from "../../shared/api/client";
 import {
@@ -52,7 +57,7 @@ export function TeachersPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [actionPending, setActionPending] = useState<"disable" | null>(null);
+  const [actionPending, setActionPending] = useState<"disable" | "activate" | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
@@ -191,6 +196,37 @@ export function TeachersPage() {
     }
   }
 
+  async function handleActivateAction() {
+    if (!selectedTeacherId) {
+      return;
+    }
+
+    setActionPending("activate");
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      await activateTeacher(selectedTeacherId);
+      const updatedDetail = await getTeacherDetail(selectedTeacherId);
+      setTeacherDetail(updatedDetail);
+      await refreshTeachersAndSelection(updatedDetail.teacher_id);
+
+      if (!isValidTeacherStatusFilter(updatedDetail.status, statusFilter)) {
+        setActionSuccess("Статус обновлён. Преподаватель скрыт текущим фильтром.");
+      } else {
+        setActionSuccess("Преподаватель снова активен, вход разблокирован.");
+      }
+    } catch (requestError) {
+      setActionError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось снова активировать преподавателя"
+      );
+    } finally {
+      setActionPending(null);
+    }
+  }
+
   if (unavailable) {
     return (
       <article className="card section-page">
@@ -199,7 +235,8 @@ export function TeachersPage() {
         <p className="summary">
           Для этого раздела нужны <code>GET /admin/teachers</code>,{" "}
           <code>GET /admin/teachers/{`{id}`}</code>,{" "}
-          <code>POST /admin/teachers/{`{id}`}/disable</code>.
+          <code>POST /admin/teachers/{`{id}`}/disable</code> и{" "}
+          <code>POST /admin/users/{`{id}`}/activate</code>.
         </p>
       </article>
     );
@@ -254,6 +291,7 @@ export function TeachersPage() {
                 onClick={() => setSelectedTeacherId(teacher.teacher_id)}
               >
                 <strong>{teacher.display_name}</strong>
+                <span>{teacher.full_name}</span>
                 <span>{teacher.email}</span>
                 <span>{formatTeacherStatus(teacher.status)}</span>
               </button>
@@ -267,18 +305,32 @@ export function TeachersPage() {
         {selectedTeacher ? <h1>{selectedTeacher.display_name}</h1> : <h1>Не выбрано</h1>}
 
         <div className="quick-filter-group" role="group" aria-label="Действия по аккаунту преподавателя">
-          <button
-            type="button"
-            className="quick-filter"
-            disabled={
-              !teacherDetail ||
-              actionPending !== null ||
-              teacherDetail.status === "disabled"
-            }
-            onClick={() => void handleDisableAction()}
-          >
-            {actionPending === "disable" ? "Отключение..." : "Отключить"}
-          </button>
+          {statusFilter !== "disabled" ? (
+            <button
+              type="button"
+              className="quick-filter"
+              disabled={
+                !teacherDetail ||
+                actionPending !== null ||
+                teacherDetail.status === "disabled"
+              }
+              onClick={() => void handleDisableAction()}
+            >
+              {actionPending === "disable" ? "Отключение..." : "Отключить"}
+            </button>
+          ) : null}
+          {statusFilter !== "active" ? (
+            <button
+              type="button"
+              className="quick-filter"
+              disabled={
+                !teacherDetail || actionPending !== null || teacherDetail.status === "active"
+              }
+              onClick={() => void handleActivateAction()}
+            >
+              {actionPending === "activate" ? "Активируем..." : "Активировать"}
+            </button>
+          ) : null}
         </div>
 
         {detailLoading ? <p className="summary">Загрузка данных преподавателя...</p> : null}
@@ -288,6 +340,9 @@ export function TeachersPage() {
 
         {teacherDetail ? (
           <div className="teacher-detail">
+            <p>
+              <strong>ФИО:</strong> {teacherDetail.full_name}
+            </p>
             <p>
               <strong>Статус:</strong> {formatTeacherStatus(teacherDetail.status)}
             </p>

@@ -30,6 +30,7 @@ class FakeTeacherProfile:
 class FakeUser:
     id: UUID
     email: str
+    full_name: str
     password_hash: str
     timezone: str
     is_active: bool
@@ -140,6 +141,7 @@ class FakeAdminRepository:
                 user
                 for user in filtered
                 if normalized_q in user.email.lower()
+                or normalized_q in user.full_name.lower()
                 or (
                     user.teacher_profile is not None
                     and normalized_q in user.teacher_profile.display_name.lower()
@@ -156,6 +158,7 @@ class FakeAdminRepository:
             {
                 "user_id": user.id,
                 "email": user.email,
+                "full_name": user.full_name,
                 "timezone": user.timezone,
                 "role": user.role.name,
                 "is_active": user.is_active,
@@ -218,6 +221,7 @@ def make_user(
     return FakeUser(
         id=uuid4(),
         email=email,
+        full_name=f"Full Name for {email.split('@', 1)[0]}",
         password_hash="hash",
         timezone="UTC",
         is_active=is_active,
@@ -440,7 +444,34 @@ async def test_admin_can_list_users_with_filters() -> None:
     assert total == 1
     assert len(items) == 1
     assert items[0].user_id == teacher.id
+    assert items[0].full_name == teacher.full_name
     assert items[0].teacher_profile_display_name == "Teacher List"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_search_users_by_full_name() -> None:
+    teacher = make_user(
+        email="teacher-name@guitaronline.dev",
+        role=RoleEnum.TEACHER,
+        display_name="Teacher Name",
+    )
+    teacher.full_name = "Иванов Сергей Петрович"
+    repository = FakeAdminRepository(users=[teacher])
+    service = AdminService(repository=repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+
+    items, total = await service.list_users(
+        admin,
+        limit=50,
+        offset=0,
+        role=None,
+        is_active=None,
+        q="Сергей Петрович",
+    )
+
+    assert total == 1
+    assert len(items) == 1
+    assert items[0].full_name == "Иванов Сергей Петрович"
 
 
 @pytest.mark.asyncio

@@ -85,6 +85,7 @@ class AdminUserListItemRead(BaseModel):
 
     user_id: UUID
     email: EmailStr
+    full_name: str
     timezone: str
     role: RoleEnum
     is_active: bool
@@ -158,6 +159,7 @@ class AdminTeacherListItemRead(BaseModel):
                 "teacher_id": "8a937f92-0132-4691-b735-c224078afaef",
                 "profile_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
                 "email": "teacher@example.com",
+                "full_name": "Петров Сергей Андреевич",
                 "display_name": "Alice Blues",
                 "status": "active",
                 "is_active": True,
@@ -171,6 +173,7 @@ class AdminTeacherListItemRead(BaseModel):
     teacher_id: UUID
     profile_id: UUID
     email: str
+    full_name: str
     display_name: str
     status: TeacherStatusEnum
     is_active: bool
@@ -188,6 +191,7 @@ class AdminTeacherDetailRead(BaseModel):
                 "teacher_id": "8a937f92-0132-4691-b735-c224078afaef",
                 "profile_id": "9e0dc1b6-c3e0-43be-8f8d-f6f321f4f0db",
                 "email": "teacher@example.com",
+                "full_name": "Петров Сергей Андреевич",
                 "display_name": "Alice Blues",
                 "bio": "Fingerstyle and jazz guitar teacher.",
                 "experience_years": 8,
@@ -203,6 +207,7 @@ class AdminTeacherDetailRead(BaseModel):
     teacher_id: UUID
     profile_id: UUID
     email: str
+    full_name: str
     display_name: str
     bio: str
     experience_years: int

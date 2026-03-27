@@ -30,6 +30,7 @@ def make_item() -> dict:
         "teacher_id": uuid4(),
         "profile_id": uuid4(),
         "email": "teacher@example.com",
+        "full_name": "Петров Сергей Андреевич",
         "display_name": "Alice Blues",
         "bio": "Fingerstyle teacher",
         "experience_years": 7,
@@ -52,6 +53,7 @@ async def test_admin_teacher_detail_returns_item() -> None:
 
     assert result.teacher_id == item["teacher_id"]
     assert result.profile_id == item["profile_id"]
+    assert result.full_name == "Петров Сергей Андреевич"
     assert result.display_name == "Alice Blues"
     assert result.tags == ["jazz", "fingerstyle"]
     assert repository.calls == [{"teacher_id": item["teacher_id"]}]

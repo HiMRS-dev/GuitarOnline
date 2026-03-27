@@ -20,7 +20,7 @@ from app.modules.billing.models import LessonPackage
 from app.modules.billing.repository import BillingRepository
 from app.modules.billing.schemas import PackageCreate
 from app.modules.billing.service import BillingService
-from app.modules.identity.models import Role, User
+from app.modules.identity.models import Role, User, build_default_full_name
 from app.modules.scheduling.models import AvailabilitySlot
 from app.modules.scheduling.repository import SchedulingRepository
 from app.modules.scheduling.schemas import SlotCreate
@@ -92,6 +92,7 @@ async def _ensure_user(
     if user is None:
         user = User(
             email=email,
+            full_name=build_default_full_name(email),
             password_hash=hash_password(DEMO_PASSWORD),
             timezone=timezone,
             is_active=True,
@@ -100,6 +101,9 @@ async def _ensure_user(
         session.add(user)
         created = True
     else:
+        desired_full_name = build_default_full_name(email)
+        if user.full_name != desired_full_name:
+            user.full_name = desired_full_name
         if not verify_password(DEMO_PASSWORD, user.password_hash):
             user.password_hash = hash_password(DEMO_PASSWORD)
         if user.role_id != role.id:

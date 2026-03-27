@@ -29,3 +29,9 @@ export async function disableTeacher(teacherId: string): Promise<TeacherDetail> 
     method: "POST"
   });
 }
+
+export async function activateTeacher(teacherId: string): Promise<void> {
+  await apiClient.request<unknown>(`/admin/users/${teacherId}/activate`, {
+    method: "POST"
+  });
+}

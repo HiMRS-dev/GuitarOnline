@@ -47,6 +47,7 @@ def make_item() -> dict:
         "teacher_id": uuid4(),
         "profile_id": uuid4(),
         "email": "teacher@example.com",
+        "full_name": "Петров Сергей Андреевич",
         "display_name": "Alice Blues",
         "status": TeacherStatusEnum.ACTIVE,
         "is_active": True,
@@ -73,6 +74,7 @@ async def test_admin_teacher_list_returns_items_and_passes_filters() -> None:
 
     assert total == 1
     assert len(items) == 1
+    assert items[0].full_name == "Петров Сергей Андреевич"
     assert items[0].display_name == "Alice Blues"
     assert repository.calls == [
         {

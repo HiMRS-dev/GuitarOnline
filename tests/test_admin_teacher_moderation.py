@@ -36,6 +36,7 @@ def make_item(*, status: TeacherStatusEnum, is_active: bool) -> dict:
         "teacher_id": uuid4(),
         "profile_id": uuid4(),
         "email": "teacher@example.com",
+        "full_name": "Петров Сергей Андреевич",
         "display_name": "Alice Blues",
         "bio": "Fingerstyle teacher",
         "experience_years": 7,

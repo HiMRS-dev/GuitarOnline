@@ -30,7 +30,7 @@ from app.modules.admin.models import AdminAction
 from app.modules.audit.models import OutboxEvent
 from app.modules.billing.models import LessonPackage, Payment
 from app.modules.booking.models import Booking
-from app.modules.identity.models import RefreshToken, Role, User
+from app.modules.identity.models import RefreshToken, Role, User, build_default_full_name
 from app.modules.lessons.models import Lesson
 from app.modules.notifications.models import Notification
 from app.modules.scheduling.models import AvailabilitySlot
@@ -135,6 +135,7 @@ async def _upsert_user(
     if user is None:
         user = User(
             email=config.email,
+            full_name=build_default_full_name(config.email),
             password_hash=password_hash,
             timezone="UTC",
             is_active=True,
@@ -144,6 +145,9 @@ async def _upsert_user(
         await session.flush()
         created = True
     else:
+        desired_full_name = build_default_full_name(config.email)
+        if user.full_name != desired_full_name:
+            user.full_name = desired_full_name
         user.password_hash = password_hash
         user.timezone = "UTC"
         user.is_active = True

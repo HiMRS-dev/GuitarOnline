@@ -57,6 +57,7 @@ class UserRead(BaseModel):
 
     id: UUID
     email: EmailStr
+    full_name: str
     timezone: str
     is_active: bool
     role: RoleRead

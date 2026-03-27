@@ -217,6 +217,7 @@ class AdminRepository:
             ).where(
                 or_(
                     User.email.ilike(pattern),
+                    User.full_name.ilike(pattern),
                     TeacherProfile.display_name.ilike(pattern),
                 ),
             )
@@ -251,6 +252,7 @@ class AdminRepository:
                 {
                     "user_id": user.id,
                     "email": user.email,
+                    "full_name": user.full_name,
                     "timezone": user.timezone,
                     "role": user.role.name,
                     "is_active": user.is_active,
@@ -374,6 +376,7 @@ class AdminRepository:
             base_stmt = base_stmt.where(
                 or_(
                     TeacherProfile.display_name.ilike(pattern),
+                    User.full_name.ilike(pattern),
                     User.email.ilike(pattern),
                 ),
             )
@@ -513,6 +516,7 @@ class AdminRepository:
             "teacher_id": profile.user_id,
             "profile_id": profile.id,
             "email": user.email,
+            "full_name": user.full_name,
             "display_name": profile.display_name,
             "status": serialized_status,
             "is_active": user.is_active,

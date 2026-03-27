@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.enums import RoleEnum
-from app.modules.identity.models import RefreshToken, Role, User
+from app.modules.identity.models import RefreshToken, Role, User, build_default_full_name
 
 
 class IdentityRepository:
@@ -44,7 +44,13 @@ class IdentityRepository:
         timezone: str,
         role_id: UUID,
     ) -> User:
-        user = User(email=email, password_hash=password_hash, timezone=timezone, role_id=role_id)
+        user = User(
+            email=email,
+            full_name=build_default_full_name(email),
+            password_hash=password_hash,
+            timezone=timezone,
+            role_id=role_id,
+        )
         self.session.add(user)
         await self.session.flush()
         await self.session.refresh(user, attribute_names=["role"])

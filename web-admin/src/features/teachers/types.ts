@@ -2,6 +2,7 @@ export type TeacherListItem = {
   teacher_id: string;
   profile_id: string;
   email: string;
+  full_name: string;
   display_name: string;
   status: string;
   is_active: boolean;

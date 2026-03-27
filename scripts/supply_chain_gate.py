@@ -53,7 +53,17 @@ def _read_pip_audit_ignore_ids(path: Path) -> list[str]:
     return ignore_ids
 
 
+def _count_reported_pip_audit_vulns(report_path: Path) -> int:
+    if not report_path.exists():
+        raise RuntimeError(f"pip-audit report not found: {report_path}")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    dependencies = report.get("dependencies", [])
+    return sum(len(dependency.get("vulns", [])) for dependency in dependencies)
+
+
 def _run_pip_audit(*, output_file: Path, ignore_ids: list[str]) -> None:
+    if output_file.exists():
+        output_file.unlink()
     command = [
         "pip-audit",
         "--skip-editable",
@@ -66,6 +76,8 @@ def _run_pip_audit(*, output_file: Path, ignore_ids: list[str]) -> None:
         command.extend(["--ignore-vuln", vuln_id])
     result = _run(command)
     if result.returncode != 0:
+        if ignore_ids and result.returncode == 1 and _count_reported_pip_audit_vulns(output_file) == 0:
+            return
         raise RuntimeError(f"pip-audit failed with exit code {result.returncode}")
 
 

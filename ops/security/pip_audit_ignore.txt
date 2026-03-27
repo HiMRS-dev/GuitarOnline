@@ -1,4 +1,8 @@
 # Supply-chain vulnerability allowlist for CI `pip-audit`.
 # Format: one vulnerability ID per line.
 #
-# No active ignores.
+# Temporary ignore added 2026-03-27.
+# Reason: CVE-2026-4539 affects transitive tooling dependency `pygments 2.19.2`
+# in CI. Remove this entry when upstream publishes a patched release or the
+# dependency path changes.
+CVE-2026-4539

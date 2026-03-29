@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Time
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,3 +56,33 @@ class AvailabilitySlot(BaseModelMixin, Base):
     )
 
     booking: Mapped[Booking | None] = relationship(back_populates="slot", uselist=False)
+
+
+class TeacherWeeklyScheduleWindow(BaseModelMixin, Base):
+    """Persistent weekly working window in teacher local timezone."""
+
+    __tablename__ = "teacher_weekly_schedule_windows"
+    __table_args__ = (
+        CheckConstraint(
+            "weekday >= 0 AND weekday <= 6",
+            name="teacher_weekly_schedule_windows_weekday_range",
+        ),
+        CheckConstraint(
+            "end_local_time > start_local_time",
+            name="teacher_weekly_schedule_windows_time_range",
+        ),
+        Index(
+            "ix_teacher_weekly_schedule_windows_teacher_weekday",
+            "teacher_id",
+            "weekday",
+        ),
+    )
+
+    teacher_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    weekday: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_local_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)
+    end_local_time: Mapped[time] = mapped_column(Time(timezone=False), nullable=False)

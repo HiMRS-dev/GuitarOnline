@@ -1765,3 +1765,61 @@
 - Do not allow perf/synthetic scripts to create ad-hoc users in production-like business data.
 - Do not rely on periodic manual cleanup as the main hygiene mechanism; isolation and reset must be the default.
 
+## 19) Teacher Permanent Working Schedule Plan (Draft 2026-03-29)
+
+### 19.1) Goal And Scope
+- Goal:
+  - implement admin-managed permanent weekly working schedule for teachers in `/admin/teachers`.
+- In scope:
+  - admin selects weekdays and working time windows,
+  - schedule is stored as a persistent weekly template,
+  - resulting schedule is shown in two timezones:
+    - `Europe/Moscow`,
+    - teacher local timezone (`users.timezone`).
+- Explicit non-goal:
+  - this feature does not implement student booking flow.
+
+### 19.2) Risk/Permission Gate
+- This work requires DB schema changes (persistent weekly template storage).
+- Before implementation, confirm permission flag for current task:
+  - `ALLOW_DATABASE_CHANGES`.
+- API contract must stay backward-compatible:
+  - only additive response fields/endpoints; no silent breaking changes.
+
+### 19.3) Execution Tasks (Ordered)
+| Task | Priority | Description | Deliverable |
+|---|---|---|---|
+| `TSCH-01` | P0 | Define schedule template model in scheduling domain (`teacher_id`, `weekday`, `start_local_time`, `end_local_time`, `timezone`, `is_active`, audit timestamps). | Approved data-contract note in checkpoint + implementation spec. |
+| `TSCH-02` | P0 | Add Alembic migration for schedule template storage with rollback path and minimal indexes (`teacher_id`, `weekday`, `is_active`). | New migration file + downgrade support. |
+| `TSCH-03` | P0 | Add admin API for teacher weekly template management (read/update) in a backward-compatible way. | New/updated admin endpoints + schemas + service/repository methods. |
+| `TSCH-04` | P0 | Add validation rules: non-empty weekdays, valid local time ranges, no overlapping windows per weekday, valid IANA timezone. | Deterministic API validation errors + unit tests. |
+| `TSCH-05` | P0 | Extend teacher detail payload with timezone required by UI schedule block. | Additive teacher detail field (`timezone`) + tests. |
+| `TSCH-06` | P1 | Implement `/admin/teachers` UI block "Working schedule": weekday selector, local time inputs, save/update actions. | Teachers page supports CRUD of weekly template. |
+| `TSCH-07` | P1 | Implement dual-time preview/render in UI for each window (teacher local + `Europe/Moscow`) with DST-safe conversion. | Schedule preview/list in two timezones. |
+| `TSCH-08` | P1 | Add optional bridge action for operational use: generate concrete slots from template for selected horizon (e.g., next 4-8 weeks) via existing bulk-create path. | Admin action available without changing booking flow. |
+| `TSCH-09` | P1 | Add backend and frontend tests for new behavior and regression-safe old flows (`teachers`, `slots`, `calendar`). | Updated pytest + web-admin tests green. |
+| `TSCH-10` | P1 | Update admin docs and checkpoint notes (new endpoints, payload examples, timezone semantics). | `docs/ADMIN_API.md` and checkpoint updated. |
+
+### 19.4) Implementation Notes
+- Preferred storage semantics:
+  - store template in teacher local timezone (weekday + local time),
+  - convert to UTC only for slot materialization and previews.
+- DST rule:
+  - source of truth is local schedule; UTC values may shift after timezone offset changes.
+- Auditability:
+  - every template change should create an admin audit record with before/after payload.
+
+### 19.5) Verification Plan
+- Backend targeted checks:
+  - `poetry run pytest -q tests/test_admin_teacher_detail.py`
+  - `poetry run pytest -q tests/test_admin_slot_bulk_create.py`
+  - new schedule-template tests (to be added with `TSCH-03`/`TSCH-04`).
+- Frontend targeted checks:
+  - `cd web-admin && npm run lint`
+  - `cd web-admin && npm run build`
+  - `cd web-admin && npm run test:smoke:e2e` (if mocks are updated for additive fields).
+
+### 19.6) Current Status
+- Planning recorded.
+- Implementation not started yet.
+

@@ -37,6 +37,8 @@ from app.modules.admin.schemas import (
     AdminSlotStatsRead,
     AdminTeacherDetailRead,
     AdminTeacherListItemRead,
+    AdminTeacherScheduleRead,
+    AdminTeacherScheduleUpsertRequest,
     AdminUserListItemRead,
     AdminUserRoleUpdateRequest,
 )
@@ -117,6 +119,38 @@ async def disable_admin_teacher(
 ) -> AdminTeacherDetailRead:
     """Disable teacher profile from admin panel."""
     return await service.disable_teacher(current_user, teacher_id=teacher_id)
+
+
+@router.get("/teachers/{teacher_id}/schedule", response_model=AdminTeacherScheduleRead)
+async def get_admin_teacher_schedule(
+    teacher_id: UUID,
+    service: SchedulingService = Depends(get_scheduling_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminTeacherScheduleRead:
+    """Get persistent weekly teacher schedule in local + Moscow time."""
+    payload = await service.get_teacher_weekly_schedule(
+        teacher_id=teacher_id,
+        actor=current_user,
+    )
+    return AdminTeacherScheduleRead.model_validate(payload)
+
+
+@router.put("/teachers/{teacher_id}/schedule", response_model=AdminTeacherScheduleRead)
+async def upsert_admin_teacher_schedule(
+    teacher_id: UUID,
+    payload: AdminTeacherScheduleUpsertRequest,
+    service: SchedulingService = Depends(get_scheduling_service),
+    current_user=Depends(require_roles(RoleEnum.ADMIN)),
+) -> AdminTeacherScheduleRead:
+    """Replace persistent weekly teacher schedule."""
+    updated = await service.replace_teacher_weekly_schedule(
+        teacher_id=teacher_id,
+        windows=[
+            (item.weekday, item.start_local_time, item.end_local_time) for item in payload.windows
+        ],
+        actor=current_user,
+    )
+    return AdminTeacherScheduleRead.model_validate(updated)
 
 
 @router.post("/users/{user_id}/role", response_model=AdminUserListItemRead)

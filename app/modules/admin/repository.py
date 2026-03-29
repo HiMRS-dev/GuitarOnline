@@ -518,6 +518,7 @@ class AdminRepository:
             "email": user.email,
             "full_name": user.full_name,
             "display_name": profile.display_name,
+            "timezone": user.timezone,
             "status": serialized_status,
             "is_active": user.is_active,
             "tags": tags,

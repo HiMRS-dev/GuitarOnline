@@ -252,6 +252,39 @@ button[disabled] {
   margin: 0.5rem 0;
 }
 
+.teacher-schedule-block {
+  margin-top: 1rem;
+  border-top: 1px solid #dbe5ef;
+  padding-top: 0.9rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.teacher-schedule-block h2 {
+  margin: 0;
+}
+
+.teacher-schedule-editor {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.teacher-schedule-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.teacher-schedule-row label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.teacher-schedule-table td:last-child {
+  width: 1%;
+}
+
 .calendar-page {
   display: grid;
   gap: 1rem;
@@ -714,6 +747,10 @@ button[disabled] {
 
   .users-metrics-grid,
   .users-teachers-list {
+    grid-template-columns: 1fr;
+  }
+
+  .teacher-schedule-row {
     grid-template-columns: 1fr;
   }
 

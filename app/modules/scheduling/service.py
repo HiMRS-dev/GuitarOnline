@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,13 +14,14 @@ from app.core.database import get_db_session
 from app.core.enums import RoleEnum, SlotStatusEnum
 from app.modules.audit.repository import AuditRepository
 from app.modules.identity.models import User
-from app.modules.scheduling.models import AvailabilitySlot
+from app.modules.scheduling.models import AvailabilitySlot, TeacherWeeklyScheduleWindow
 from app.modules.scheduling.repository import SchedulingRepository
 from app.modules.scheduling.schemas import SlotCreate
 from app.shared.exceptions import BusinessRuleException, NotFoundException, UnauthorizedException
 from app.shared.utils import ensure_utc, utc_now
 
 settings = get_settings()
+MOSCOW_TIMEZONE = "Europe/Moscow"
 
 
 class SchedulingService:
@@ -80,6 +82,71 @@ class SchedulingService:
             },
         )
         return slot
+
+    async def get_teacher_weekly_schedule(
+        self,
+        *,
+        teacher_id: UUID,
+        actor: User,
+    ) -> dict[str, object]:
+        """Return persistent weekly working schedule for teacher."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can view teacher schedules")
+
+        timezone_name = await self._resolve_teacher_timezone(teacher_id=teacher_id)
+        windows = await self.repository.list_teacher_weekly_schedule_windows(teacher_id)
+        return self._build_teacher_weekly_schedule_payload(
+            teacher_id=teacher_id,
+            timezone_name=timezone_name,
+            windows=windows,
+        )
+
+    async def replace_teacher_weekly_schedule(
+        self,
+        *,
+        teacher_id: UUID,
+        windows: list[tuple[int, time, time]],
+        actor: User,
+    ) -> dict[str, object]:
+        """Replace persistent weekly working schedule for teacher."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can update teacher schedules")
+
+        timezone_name = await self._resolve_teacher_timezone(teacher_id=teacher_id)
+        normalized_windows = self._normalize_weekly_schedule_windows(windows)
+
+        await self.repository.lock_teacher_for_slot_mutation(teacher_id)
+        previous_windows = await self.repository.list_teacher_weekly_schedule_windows(teacher_id)
+        updated_windows = await self.repository.replace_teacher_weekly_schedule_windows(
+            teacher_id=teacher_id,
+            windows=normalized_windows,
+        )
+
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="admin.teacher.schedule.replace",
+            entity_type="teacher_schedule",
+            entity_id=str(teacher_id),
+            payload={
+                "teacher_id": str(teacher_id),
+                "timezone": timezone_name,
+                "previous_windows": self._serialize_windows_for_audit(previous_windows),
+                "updated_windows": [
+                    {
+                        "weekday": weekday,
+                        "start_local_time": start_local_time.isoformat(),
+                        "end_local_time": end_local_time.isoformat(),
+                    }
+                    for weekday, start_local_time, end_local_time in normalized_windows
+                ],
+            },
+        )
+
+        return self._build_teacher_weekly_schedule_payload(
+            teacher_id=teacher_id,
+            timezone_name=timezone_name,
+            windows=updated_windows,
+        )
 
     async def bulk_create_slots(
         self,
@@ -249,6 +316,152 @@ class SchedulingService:
     async def release_slot(self, slot: AvailabilitySlot) -> None:
         """Return slot to OPEN state."""
         await self.repository.set_slot_status(slot, SlotStatusEnum.OPEN)
+
+    async def _resolve_teacher_timezone(self, *, teacher_id: UUID) -> str:
+        timezone_name = await self.repository.get_teacher_timezone(teacher_id)
+        if timezone_name is None:
+            raise NotFoundException("Teacher not found")
+        try:
+            ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError as exc:
+            raise BusinessRuleException("Teacher timezone is invalid") from exc
+        return timezone_name
+
+    @staticmethod
+    def _normalize_weekly_schedule_windows(
+        windows: list[tuple[int, time, time]],
+    ) -> list[tuple[int, time, time]]:
+        if not windows:
+            return []
+        if len(windows) > 84:
+            raise BusinessRuleException("Schedule contains too many windows")
+
+        normalized: list[tuple[int, time, time]] = []
+        for weekday, start_local_time, end_local_time in windows:
+            normalized_start = start_local_time.replace(second=0, microsecond=0)
+            normalized_end = end_local_time.replace(second=0, microsecond=0)
+            if weekday < 0 or weekday > 6:
+                raise BusinessRuleException("weekday must be in range 0..6")
+            if normalized_end <= normalized_start:
+                raise BusinessRuleException(
+                    "Schedule window end_local_time must be after start_local_time",
+                )
+            normalized.append((weekday, normalized_start, normalized_end))
+
+        normalized.sort(key=lambda item: (item[0], item[1], item[2]))
+
+        by_weekday: dict[int, list[tuple[time, time]]] = {}
+        for weekday, start_local_time, end_local_time in normalized:
+            by_weekday.setdefault(weekday, []).append((start_local_time, end_local_time))
+        for weekday_windows in by_weekday.values():
+            for index in range(1, len(weekday_windows)):
+                previous_start, previous_end = weekday_windows[index - 1]
+                current_start, current_end = weekday_windows[index]
+                if current_start < previous_end:
+                    raise BusinessRuleException(
+                        "Schedule windows overlap within the same weekday",
+                        details={
+                            "previous_start_local_time": previous_start.isoformat(),
+                            "previous_end_local_time": previous_end.isoformat(),
+                            "current_start_local_time": current_start.isoformat(),
+                            "current_end_local_time": current_end.isoformat(),
+                        },
+                    )
+        return normalized
+
+    def _build_teacher_weekly_schedule_payload(
+        self,
+        *,
+        teacher_id: UUID,
+        timezone_name: str,
+        windows: list[TeacherWeeklyScheduleWindow],
+    ) -> dict[str, object]:
+        teacher_zone = ZoneInfo(timezone_name)
+        moscow_zone = ZoneInfo(MOSCOW_TIMEZONE)
+
+        serialized_windows: list[dict[str, object]] = []
+        for window in windows:
+            weekday = int(window.weekday)
+            start_local_time = window.start_local_time
+            end_local_time = window.end_local_time
+            reference_date = self._next_local_date_for_weekday(
+                weekday=weekday,
+                timezone_name=timezone_name,
+            )
+            start_local_datetime = datetime.combine(
+                reference_date,
+                start_local_time,
+                tzinfo=teacher_zone,
+            )
+            end_local_datetime = datetime.combine(
+                reference_date,
+                end_local_time,
+                tzinfo=teacher_zone,
+            )
+            start_moscow_datetime = start_local_datetime.astimezone(moscow_zone)
+            end_moscow_datetime = end_local_datetime.astimezone(moscow_zone)
+
+            serialized_windows.append(
+                {
+                    "schedule_window_id": window.id,
+                    "weekday": weekday,
+                    "start_local_time": start_local_time,
+                    "end_local_time": end_local_time,
+                    "moscow_start_weekday": start_moscow_datetime.weekday(),
+                    "moscow_end_weekday": end_moscow_datetime.weekday(),
+                    "moscow_start_time": start_moscow_datetime.time().replace(
+                        second=0,
+                        microsecond=0,
+                    ),
+                    "moscow_end_time": end_moscow_datetime.time().replace(second=0, microsecond=0),
+                    "created_at_utc": window.created_at,
+                    "updated_at_utc": window.updated_at,
+                },
+            )
+
+        serialized_windows.sort(
+            key=lambda item: (
+                int(item["weekday"]),
+                str(item["start_local_time"]),
+                str(item["end_local_time"]),
+                str(item["schedule_window_id"]),
+            ),
+        )
+        return {
+            "teacher_id": teacher_id,
+            "timezone": timezone_name,
+            "windows": serialized_windows,
+        }
+
+    @staticmethod
+    def _next_local_date_for_weekday(*, weekday: int, timezone_name: str) -> date:
+        local_today = utc_now().astimezone(ZoneInfo(timezone_name)).date()
+        days_ahead = (weekday - local_today.weekday()) % 7
+        return local_today + timedelta(days=days_ahead)
+
+    @staticmethod
+    def _serialize_windows_for_audit(
+        windows: list[TeacherWeeklyScheduleWindow],
+    ) -> list[dict[str, object]]:
+        serialized: list[dict[str, object]] = []
+        for window in windows:
+            serialized.append(
+                {
+                    "schedule_window_id": str(window.id),
+                    "weekday": int(window.weekday),
+                    "start_local_time": window.start_local_time.isoformat(),
+                    "end_local_time": window.end_local_time.isoformat(),
+                },
+            )
+        serialized.sort(
+            key=lambda item: (
+                int(item["weekday"]),
+                str(item["start_local_time"]),
+                str(item["end_local_time"]),
+                str(item["schedule_window_id"]),
+            ),
+        )
+        return serialized
 
 
 async def get_scheduling_service(

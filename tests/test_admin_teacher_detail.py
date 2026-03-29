@@ -32,6 +32,7 @@ def make_item() -> dict:
         "email": "teacher@example.com",
         "full_name": "Петров Сергей Андреевич",
         "display_name": "Alice Blues",
+        "timezone": "Europe/Moscow",
         "bio": "Fingerstyle teacher",
         "experience_years": 7,
         "status": TeacherStatusEnum.ACTIVE,

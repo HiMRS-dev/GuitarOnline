@@ -83,7 +83,9 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
               teacher_id: TEACHER_ID,
               profile_id: PROFILE_ID,
               email: "teacher-smoke@guitaronline.dev",
+              full_name: "Smoke Teacher Full Name",
               display_name: "Smoke Teacher",
+              timezone: "Europe/Moscow",
               status: "active",
               is_active: true,
               tags: ["fingerstyle"],
@@ -107,7 +109,9 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
           teacher_id: TEACHER_ID,
           profile_id: PROFILE_ID,
           email: "teacher-smoke@guitaronline.dev",
+          full_name: "Smoke Teacher Full Name",
           display_name: "Smoke Teacher",
+          timezone: "Europe/Moscow",
           status: "active",
           is_active: true,
           tags: ["fingerstyle"],
@@ -115,6 +119,19 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
           updated_at_utc: "2026-03-10T00:00:00Z",
           bio: "Smoke profile",
           experience_years: 8
+        })
+      });
+      return;
+    }
+
+    if (method === "GET" && path === `/api/v1/admin/teachers/${TEACHER_ID}/schedule`) {
+      await route.fulfill({
+        status: 200,
+        headers: jsonHeaders(),
+        body: JSON.stringify({
+          teacher_id: TEACHER_ID,
+          timezone: "Europe/Moscow",
+          windows: []
         })
       });
       return;

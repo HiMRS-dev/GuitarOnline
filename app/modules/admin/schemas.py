@@ -175,6 +175,7 @@ class AdminTeacherListItemRead(BaseModel):
     email: str
     full_name: str
     display_name: str
+    timezone: str
     status: TeacherStatusEnum
     is_active: bool
     tags: list[str]
@@ -209,6 +210,7 @@ class AdminTeacherDetailRead(BaseModel):
     email: str
     full_name: str
     display_name: str
+    timezone: str
     bio: str
     experience_years: int
     status: TeacherStatusEnum
@@ -216,6 +218,54 @@ class AdminTeacherDetailRead(BaseModel):
     tags: list[str]
     created_at_utc: datetime
     updated_at_utc: datetime
+
+
+class AdminTeacherScheduleWindowWrite(BaseModel):
+    """Teacher weekly schedule window in local timezone."""
+
+    weekday: int = Field(ge=0, le=6)
+    start_local_time: time
+    end_local_time: time
+
+    @field_validator("start_local_time", "end_local_time", mode="after")
+    @classmethod
+    def normalize_time_precision(cls, value: time) -> time:
+        return value.replace(second=0, microsecond=0)
+
+    @model_validator(mode="after")
+    def validate_window_range(self) -> AdminTeacherScheduleWindowWrite:
+        if self.end_local_time <= self.start_local_time:
+            raise ValueError("end_local_time must be after start_local_time")
+        return self
+
+
+class AdminTeacherScheduleUpsertRequest(BaseModel):
+    """Upsert payload for persistent teacher weekly schedule."""
+
+    windows: list[AdminTeacherScheduleWindowWrite] = Field(default_factory=list, max_length=84)
+
+
+class AdminTeacherScheduleWindowRead(BaseModel):
+    """Teacher weekly schedule window with Moscow-time projection."""
+
+    schedule_window_id: UUID
+    weekday: int
+    start_local_time: time
+    end_local_time: time
+    moscow_start_weekday: int
+    moscow_end_weekday: int
+    moscow_start_time: time
+    moscow_end_time: time
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
+class AdminTeacherScheduleRead(BaseModel):
+    """Persistent teacher weekly schedule response."""
+
+    teacher_id: UUID
+    timezone: str
+    windows: list[AdminTeacherScheduleWindowRead]
 
 
 class AdminBookingListItemRead(BaseModel):

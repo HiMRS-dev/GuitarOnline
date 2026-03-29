@@ -788,10 +788,20 @@ async def landing_page() -> HTMLResponse:
     return HTMLResponse(content=_landing_page_html())
 
 
+@app.get("/login", include_in_schema=False)
+@app.get("/login/", include_in_schema=False)
 @app.get("/admin", include_in_schema=False)
 @app.get("/admin/", include_in_schema=False)
+async def admin_login_redirect() -> RedirectResponse:
+    """Redirect legacy/root login paths to canonical admin login route."""
+    return RedirectResponse(
+        url="/admin/login",
+        status_code=status.HTTP_308_PERMANENT_REDIRECT,
+    )
+
+
 @app.get("/admin/{path:path}", include_in_schema=False)
-async def admin_ui_page(path: str = "") -> FileResponse:
+async def admin_ui_page(path: str) -> FileResponse:
     """Serve business admin SPA shell."""
     if _ADMIN_UI_DIST_DIR is None:
         raise HTTPException(

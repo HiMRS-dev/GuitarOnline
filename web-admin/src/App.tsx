@@ -62,7 +62,7 @@ export function App() {
   return (
     <Routes>
       <Route
-        path="/login"
+        path="/admin/login"
         element={
           <LoginPage tokens={tokens} onSignedIn={handleSignedIn} onSignOut={handleSignOut} />
         }
@@ -84,7 +84,7 @@ export function App() {
         <Route path="packages" element={<LazyAdminSection><PackagesPage /></LazyAdminSection>} />
         <Route path="kpi" element={<LazyAdminSection><KpiPage /></LazyAdminSection>} />
       </Route>
-      <Route path="*" element={<Navigate to={tokens ? "/admin" : "/login"} replace />} />
+      <Route path="*" element={<Navigate to={tokens ? "/admin/kpi" : "/admin/login"} replace />} />
     </Routes>
   );
 }
@@ -197,7 +197,7 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
             <button type="button" onClick={handleLogout}>
               Выйти
             </button>
-            <Link className="link-btn" to="/admin">
+            <Link className="link-btn" to="/admin/kpi">
               Открыть админку
             </Link>
           </div>
@@ -250,7 +250,7 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
   }, [onInvalidSession, tokens?.access_token]);
 
   if (state === "denied") {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/admin/login" replace />;
   }
   if (state === "pending") {
     return (

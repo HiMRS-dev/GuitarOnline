@@ -476,3 +476,29 @@ explicit approval over silent decisions
 When unsure:
 
 stop and choose the safest option.
+
+---
+
+# 24. Execution Ownership (Persistent)
+
+For routine operational work in this repository, the agent must execute tasks end-to-end without delegating execution back to the user.
+
+Default expectation:
+
+the agent runs commands and performs the full flow independently  
+the agent does not ask the user to run routine commands manually  
+the agent reports final outcome and blockers only
+
+Routine tasks include:
+
+git pull / status checks  
+build or rebuild steps  
+migrations  
+service restarts  
+logs and smoke checks
+
+The agent may involve the user only when there is a real external blocker, such as:
+
+missing credentials or secrets  
+missing permissions / access boundaries  
+interactive approval outside agent control (e.g., 2FA, SSO, hardware key)

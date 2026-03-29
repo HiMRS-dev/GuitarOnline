@@ -220,14 +220,6 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
   useEffect(() => {
     let active = true;
 
-    if (!tokens?.access_token) {
-      setCurrentUser(null);
-      setState("denied");
-      return () => {
-        active = false;
-      };
-    }
-
     setState("pending");
     getCurrentUser()
       .then((currentUser) => {

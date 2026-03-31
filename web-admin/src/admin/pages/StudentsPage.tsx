@@ -13,6 +13,20 @@ const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 const ADMIN_STUDENT_FILTER_STORAGE_KEY = "go_admin_students_selected_id";
 const ACTIVE_BOOKING_STATUSES = new Set<AdminBooking["status"]>(["hold", "confirmed"]);
 
+const PACKAGE_STATUS_LABELS: Record<AdminPackage["status"], string> = {
+  active: "активен",
+  expired: "истёк",
+  depleted: "исчерпан",
+  canceled: "отменён"
+};
+
+const BOOKING_STATUS_LABELS: Record<AdminBooking["status"], string> = {
+  hold: "удержание",
+  confirmed: "подтверждено",
+  canceled: "отменено",
+  expired: "истекло"
+};
+
 type AdminStudentListItem = {
   user_id: string;
   email: string;
@@ -44,6 +58,8 @@ type StudentPreferredTimeSummary = {
   count: number;
   nextAtUtc: string | null;
 };
+
+type StudentActiveFilter = "all" | "active" | "inactive";
 
 function formatDateTime(value: string, timezone?: string): string {
   const parsed = new Date(value);
@@ -81,6 +97,14 @@ function formatWeekday(value: string, timezone: string): string {
   }).format(parsed);
 }
 
+function formatPackageStatus(status: AdminPackage["status"]): string {
+  return PACKAGE_STATUS_LABELS[status] ?? status;
+}
+
+function formatBookingStatus(status: AdminBooking["status"]): string {
+  return BOOKING_STATUS_LABELS[status] ?? status;
+}
+
 function summarizePackages(packages: AdminPackage[]): StudentPackageSummary {
   return packages.reduce<StudentPackageSummary>(
     (summary, pkg) => ({
@@ -104,6 +128,8 @@ export function StudentsPage() {
     () => localStorage.getItem(ADMIN_STUDENT_FILTER_STORAGE_KEY) || null
   );
   const selectedStudentRef = useRef<string | null>(selectedStudentId);
+  const [activeFilter, setActiveFilter] = useState<StudentActiveFilter>("all");
+  const [query, setQuery] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -300,6 +326,40 @@ export function StudentsPage() {
     [selectedStudentId, students]
   );
   const packageSummary = useMemo(() => summarizePackages(packages), [packages]);
+  const filteredStudents = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+
+    return students.filter((student) => {
+      const matchesStatus =
+        activeFilter === "all" ||
+        (activeFilter === "active" ? student.is_active : !student.is_active);
+
+      if (!matchesStatus) {
+        return false;
+      }
+
+      if (!normalizedQuery) {
+        return true;
+      }
+
+      return (
+        student.full_name.toLowerCase().includes(normalizedQuery) ||
+        student.email.toLowerCase().includes(normalizedQuery) ||
+        student.user_id.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [activeFilter, query, students]);
+
+  useEffect(() => {
+    if (filteredStudents.length === 0) {
+      setSelectedStudentId(null);
+      return;
+    }
+    if (selectedStudentId && filteredStudents.some((item) => item.user_id === selectedStudentId)) {
+      return;
+    }
+    setSelectedStudentId(filteredStudents[0].user_id);
+  }, [filteredStudents, selectedStudentId]);
 
   const teacherById = useMemo(
     () => new Map(teachers.map((teacher) => [teacher.teacher_id, teacher])),
@@ -457,11 +517,39 @@ export function StudentsPage() {
       <article className="card">
         <p className="eyebrow">Студенты</p>
         <h1>Список учеников</h1>
+        <div className="users-provision-form">
+          <label>
+            <span>Статус</span>
+            <select
+              value={activeFilter}
+              onChange={(event) => setActiveFilter(event.target.value as StudentActiveFilter)}
+            >
+              <option value="all">Все</option>
+              <option value="active">Только активные</option>
+              <option value="inactive">Только отключённые</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Поиск (ФИО / почта / ID)</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="например, student@... или Иванов"
+            />
+          </label>
+        </div>
+
+        <p className="summary">Найдено учеников: {filteredStudents.length}</p>
+
         {students.length === 0 ? (
-          <p className="summary">Пока нет учеников.</p>
+          <p className="summary">Пока нет учеников в системе.</p>
+        ) : filteredStudents.length === 0 ? (
+          <p className="summary">По выбранным фильтрам ученики не найдены.</p>
         ) : (
           <div className="teacher-list">
-            {students.map((student) => (
+            {filteredStudents.map((student) => (
               <button
                 key={student.user_id}
                 type="button"
@@ -534,6 +622,41 @@ export function StudentsPage() {
               <p>{packageSummary.lessonsReserved}</p>
             </div>
           </div>
+
+          {packages.length ? (
+            <div className="bookings-table-wrap">
+              <table className="bookings-table">
+                <thead>
+                  <tr>
+                    <th>Пакет</th>
+                    <th>Статус</th>
+                    <th>Осталось</th>
+                    <th>Зарезервировано</th>
+                    <th>Стоимость</th>
+                    <th>Истекает</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packages.map((pkg) => (
+                    <tr key={pkg.package_id}>
+                      <td>{pkg.package_id.slice(0, 8)}</td>
+                      <td>{formatPackageStatus(pkg.status)}</td>
+                      <td>{pkg.lessons_left}</td>
+                      <td>{pkg.lessons_reserved}</td>
+                      <td>
+                        {pkg.price_amount
+                          ? `${pkg.price_amount} ${pkg.price_currency ?? ""}`
+                          : "-"}
+                      </td>
+                      <td>{formatDateTime(pkg.expires_at_utc)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="summary">У ученика пока нет пакетов.</p>
+          )}
         </section>
 
         <section className="teacher-schedule-block">
@@ -629,7 +752,7 @@ export function StudentsPage() {
                           {formatTime(booking.slot_end_at_utc, selectedStudent?.timezone ?? "UTC")}
                         </td>
                         <td>{teacher?.display_name ?? booking.teacher_id}</td>
-                        <td>{booking.status}</td>
+                        <td>{formatBookingStatus(booking.status)}</td>
                       </tr>
                     );
                   })}

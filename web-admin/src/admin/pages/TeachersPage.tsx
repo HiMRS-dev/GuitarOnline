@@ -449,7 +449,7 @@ export function TeachersPage() {
   }
 
   return (
-    <section className="teachers-grid teachers-with-picker-grid">
+    <section className="teachers-grid">
       <article className="card teachers-picker-card">
         <p className="eyebrow">Преподаватели</p>
         <h1>Выбор преподавателя</h1>

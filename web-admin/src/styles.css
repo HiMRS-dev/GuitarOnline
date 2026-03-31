@@ -201,7 +201,8 @@ button[disabled] {
 .teachers-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
 }
 
 .teacher-list {
@@ -285,11 +286,6 @@ button[disabled] {
   width: 1%;
 }
 
-.teachers-with-picker-grid {
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-
 .teachers-picker-card,
 .students-picker-card {
   display: grid;
@@ -313,23 +309,12 @@ button[disabled] {
   width: min(860px, 95vw);
 }
 
-.students-grid {
-  grid-template-columns: minmax(0, 1fr);
-  align-items: start;
-}
-
 .students-card {
   min-width: 0;
 }
 
 .students-filter-form {
   margin-bottom: 0.75rem;
-}
-
-.students-list {
-  max-height: 560px;
-  overflow: auto;
-  padding-right: 0.15rem;
 }
 
 .students-detail p {
@@ -840,10 +825,6 @@ button[disabled] {
     grid-template-columns: 1fr;
   }
 
-  .teachers-with-picker-grid {
-    grid-template-columns: 1fr;
-  }
-
   .users-metrics-grid,
   .users-teachers-list {
     grid-template-columns: 1fr;
@@ -851,11 +832,6 @@ button[disabled] {
 
   .teacher-schedule-row {
     grid-template-columns: 1fr;
-  }
-
-  .students-list {
-    max-height: none;
-    padding-right: 0;
   }
 
   .teacher-picker-list,

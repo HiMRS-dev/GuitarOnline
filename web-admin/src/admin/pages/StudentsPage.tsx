@@ -564,7 +564,7 @@ export function StudentsPage() {
   }, [bookings]);
 
   return (
-    <section className="teachers-grid students-grid">
+    <section className="teachers-grid">
       <article className="card students-card students-picker-card">
         <p className="eyebrow">Студенты</p>
         <h1>Выбор ученика</h1>
@@ -836,7 +836,7 @@ export function StudentsPage() {
 
             {!studentsLoading && !studentsUnavailable ? (
               filteredStudents.length ? (
-                <div className="teacher-list students-list students-picker-list">
+                <div className="teacher-list students-picker-list">
                   {filteredStudents.map((student) => (
                     <button
                       key={student.user_id}

@@ -285,6 +285,34 @@ button[disabled] {
   width: 1%;
 }
 
+.teachers-with-picker-grid {
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.teachers-picker-card,
+.students-picker-card {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.teachers-picker-search {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.teacher-picker-list,
+.students-picker-list {
+  max-height: min(52vh, 560px);
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.teachers-picker-modal,
+.students-picker-modal {
+  width: min(860px, 95vw);
+}
+
 .students-grid {
   align-items: start;
 }
@@ -811,6 +839,10 @@ button[disabled] {
     grid-template-columns: 1fr;
   }
 
+  .teachers-with-picker-grid {
+    grid-template-columns: 1fr;
+  }
+
   .users-metrics-grid,
   .users-teachers-list {
     grid-template-columns: 1fr;
@@ -822,6 +854,12 @@ button[disabled] {
 
   .students-list {
     max-height: none;
+    padding-right: 0;
+  }
+
+  .teacher-picker-list,
+  .students-picker-list {
+    max-height: 60vh;
     padding-right: 0;
   }
 

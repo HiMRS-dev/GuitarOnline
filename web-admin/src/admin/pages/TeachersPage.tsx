@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   activateTeacher,
@@ -83,18 +83,26 @@ function sortScheduleDraft(items: TeacherScheduleWindowWrite[]): TeacherSchedule
     if (left.weekday !== right.weekday) {
       return left.weekday - right.weekday;
     }
-    return toMinutes(toInputTime(left.start_local_time)) - toMinutes(toInputTime(right.start_local_time));
+    return (
+      toMinutes(toInputTime(left.start_local_time)) - toMinutes(toInputTime(right.start_local_time))
+    );
   });
 }
 
 export function TeachersPage() {
-  const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(
     () => localStorage.getItem(ADMIN_TEACHER_FILTER_STORAGE_KEY) || null
   );
   const [statusFilter, setStatusFilter] = useState<TeacherStatusFilter>(() =>
     normalizeStatusFilter(localStorage.getItem(ADMIN_TEACHERS_STATUS_STORAGE_KEY))
   );
+  const [teacherSearch, setTeacherSearch] = useState("");
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [pickerTeachers, setPickerTeachers] = useState<TeacherListItem[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [pickerUnavailable, setPickerUnavailable] = useState(false);
+
   const [teacherDetail, setTeacherDetail] = useState<TeacherDetail | null>(null);
   const [teacherSchedule, setTeacherSchedule] = useState<TeacherSchedule | null>(null);
   const [scheduleDraft, setScheduleDraft] = useState<TeacherScheduleWindowWrite[]>([]);
@@ -102,12 +110,10 @@ export function TeachersPage() {
   const [newWindowStart, setNewWindowStart] = useState("10:00");
   const [newWindowEnd, setNewWindowEnd] = useState("16:00");
 
-  const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const [scheduleSaving, setScheduleSaving] = useState(false);
 
-  const [error, setError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -115,54 +121,46 @@ export function TeachersPage() {
   const [scheduleSaveSuccess, setScheduleSaveSuccess] = useState<string | null>(null);
 
   const [actionPending, setActionPending] = useState<"disable" | "activate" | null>(null);
-  const [unavailable, setUnavailable] = useState(false);
-  const selectedTeacherIdRef = useRef<string | null>(selectedTeacherId);
 
-  useEffect(() => {
-    selectedTeacherIdRef.current = selectedTeacherId;
-  }, [selectedTeacherId]);
+  const loadTeachersForPicker = useCallback(async () => {
+    setPickerLoading(true);
+    setPickerError(null);
+    setPickerUnavailable(false);
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(null);
-    setUnavailable(false);
-
-    listTeachers(statusFilter === "all" ? {} : { status: statusFilter })
-      .then((page) => {
-        if (!active) {
-          return;
-        }
-        setTeachers(page.items);
-        const preferredTeacherId = selectedTeacherIdRef.current ?? page.items[0]?.teacher_id ?? null;
-        const hasPreferredTeacher = page.items.some(
-          (teacher) => teacher.teacher_id === preferredTeacherId
+    try {
+      const items: TeacherListItem[] = [];
+      let offset = 0;
+      const limit = 200;
+      while (true) {
+        const page = await listTeachers(
+          statusFilter === "all"
+            ? { limit, offset }
+            : { status: statusFilter, limit, offset }
         );
-        const nextSelectedId = hasPreferredTeacher ? preferredTeacherId : page.items[0]?.teacher_id ?? null;
-        setSelectedTeacherId(nextSelectedId);
-      })
-      .catch((requestError) => {
-        if (!active) {
-          return;
-        }
-        if (
-          requestError instanceof ApiClientError &&
-          UNAVAILABLE_STATUSES.has(requestError.status)
-        ) {
-          setUnavailable(true);
-          return;
-        }
-        setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить список");
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
+        items.push(...page.items);
+        offset += page.items.length;
 
-    return () => {
-      active = false;
-    };
+        if (page.items.length < limit || items.length >= page.total) {
+          break;
+        }
+      }
+      setPickerTeachers(items);
+    } catch (requestError) {
+      if (
+        requestError instanceof ApiClientError &&
+        UNAVAILABLE_STATUSES.has(requestError.status)
+      ) {
+        setPickerUnavailable(true);
+      } else {
+        setPickerError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Не удалось загрузить список преподавателей"
+        );
+      }
+    } finally {
+      setPickerLoading(false);
+    }
   }, [statusFilter]);
 
   useEffect(() => {
@@ -178,8 +176,19 @@ export function TeachersPage() {
   }, [statusFilter]);
 
   useEffect(() => {
-    if (!selectedTeacherId || unavailable) {
+    if (!isPickerOpen) {
+      return;
+    }
+    void loadTeachersForPicker();
+  }, [isPickerOpen, loadTeachersForPicker]);
+
+  useEffect(() => {
+    if (!selectedTeacherId) {
       setTeacherDetail(null);
+      setTeacherSchedule(null);
+      setScheduleDraft([]);
+      setDetailError(null);
+      setScheduleError(null);
       return;
     }
 
@@ -195,7 +204,10 @@ export function TeachersPage() {
       })
       .catch((requestError) => {
         if (active) {
-          setDetailError(requestError instanceof Error ? requestError.message : "Не удалось загрузить данные");
+          setTeacherDetail(null);
+          setDetailError(
+            requestError instanceof Error ? requestError.message : "Не удалось загрузить данные"
+          );
         }
       })
       .finally(() => {
@@ -207,10 +219,10 @@ export function TeachersPage() {
     return () => {
       active = false;
     };
-  }, [selectedTeacherId, unavailable]);
+  }, [selectedTeacherId]);
 
   useEffect(() => {
-    if (!selectedTeacherId || unavailable) {
+    if (!selectedTeacherId) {
       setTeacherSchedule(null);
       setScheduleDraft([]);
       setScheduleError(null);
@@ -258,29 +270,26 @@ export function TeachersPage() {
     return () => {
       active = false;
     };
-  }, [selectedTeacherId, unavailable]);
+  }, [selectedTeacherId]);
 
-  const selectedTeacher = useMemo(
-    () => teachers.find((item) => item.teacher_id === selectedTeacherId) ?? null,
-    [selectedTeacherId, teachers]
-  );
-
-  async function refreshTeachersAndSelection(preferredTeacherId: string | null) {
-    const page = await listTeachers(statusFilter === "all" ? {} : { status: statusFilter });
-    setTeachers(page.items);
-
-    const fallbackTeacherId = preferredTeacherId ?? page.items[0]?.teacher_id ?? null;
-    const nextSelectedId = page.items.some((item) => item.teacher_id === fallbackTeacherId)
-      ? fallbackTeacherId
-      : page.items[0]?.teacher_id ?? null;
-
-    setSelectedTeacherId(nextSelectedId);
-    if (!nextSelectedId) {
-      setTeacherDetail(null);
-      setTeacherSchedule(null);
-      setScheduleDraft([]);
+  const filteredPickerTeachers = useMemo(() => {
+    const normalizedQuery = teacherSearch.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return pickerTeachers;
     }
-  }
+    return pickerTeachers.filter((teacher) => {
+      return (
+        teacher.display_name.toLowerCase().includes(normalizedQuery) ||
+        teacher.full_name.toLowerCase().includes(normalizedQuery) ||
+        teacher.email.toLowerCase().includes(normalizedQuery)
+      );
+    });
+  }, [pickerTeachers, teacherSearch]);
+
+  const selectedTeacherFromPicker = useMemo(
+    () => pickerTeachers.find((item) => item.teacher_id === selectedTeacherId) ?? null,
+    [pickerTeachers, selectedTeacherId]
+  );
 
   async function handleDisableAction() {
     if (!selectedTeacherId) {
@@ -295,7 +304,10 @@ export function TeachersPage() {
       invalidateTeachersCache();
       const updatedDetail = await disableTeacher(selectedTeacherId);
       setTeacherDetail(updatedDetail);
-      await refreshTeachersAndSelection(updatedDetail.teacher_id);
+
+      if (isPickerOpen) {
+        await loadTeachersForPicker();
+      }
 
       if (!isValidTeacherStatusFilter(updatedDetail.status, statusFilter)) {
         setActionSuccess("Статус обновлён. Преподаватель скрыт текущим фильтром.");
@@ -304,7 +316,9 @@ export function TeachersPage() {
       }
     } catch (requestError) {
       setActionError(
-        requestError instanceof Error ? requestError.message : "Не удалось отключить преподавателя"
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось отключить преподавателя"
       );
     } finally {
       setActionPending(null);
@@ -325,7 +339,10 @@ export function TeachersPage() {
       await activateTeacher(selectedTeacherId);
       const updatedDetail = await getTeacherDetail(selectedTeacherId);
       setTeacherDetail(updatedDetail);
-      await refreshTeachersAndSelection(updatedDetail.teacher_id);
+
+      if (isPickerOpen) {
+        await loadTeachersForPicker();
+      }
 
       if (!isValidTeacherStatusFilter(updatedDetail.status, statusFilter)) {
         setActionSuccess("Статус обновлён. Преподаватель скрыт текущим фильтром.");
@@ -431,45 +448,27 @@ export function TeachersPage() {
     }
   }
 
-  if (unavailable) {
-    return (
-      <article className="card section-page">
-        <p className="eyebrow">Преподаватели</p>
-        <h1>Эндпоинты недоступны</h1>
-        <p className="summary">
-          Для этого раздела нужны <code>GET /admin/teachers</code>,{" "}
-          <code>GET /admin/teachers/{`{id}`}</code>,{" "}
-          <code>POST /admin/teachers/{`{id}`}/disable</code> и{" "}
-          <code>POST /admin/users/{`{id}`}/activate</code>.
-        </p>
-      </article>
-    );
-  }
-
-  if (loading) {
-    return (
-      <article className="card section-page">
-        <h1>Преподаватели</h1>
-        <p className="summary">Загрузка списка...</p>
-      </article>
-    );
-  }
-
-  if (error) {
-    return (
-      <article className="card section-page">
-        <h1>Преподаватели</h1>
-        <p className="error-text">{error}</p>
-      </article>
-    );
-  }
-
   return (
-    <section className="teachers-grid">
-      <article className="card">
+    <section className="teachers-grid teachers-with-picker-grid">
+      <article className="card teachers-picker-card">
         <p className="eyebrow">Преподаватели</p>
-        <h1>Список преподавателей</h1>
-        <div className="quick-filter-group" role="group" aria-label="Фильтры статуса преподавателей">
+        <h1>Выбор преподавателя</h1>
+
+        <label className="teachers-picker-search">
+          <span>Поиск преподавателя</span>
+          <input
+            type="search"
+            value={teacherSearch}
+            onChange={(event) => setTeacherSearch(event.target.value)}
+            placeholder="например, jazz или teacher@..."
+          />
+        </label>
+
+        <div
+          className="quick-filter-group"
+          role="group"
+          aria-label="Фильтры статуса преподавателей"
+        >
           {STATUS_FILTER_OPTIONS.map((option) => (
             <button
               key={option.value}
@@ -481,32 +480,38 @@ export function TeachersPage() {
             </button>
           ))}
         </div>
-        {teachers.length === 0 ? (
-          <p className="summary">По выбранному фильтру нет преподавателей.</p>
-        ) : (
-          <div className="teacher-list">
-            {teachers.map((teacher) => (
-              <button
-                key={teacher.teacher_id}
-                type="button"
-                className={
-                  teacher.teacher_id === selectedTeacherId ? "teacher-item active" : "teacher-item"
-                }
-                onClick={() => setSelectedTeacherId(teacher.teacher_id)}
-              >
-                <strong>{teacher.display_name}</strong>
-                <span>{teacher.full_name}</span>
-                <span>{teacher.email}</span>
-                <span>{formatTeacherStatus(teacher.status)}</span>
-              </button>
-            ))}
-          </div>
-        )}
+
+        <div className="quick-filter-group" role="group" aria-label="Выбор преподавателя из списка">
+          <button
+            type="button"
+            className="quick-filter active"
+            onClick={() => setIsPickerOpen(true)}
+          >
+            Открыть список
+          </button>
+          <button
+            type="button"
+            className="quick-filter"
+            onClick={() => setSelectedTeacherId(null)}
+            disabled={!selectedTeacherId}
+          >
+            Сбросить выбор
+          </button>
+        </div>
+
+        <p className="summary">
+          Выбран: <strong>{teacherDetail?.display_name ?? selectedTeacherFromPicker?.display_name ?? "не выбран"}</strong>
+        </p>
+
+        {pickerUnavailable ? (
+          <p className="summary">`GET /admin/teachers` недоступен в текущем backend-контракте.</p>
+        ) : null}
+        {pickerError ? <p className="error-text">{pickerError}</p> : null}
       </article>
 
-      <article className="card">
+      <article className="card teachers-card-detail">
         <p className="eyebrow">Карточка преподавателя</p>
-        {selectedTeacher ? <h1>{selectedTeacher.display_name}</h1> : <h1>Не выбрано</h1>}
+        {teacherDetail ? <h1>{teacherDetail.display_name}</h1> : <h1>Не выбрано</h1>}
 
         <div className="quick-filter-group" role="group" aria-label="Действия по аккаунту преподавателя">
           {statusFilter !== "disabled" ? (
@@ -564,15 +569,14 @@ export function TeachersPage() {
             </p>
           </div>
         ) : (
-          <p className="summary">Выберите преподавателя для просмотра карточки.</p>
+          <p className="summary">Выберите преподавателя через кнопку "Открыть список".</p>
         )}
 
         <section className="teacher-schedule-block">
           <h2>Постоянный график преподавателя</h2>
           {teacherSchedule ? (
             <p className="summary">
-              Локальная зона: <code>{teacherSchedule.timezone}</code>, вторая зона:{" "}
-              <code>Europe/Moscow</code>.
+              Локальная зона: <code>{teacherSchedule.timezone}</code>, вторая зона: <code>Europe/Moscow</code>.
             </p>
           ) : null}
           {scheduleLoading ? <p className="summary">Загрузка графика...</p> : null}
@@ -713,6 +717,63 @@ export function TeachersPage() {
           ) : null}
         </section>
       </article>
+
+      {isPickerOpen ? (
+        <div className="modal-backdrop">
+          <div className="modal-card teachers-picker-modal">
+            <h2>Список преподавателей</h2>
+
+            <label>
+              <span>Поиск преподавателя</span>
+              <input
+                type="search"
+                value={teacherSearch}
+                onChange={(event) => setTeacherSearch(event.target.value)}
+                placeholder="например, jazz или teacher@..."
+              />
+            </label>
+
+            {pickerLoading ? <p className="summary">Загрузка списка...</p> : null}
+            {pickerError ? <p className="error-text">{pickerError}</p> : null}
+            {pickerUnavailable ? (
+              <p className="summary">`GET /admin/teachers` недоступен в текущем backend-контракте.</p>
+            ) : null}
+
+            {!pickerLoading && !pickerUnavailable ? (
+              filteredPickerTeachers.length ? (
+                <div className="teacher-list teacher-picker-list">
+                  {filteredPickerTeachers.map((teacher) => (
+                    <button
+                      key={teacher.teacher_id}
+                      type="button"
+                      className={
+                        teacher.teacher_id === selectedTeacherId ? "teacher-item active" : "teacher-item"
+                      }
+                      onClick={() => {
+                        setSelectedTeacherId(teacher.teacher_id);
+                        setIsPickerOpen(false);
+                      }}
+                    >
+                      <strong>{teacher.display_name}</strong>
+                      <span>{teacher.full_name}</span>
+                      <span>{teacher.email}</span>
+                      <span>{formatTeacherStatus(teacher.status)}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="summary">По выбранным фильтрам преподаватели не найдены.</p>
+              )
+            ) : null}
+
+            <div className="modal-actions">
+              <button type="button" onClick={() => setIsPickerOpen(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

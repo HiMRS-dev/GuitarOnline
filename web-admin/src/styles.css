@@ -289,6 +289,10 @@ button[disabled] {
   align-items: start;
 }
 
+.students-card {
+  min-width: 0;
+}
+
 .students-filter-form {
   margin-bottom: 0.75rem;
 }
@@ -299,13 +303,52 @@ button[disabled] {
   padding-right: 0.15rem;
 }
 
+.students-detail p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.students-metrics-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.students-metrics-grid .kpi-tile {
+  min-width: 0;
+}
+
+.students-metrics-grid .kpi-tile h3 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.students-packages-table,
+.students-time-table,
+.students-upcoming-table {
+  table-layout: fixed;
+}
+
+.students-packages-table th,
+.students-packages-table td,
+.students-time-table th,
+.students-time-table td,
+.students-upcoming-table th,
+.students-upcoming-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.students-teachers-list {
+  grid-template-columns: 1fr;
+}
+
 .students-time-table td:first-child {
   text-transform: capitalize;
 }
 
 .students-upcoming-table td:first-child {
   white-space: normal;
-  min-width: 220px;
+  min-width: 0;
 }
 
 .calendar-page {
@@ -780,6 +823,10 @@ button[disabled] {
   .students-list {
     max-height: none;
     padding-right: 0;
+  }
+
+  .students-metrics-grid {
+    grid-template-columns: 1fr;
   }
 
   .kpi-range,

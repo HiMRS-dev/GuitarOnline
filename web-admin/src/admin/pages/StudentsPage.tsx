@@ -514,7 +514,7 @@ export function StudentsPage() {
 
   return (
     <section className="teachers-grid students-grid">
-      <article className="card">
+      <article className="card students-card">
         <p className="eyebrow">Студенты</p>
         <h1>Список учеников</h1>
         <div className="users-provision-form students-filter-form">
@@ -578,7 +578,7 @@ export function StudentsPage() {
         {teachersError ? <p className="error-text">{teachersError}</p> : null}
 
         {selectedStudent ? (
-          <div className="teacher-detail">
+          <div className="teacher-detail students-detail">
             <p>
               <strong>ФИО:</strong> {selectedStudent.full_name}
             </p>
@@ -604,7 +604,7 @@ export function StudentsPage() {
 
         <section className="teacher-schedule-block">
           <h2>Пакеты ученика</h2>
-          <div className="users-metrics-grid">
+          <div className="users-metrics-grid students-metrics-grid">
             <div className="kpi-tile">
               <h3>Всего пакетов</h3>
               <p>{packageSummary.packagesTotal}</p>
@@ -667,7 +667,7 @@ export function StudentsPage() {
           ) : null}
           {!teachersLoading && !teachersUnavailable ? (
             teacherSummaries.length ? (
-              <div className="users-teachers-list">
+              <div className="users-teachers-list students-teachers-list">
                 {teacherSummaries.map((item) => {
                   const teacher = teacherById.get(item.teacherId);
                   return (

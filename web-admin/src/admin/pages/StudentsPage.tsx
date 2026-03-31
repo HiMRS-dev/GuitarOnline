@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { listAdminBookings } from "../../features/bookings/api";
 import type { AdminBooking } from "../../features/bookings/types";
@@ -11,6 +11,7 @@ import type { PageResponse } from "../../shared/api/types";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 const ADMIN_STUDENT_FILTER_STORAGE_KEY = "go_admin_students_selected_id";
+const ADMIN_STUDENT_PROFILE_STORAGE_KEY = "go_admin_students_selected_profile";
 const ACTIVE_BOOKING_STATUSES = new Set<AdminBooking["status"]>(["hold", "confirmed"]);
 
 const PACKAGE_STATUS_LABELS: Record<AdminPackage["status"], string> = {
@@ -60,6 +61,64 @@ type StudentPreferredTimeSummary = {
 };
 
 type StudentActiveFilter = "all" | "active" | "inactive";
+
+function canUseStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function loadStoredSelectedStudent(): AdminStudentListItem | null {
+  if (!canUseStorage()) {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(ADMIN_STUDENT_PROFILE_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<AdminStudentListItem>;
+    if (
+      typeof parsed.user_id !== "string" ||
+      typeof parsed.email !== "string" ||
+      typeof parsed.full_name !== "string" ||
+      typeof parsed.timezone !== "string" ||
+      typeof parsed.is_active !== "boolean" ||
+      typeof parsed.created_at_utc !== "string" ||
+      typeof parsed.updated_at_utc !== "string"
+    ) {
+      window.localStorage.removeItem(ADMIN_STUDENT_PROFILE_STORAGE_KEY);
+      return null;
+    }
+
+    return {
+      user_id: parsed.user_id,
+      email: parsed.email,
+      full_name: parsed.full_name,
+      timezone: parsed.timezone,
+      role: "student",
+      is_active: parsed.is_active,
+      created_at_utc: parsed.created_at_utc,
+      updated_at_utc: parsed.updated_at_utc
+    };
+  } catch {
+    window.localStorage.removeItem(ADMIN_STUDENT_PROFILE_STORAGE_KEY);
+    return null;
+  }
+}
+
+function persistSelectedStudent(profile: AdminStudentListItem | null): void {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  if (!profile) {
+    window.localStorage.removeItem(ADMIN_STUDENT_PROFILE_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(ADMIN_STUDENT_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+}
 
 function formatDateTime(value: string, timezone?: string): string {
   const parsed = new Date(value);
@@ -127,15 +186,20 @@ export function StudentsPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
     () => localStorage.getItem(ADMIN_STUDENT_FILTER_STORAGE_KEY) || null
   );
-  const selectedStudentRef = useRef<string | null>(selectedStudentId);
+  const [selectedStudentProfile, setSelectedStudentProfile] = useState<AdminStudentListItem | null>(
+    () => loadStoredSelectedStudent()
+  );
+
   const [activeFilter, setActiveFilter] = useState<StudentActiveFilter>("all");
   const [query, setQuery] = useState("");
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsError, setStudentsError] = useState<string | null>(null);
+  const [studentsUnavailable, setStudentsUnavailable] = useState(false);
 
-  const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [teachersLoading, setTeachersLoading] = useState(false);
 
-  const [error, setError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [bookingsError, setBookingsError] = useState<string | null>(null);
   const [teachersError, setTeachersError] = useState<string | null>(null);
@@ -144,112 +208,116 @@ export function StudentsPage() {
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
 
-  const [unavailable, setUnavailable] = useState(false);
   const [bookingsUnavailable, setBookingsUnavailable] = useState(false);
   const [teachersUnavailable, setTeachersUnavailable] = useState(false);
 
-  useEffect(() => {
-    selectedStudentRef.current = selectedStudentId;
-  }, [selectedStudentId]);
+  const loadStudentsForPicker = useCallback(async () => {
+    setStudentsLoading(true);
+    setStudentsError(null);
+    setStudentsUnavailable(false);
+
+    try {
+      const items: AdminStudentListItem[] = [];
+      let offset = 0;
+      const limit = 200;
+
+      while (true) {
+        const page = await apiClient.request<PageResponse<AdminStudentListItem>>(
+          `/admin/users?role=student&limit=${limit}&offset=${offset}`
+        );
+        items.push(...page.items);
+        offset += page.items.length;
+
+        if (page.items.length < limit || items.length >= page.total) {
+          break;
+        }
+      }
+
+      setStudents(items);
+    } catch (requestError) {
+      if (
+        requestError instanceof ApiClientError &&
+        UNAVAILABLE_STATUSES.has(requestError.status)
+      ) {
+        setStudentsUnavailable(true);
+      } else {
+        setStudentsError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Не удалось загрузить список учеников"
+        );
+      }
+    } finally {
+      setStudentsLoading(false);
+    }
+  }, []);
+
+  const loadTeachersLookup = useCallback(async () => {
+    setTeachersLoading(true);
+    setTeachersError(null);
+    setTeachersUnavailable(false);
+
+    try {
+      const items: TeacherListItem[] = [];
+      let offset = 0;
+      const limit = 200;
+
+      while (true) {
+        const page = await listTeachers({ limit, offset });
+        items.push(...page.items);
+        offset += page.items.length;
+
+        if (page.items.length < limit || items.length >= page.total) {
+          break;
+        }
+      }
+
+      setTeachers(items);
+    } catch (requestError) {
+      if (
+        requestError instanceof ApiClientError &&
+        UNAVAILABLE_STATUSES.has(requestError.status)
+      ) {
+        setTeachersUnavailable(true);
+        setTeachers([]);
+      } else {
+        setTeachersError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Не удалось загрузить список преподавателей"
+        );
+      }
+    } finally {
+      setTeachersLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!selectedStudentId) {
       localStorage.removeItem(ADMIN_STUDENT_FILTER_STORAGE_KEY);
+      persistSelectedStudent(null);
       return;
     }
     localStorage.setItem(ADMIN_STUDENT_FILTER_STORAGE_KEY, selectedStudentId);
   }, [selectedStudentId]);
 
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    setError(null);
-    setUnavailable(false);
-
-    apiClient
-      .request<PageResponse<AdminStudentListItem>>(
-        "/admin/users?role=student&limit=100&offset=0"
-      )
-      .then((page) => {
-        if (!active) {
-          return;
-        }
-        setStudents(page.items);
-        const preferredStudentId = selectedStudentRef.current ?? page.items[0]?.user_id ?? null;
-        const hasPreferred = page.items.some((item) => item.user_id === preferredStudentId);
-        setSelectedStudentId(hasPreferred ? preferredStudentId : page.items[0]?.user_id ?? null);
-      })
-      .catch((requestError) => {
-        if (!active) {
-          return;
-        }
-        if (
-          requestError instanceof ApiClientError &&
-          UNAVAILABLE_STATUSES.has(requestError.status)
-        ) {
-          setUnavailable(true);
-          return;
-        }
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Не удалось загрузить список учеников"
-        );
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (!selectedStudentId || !selectedStudentProfile || selectedStudentProfile.user_id !== selectedStudentId) {
+      persistSelectedStudent(null);
+      return;
+    }
+    persistSelectedStudent(selectedStudentProfile);
+  }, [selectedStudentId, selectedStudentProfile]);
 
   useEffect(() => {
-    let active = true;
-    setTeachersLoading(true);
-    setTeachersError(null);
-    setTeachersUnavailable(false);
-
-    listTeachers()
-      .then((page) => {
-        if (active) {
-          setTeachers(page.items);
-        }
-      })
-      .catch((requestError) => {
-        if (!active) {
-          return;
-        }
-        if (
-          requestError instanceof ApiClientError &&
-          UNAVAILABLE_STATUSES.has(requestError.status)
-        ) {
-          setTeachersUnavailable(true);
-          setTeachers([]);
-          return;
-        }
-        setTeachersError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Не удалось загрузить список преподавателей"
-        );
-      })
-      .finally(() => {
-        if (active) {
-          setTeachersLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (!isPickerOpen) {
+      return;
+    }
+    void loadStudentsForPicker();
+  }, [isPickerOpen, loadStudentsForPicker]);
 
   useEffect(() => {
-    if (!selectedStudentId || unavailable) {
+    if (!selectedStudentId) {
       setPackages([]);
       setBookings([]);
       setDetailError(null);
@@ -319,13 +387,38 @@ export function StudentsPage() {
     return () => {
       active = false;
     };
-  }, [selectedStudentId, unavailable]);
+  }, [selectedStudentId]);
 
-  const selectedStudent = useMemo(
-    () => students.find((item) => item.user_id === selectedStudentId) ?? null,
-    [selectedStudentId, students]
-  );
+  useEffect(() => {
+    if (!selectedStudentId || students.length === 0) {
+      return;
+    }
+    const found = students.find((item) => item.user_id === selectedStudentId);
+    if (found) {
+      setSelectedStudentProfile(found);
+    }
+  }, [selectedStudentId, students]);
+
+  useEffect(() => {
+    if (bookings.length === 0 || teachers.length > 0 || teachersLoading || teachersUnavailable) {
+      return;
+    }
+    void loadTeachersLookup();
+  }, [bookings.length, loadTeachersLookup, teachers.length, teachersLoading, teachersUnavailable]);
+
+  const selectedStudent = useMemo(() => {
+    const fromList = students.find((item) => item.user_id === selectedStudentId) ?? null;
+    if (fromList) {
+      return fromList;
+    }
+    if (selectedStudentProfile && selectedStudentProfile.user_id === selectedStudentId) {
+      return selectedStudentProfile;
+    }
+    return null;
+  }, [selectedStudentId, selectedStudentProfile, students]);
+
   const packageSummary = useMemo(() => summarizePackages(packages), [packages]);
+
   const filteredStudents = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
 
@@ -349,17 +442,6 @@ export function StudentsPage() {
       );
     });
   }, [activeFilter, query, students]);
-
-  useEffect(() => {
-    if (filteredStudents.length === 0) {
-      setSelectedStudentId(null);
-      return;
-    }
-    if (selectedStudentId && filteredStudents.some((item) => item.user_id === selectedStudentId)) {
-      return;
-    }
-    setSelectedStudentId(filteredStudents[0].user_id);
-  }, [filteredStudents, selectedStudentId]);
 
   const teacherById = useMemo(
     () => new Map(teachers.map((teacher) => [teacher.teacher_id, teacher])),
@@ -481,42 +563,12 @@ export function StudentsPage() {
       .slice(0, 5);
   }, [bookings]);
 
-  if (unavailable) {
-    return (
-      <article className="card section-page">
-        <p className="eyebrow">Студенты</p>
-        <h1>Эндпоинт недоступен</h1>
-        <p className="summary">
-          Для раздела нужны <code>GET /admin/users?role=student</code> и{" "}
-          <code>GET /admin/packages</code>.
-        </p>
-      </article>
-    );
-  }
-
-  if (loading) {
-    return (
-      <article className="card section-page">
-        <h1>Студенты</h1>
-        <p className="summary">Загрузка списка учеников...</p>
-      </article>
-    );
-  }
-
-  if (error) {
-    return (
-      <article className="card section-page">
-        <h1>Студенты</h1>
-        <p className="error-text">{error}</p>
-      </article>
-    );
-  }
-
   return (
     <section className="teachers-grid students-grid">
-      <article className="card students-card">
+      <article className="card students-card students-picker-card">
         <p className="eyebrow">Студенты</p>
-        <h1>Список учеников</h1>
+        <h1>Выбор ученика</h1>
+
         <div className="users-provision-form students-filter-form">
           <label>
             <span>Статус</span>
@@ -541,31 +593,35 @@ export function StudentsPage() {
           </label>
         </div>
 
-        <p className="summary">Найдено учеников: {filteredStudents.length}</p>
+        <div className="quick-filter-group" role="group" aria-label="Выбор ученика из списка">
+          <button
+            type="button"
+            className="quick-filter active"
+            onClick={() => setIsPickerOpen(true)}
+          >
+            Открыть список
+          </button>
+          <button
+            type="button"
+            className="quick-filter"
+            onClick={() => {
+              setSelectedStudentId(null);
+              setSelectedStudentProfile(null);
+            }}
+            disabled={!selectedStudentId}
+          >
+            Сбросить выбор
+          </button>
+        </div>
 
-        {students.length === 0 ? (
-          <p className="summary">Пока нет учеников в системе.</p>
-        ) : filteredStudents.length === 0 ? (
-          <p className="summary">По выбранным фильтрам ученики не найдены.</p>
-        ) : (
-          <div className="teacher-list students-list">
-            {filteredStudents.map((student) => (
-              <button
-                key={student.user_id}
-                type="button"
-                className={
-                  student.user_id === selectedStudentId ? "teacher-item active" : "teacher-item"
-                }
-                onClick={() => setSelectedStudentId(student.user_id)}
-              >
-                <strong>{student.full_name}</strong>
-                <span>{student.email}</span>
-                <span>{student.timezone}</span>
-                <span>{student.is_active ? "активен" : "отключён"}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <p className="summary">
+          Выбран: <strong>{selectedStudent?.full_name ?? selectedStudentId ?? "не выбран"}</strong>
+        </p>
+
+        {studentsUnavailable ? (
+          <p className="summary">`GET /admin/users?role=student` недоступен в текущем backend-контракте.</p>
+        ) : null}
+        {studentsError ? <p className="error-text">{studentsError}</p> : null}
       </article>
 
       <article className="card">
@@ -599,7 +655,7 @@ export function StudentsPage() {
             </p>
           </div>
         ) : (
-          <p className="summary">Выберите ученика для просмотра карточки.</p>
+          <p className="summary">Выберите ученика через кнопку "Открыть список".</p>
         )}
 
         <section className="teacher-schedule-block">
@@ -644,9 +700,7 @@ export function StudentsPage() {
                       <td>{pkg.lessons_left}</td>
                       <td>{pkg.lessons_reserved}</td>
                       <td>
-                        {pkg.price_amount
-                          ? `${pkg.price_amount} ${pkg.price_currency ?? ""}`
-                          : "-"}
+                        {pkg.price_amount ? `${pkg.price_amount} ${pkg.price_currency ?? ""}` : "-"}
                       </td>
                       <td>{formatDateTime(pkg.expires_at_utc)}</td>
                     </tr>
@@ -717,11 +771,7 @@ export function StudentsPage() {
                         {item.startTime} - {item.endTime}
                       </td>
                       <td>{item.count}</td>
-                      <td>
-                        {item.nextAtUtc
-                          ? formatDateTime(item.nextAtUtc, selectedStudent?.timezone)
-                          : "-"}
-                      </td>
+                      <td>{item.nextAtUtc ? formatDateTime(item.nextAtUtc, selectedStudent?.timezone) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -747,7 +797,7 @@ export function StudentsPage() {
                     return (
                       <tr key={booking.booking_id}>
                         <td>
-                          {formatWeekday(booking.slot_start_at_utc, selectedStudent?.timezone ?? "UTC")} {" "}
+                          {formatWeekday(booking.slot_start_at_utc, selectedStudent?.timezone ?? "UTC")}{" "}
                           {formatTime(booking.slot_start_at_utc, selectedStudent?.timezone ?? "UTC")} -{" "}
                           {formatTime(booking.slot_end_at_utc, selectedStudent?.timezone ?? "UTC")}
                         </td>
@@ -762,6 +812,64 @@ export function StudentsPage() {
           ) : null}
         </section>
       </article>
+
+      {isPickerOpen ? (
+        <div className="modal-backdrop">
+          <div className="modal-card students-picker-modal">
+            <h2>Список учеников</h2>
+
+            <label>
+              <span>Поиск (ФИО / почта / ID)</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="например, student@... или Иванов"
+              />
+            </label>
+
+            {studentsLoading ? <p className="summary">Загрузка списка...</p> : null}
+            {studentsError ? <p className="error-text">{studentsError}</p> : null}
+            {studentsUnavailable ? (
+              <p className="summary">`GET /admin/users?role=student` недоступен в текущем backend-контракте.</p>
+            ) : null}
+
+            {!studentsLoading && !studentsUnavailable ? (
+              filteredStudents.length ? (
+                <div className="teacher-list students-list students-picker-list">
+                  {filteredStudents.map((student) => (
+                    <button
+                      key={student.user_id}
+                      type="button"
+                      className={
+                        student.user_id === selectedStudentId ? "teacher-item active" : "teacher-item"
+                      }
+                      onClick={() => {
+                        setSelectedStudentId(student.user_id);
+                        setSelectedStudentProfile(student);
+                        setIsPickerOpen(false);
+                      }}
+                    >
+                      <strong>{student.full_name}</strong>
+                      <span>{student.email}</span>
+                      <span>{student.timezone}</span>
+                      <span>{student.is_active ? "активен" : "отключён"}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="summary">По выбранным фильтрам ученики не найдены.</p>
+              )
+            ) : null}
+
+            <div className="modal-actions">
+              <button type="button" onClick={() => setIsPickerOpen(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

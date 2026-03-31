@@ -285,6 +285,29 @@ button[disabled] {
   width: 1%;
 }
 
+.students-grid {
+  align-items: start;
+}
+
+.students-filter-form {
+  margin-bottom: 0.75rem;
+}
+
+.students-list {
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.students-time-table td:first-child {
+  text-transform: capitalize;
+}
+
+.students-upcoming-table td:first-child {
+  white-space: normal;
+  min-width: 220px;
+}
+
 .calendar-page {
   display: grid;
   gap: 1rem;
@@ -752,6 +775,11 @@ button[disabled] {
 
   .teacher-schedule-row {
     grid-template-columns: 1fr;
+  }
+
+  .students-list {
+    max-height: none;
+    padding-right: 0;
   }
 
   .kpi-range,

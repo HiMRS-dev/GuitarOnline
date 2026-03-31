@@ -513,11 +513,11 @@ export function StudentsPage() {
   }
 
   return (
-    <section className="teachers-grid">
+    <section className="teachers-grid students-grid">
       <article className="card">
         <p className="eyebrow">Студенты</p>
         <h1>Список учеников</h1>
-        <div className="users-provision-form">
+        <div className="users-provision-form students-filter-form">
           <label>
             <span>Статус</span>
             <select
@@ -548,7 +548,7 @@ export function StudentsPage() {
         ) : filteredStudents.length === 0 ? (
           <p className="summary">По выбранным фильтрам ученики не найдены.</p>
         ) : (
-          <div className="teacher-list">
+          <div className="teacher-list students-list">
             {filteredStudents.map((student) => (
               <button
                 key={student.user_id}
@@ -625,7 +625,7 @@ export function StudentsPage() {
 
           {packages.length ? (
             <div className="bookings-table-wrap">
-              <table className="bookings-table">
+              <table className="bookings-table students-packages-table">
                 <thead>
                   <tr>
                     <th>Пакет</th>
@@ -700,7 +700,7 @@ export function StudentsPage() {
             <p className="summary">`GET /admin/bookings` недоступен в текущем backend-контракте.</p>
           ) : preferredTimeSummaries.length ? (
             <div className="bookings-table-wrap">
-              <table className="bookings-table">
+              <table className="bookings-table students-time-table">
                 <thead>
                   <tr>
                     <th>День недели</th>
@@ -733,7 +733,7 @@ export function StudentsPage() {
 
           {upcomingBookings.length ? (
             <div className="bookings-table-wrap">
-              <table className="bookings-table">
+              <table className="bookings-table students-upcoming-table">
                 <thead>
                   <tr>
                     <th>Ближайшие занятия</th>

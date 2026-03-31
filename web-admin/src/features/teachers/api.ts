@@ -14,6 +14,9 @@ const TEACHER_SCHEDULE_CACHE_TTL_MS = 15_000;
 
 type TeachersFilterParams = {
   status?: "active" | "disabled";
+  q?: string;
+  limit?: number;
+  offset?: number;
 };
 
 type TeachersListCacheEntry = {
@@ -39,7 +42,11 @@ const teacherDetailCache = new Map<string, TeacherDetailCacheEntry>();
 const teacherScheduleCache = new Map<string, TeacherScheduleCacheEntry>();
 
 function buildTeachersCacheKey(filters: TeachersFilterParams): string {
-  return filters.status ?? "all";
+  const status = filters.status ?? "all";
+  const q = (filters.q ?? "").trim().toLowerCase();
+  const limit = String(filters.limit ?? 50);
+  const offset = String(filters.offset ?? 0);
+  return `${status}|${q}|${limit}|${offset}`;
 }
 
 export function invalidateTeachersCache(): void {
@@ -63,11 +70,14 @@ export async function listTeachers(
   }
 
   const params = new URLSearchParams({
-    limit: "50",
-    offset: "0"
+    limit: String(filters.limit ?? 50),
+    offset: String(filters.offset ?? 0)
   });
   if (filters.status) {
     params.set("status", filters.status);
+  }
+  if (filters.q?.trim()) {
+    params.set("q", filters.q.trim());
   }
 
   const request = apiClient

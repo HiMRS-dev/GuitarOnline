@@ -1,4 +1,5 @@
 import { apiClient } from "../../shared/api/client";
+import { loadAccessSession } from "./storage";
 
 import type { CurrentUser, LoginPayload, TokenPair } from "./types";
 
@@ -54,8 +55,13 @@ export async function getCurrentUser(): Promise<CurrentUser> {
 
 export async function logout(): Promise<void> {
   invalidateCurrentUserCache();
+  const session = loadAccessSession();
   await apiClient.request<void>("/identity/auth/logout", {
     method: "POST",
+    body:
+      session?.refresh_token && session.refresh_token.trim()
+        ? { refresh_token: session.refresh_token }
+        : undefined,
     auth: false,
     retryOnUnauthorized: false
   });

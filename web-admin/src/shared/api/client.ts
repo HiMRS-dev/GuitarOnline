@@ -119,8 +119,17 @@ export class ApiClient {
   }
 
   private async refreshAccessToken(): Promise<boolean> {
+    const session = loadAccessSession();
     const response = await fetch(`${API_BASE_URL}/identity/auth/refresh`, {
       method: "POST",
+      headers:
+        session?.refresh_token && session.refresh_token.trim()
+          ? { "Content-Type": "application/json" }
+          : undefined,
+      body:
+        session?.refresh_token && session.refresh_token.trim()
+          ? JSON.stringify({ refresh_token: session.refresh_token })
+          : undefined,
       credentials: "include"
     });
     if (!response.ok) {

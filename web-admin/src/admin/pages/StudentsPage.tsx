@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { listAdminBookings } from "../../features/bookings/api";
+import type { AdminBooking } from "../../features/bookings/types";
 import { listAdminPackages } from "../../features/packages/api";
 import type { AdminPackage } from "../../features/packages/types";
+import { listTeachers } from "../../features/teachers/api";
+import type { TeacherListItem } from "../../features/teachers/types";
 import { ApiClientError, apiClient } from "../../shared/api/client";
 import type { PageResponse } from "../../shared/api/types";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 const ADMIN_STUDENT_FILTER_STORAGE_KEY = "go_admin_students_selected_id";
+const ACTIVE_BOOKING_STATUSES = new Set<AdminBooking["status"]>(["hold", "confirmed"]);
 
 type AdminStudentListItem = {
   user_id: string;
@@ -26,14 +31,53 @@ type StudentPackageSummary = {
   lessonsReserved: number;
 };
 
-function formatDateTime(value: string): string {
+type StudentTeacherSummary = {
+  teacherId: string;
+  bookingsTotal: number;
+  lastLessonUtc: string | null;
+};
+
+type StudentPreferredTimeSummary = {
+  weekday: string;
+  startTime: string;
+  endTime: string;
+  count: number;
+  nextAtUtc: string | null;
+};
+
+function formatDateTime(value: string, timezone?: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
     return value;
   }
   return new Intl.DateTimeFormat("ru-RU", {
     dateStyle: "medium",
-    timeStyle: "short"
+    timeStyle: "short",
+    ...(timezone ? { timeZone: timezone } : {})
+  }).format(parsed);
+}
+
+function formatTime(value: string, timezone: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: timezone
+  }).format(parsed);
+}
+
+function formatWeekday(value: string, timezone: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "-";
+  }
+  return new Intl.DateTimeFormat("ru-RU", {
+    weekday: "long",
+    timeZone: timezone
   }).format(parsed);
 }
 
@@ -63,12 +107,20 @@ export function StudentsPage() {
 
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [teachersLoading, setTeachersLoading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [bookingsError, setBookingsError] = useState<string | null>(null);
+  const [teachersError, setTeachersError] = useState<string | null>(null);
 
   const [packages, setPackages] = useState<AdminPackage[]>([]);
+  const [bookings, setBookings] = useState<AdminBooking[]>([]);
+  const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
+
   const [unavailable, setUnavailable] = useState(false);
+  const [bookingsUnavailable, setBookingsUnavailable] = useState(false);
+  const [teachersUnavailable, setTeachersUnavailable] = useState(false);
 
   useEffect(() => {
     selectedStudentRef.current = selectedStudentId;
@@ -130,32 +182,107 @@ export function StudentsPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedStudentId || unavailable) {
-      setPackages([]);
-      setDetailError(null);
-      return;
-    }
-
     let active = true;
-    setDetailLoading(true);
-    setDetailError(null);
+    setTeachersLoading(true);
+    setTeachersError(null);
+    setTeachersUnavailable(false);
 
-    listAdminPackages({ studentId: selectedStudentId })
+    listTeachers()
       .then((page) => {
         if (active) {
-          setPackages(page.items);
+          setTeachers(page.items);
         }
       })
       .catch((requestError) => {
         if (!active) {
           return;
         }
-        setPackages([]);
-        setDetailError(
+        if (
+          requestError instanceof ApiClientError &&
+          UNAVAILABLE_STATUSES.has(requestError.status)
+        ) {
+          setTeachersUnavailable(true);
+          setTeachers([]);
+          return;
+        }
+        setTeachersError(
           requestError instanceof Error
             ? requestError.message
-            : "Не удалось загрузить пакеты ученика"
+            : "Не удалось загрузить список преподавателей"
         );
+      })
+      .finally(() => {
+        if (active) {
+          setTeachersLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedStudentId || unavailable) {
+      setPackages([]);
+      setBookings([]);
+      setDetailError(null);
+      setBookingsError(null);
+      setBookingsUnavailable(false);
+      return;
+    }
+
+    let active = true;
+    setDetailLoading(true);
+    setDetailError(null);
+    setBookingsError(null);
+    setBookingsUnavailable(false);
+
+    Promise.allSettled([
+      listAdminPackages({ studentId: selectedStudentId }),
+      listAdminBookings({
+        studentId: selectedStudentId,
+        limit: 300,
+        offset: 0
+      })
+    ])
+      .then((results) => {
+        if (!active) {
+          return;
+        }
+
+        const packagesResult = results[0];
+        if (packagesResult.status === "fulfilled") {
+          setPackages(packagesResult.value.items);
+        } else {
+          setPackages([]);
+          const packageError = packagesResult.reason;
+          setDetailError(
+            packageError instanceof Error
+              ? packageError.message
+              : "Не удалось загрузить пакеты ученика"
+          );
+        }
+
+        const bookingsResult = results[1];
+        if (bookingsResult.status === "fulfilled") {
+          setBookings(bookingsResult.value.items);
+        } else {
+          setBookings([]);
+          const bookingError = bookingsResult.reason;
+          if (
+            bookingError instanceof ApiClientError &&
+            UNAVAILABLE_STATUSES.has(bookingError.status)
+          ) {
+            setBookingsUnavailable(true);
+          } else {
+            setBookingsError(
+              bookingError instanceof Error
+                ? bookingError.message
+                : "Не удалось загрузить бронирования ученика"
+            );
+          }
+        }
       })
       .finally(() => {
         if (active) {
@@ -173,6 +300,126 @@ export function StudentsPage() {
     [selectedStudentId, students]
   );
   const packageSummary = useMemo(() => summarizePackages(packages), [packages]);
+
+  const teacherById = useMemo(
+    () => new Map(teachers.map((teacher) => [teacher.teacher_id, teacher])),
+    [teachers]
+  );
+
+  const teacherSummaries = useMemo<StudentTeacherSummary[]>(() => {
+    const byTeacher = new Map<string, StudentTeacherSummary>();
+
+    for (const booking of bookings) {
+      if (!ACTIVE_BOOKING_STATUSES.has(booking.status)) {
+        continue;
+      }
+
+      const existing = byTeacher.get(booking.teacher_id) ?? {
+        teacherId: booking.teacher_id,
+        bookingsTotal: 0,
+        lastLessonUtc: null
+      };
+      existing.bookingsTotal += 1;
+
+      if (
+        existing.lastLessonUtc === null ||
+        new Date(booking.slot_start_at_utc).getTime() > new Date(existing.lastLessonUtc).getTime()
+      ) {
+        existing.lastLessonUtc = booking.slot_start_at_utc;
+      }
+
+      byTeacher.set(booking.teacher_id, existing);
+    }
+
+    return [...byTeacher.values()].sort((left, right) => {
+      if (left.bookingsTotal !== right.bookingsTotal) {
+        return right.bookingsTotal - left.bookingsTotal;
+      }
+      if (!left.lastLessonUtc) {
+        return 1;
+      }
+      if (!right.lastLessonUtc) {
+        return -1;
+      }
+      return new Date(right.lastLessonUtc).getTime() - new Date(left.lastLessonUtc).getTime();
+    });
+  }, [bookings]);
+
+  const preferredTimeSummaries = useMemo<StudentPreferredTimeSummary[]>(() => {
+    const timezone = selectedStudent?.timezone || "UTC";
+    const byTime = new Map<string, StudentPreferredTimeSummary>();
+    const now = Date.now();
+
+    for (const booking of bookings) {
+      if (!ACTIVE_BOOKING_STATUSES.has(booking.status)) {
+        continue;
+      }
+
+      const start = new Date(booking.slot_start_at_utc);
+      const end = new Date(booking.slot_end_at_utc);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        continue;
+      }
+
+      const weekday = formatWeekday(booking.slot_start_at_utc, timezone);
+      const startTime = formatTime(booking.slot_start_at_utc, timezone);
+      const endTime = formatTime(booking.slot_end_at_utc, timezone);
+      const key = `${weekday}-${startTime}-${endTime}`;
+
+      const existing = byTime.get(key) ?? {
+        weekday,
+        startTime,
+        endTime,
+        count: 0,
+        nextAtUtc: null
+      };
+      existing.count += 1;
+
+      if (start.getTime() >= now) {
+        if (
+          existing.nextAtUtc === null ||
+          start.getTime() < new Date(existing.nextAtUtc).getTime()
+        ) {
+          existing.nextAtUtc = booking.slot_start_at_utc;
+        }
+      }
+
+      byTime.set(key, existing);
+    }
+
+    return [...byTime.values()]
+      .sort((left, right) => {
+        if (left.count !== right.count) {
+          return right.count - left.count;
+        }
+        if (!left.nextAtUtc && !right.nextAtUtc) {
+          return 0;
+        }
+        if (!left.nextAtUtc) {
+          return 1;
+        }
+        if (!right.nextAtUtc) {
+          return -1;
+        }
+        return new Date(left.nextAtUtc).getTime() - new Date(right.nextAtUtc).getTime();
+      })
+      .slice(0, 6);
+  }, [bookings, selectedStudent?.timezone]);
+
+  const upcomingBookings = useMemo(() => {
+    const now = Date.now();
+    return bookings
+      .filter(
+        (booking) =>
+          ACTIVE_BOOKING_STATUSES.has(booking.status) &&
+          new Date(booking.slot_start_at_utc).getTime() >= now
+      )
+      .sort(
+        (left, right) =>
+          new Date(left.slot_start_at_utc).getTime() - new Date(right.slot_start_at_utc).getTime()
+      )
+      .slice(0, 5);
+  }, [bookings]);
 
   if (unavailable) {
     return (
@@ -239,6 +486,8 @@ export function StudentsPage() {
 
         {detailLoading ? <p className="summary">Загрузка карточки ученика...</p> : null}
         {detailError ? <p className="error-text">{detailError}</p> : null}
+        {bookingsError ? <p className="error-text">{bookingsError}</p> : null}
+        {teachersError ? <p className="error-text">{teachersError}</p> : null}
 
         {selectedStudent ? (
           <div className="teacher-detail">
@@ -285,6 +534,109 @@ export function StudentsPage() {
               <p>{packageSummary.lessonsReserved}</p>
             </div>
           </div>
+        </section>
+
+        <section className="teacher-schedule-block">
+          <h2>Преподаватели ученика</h2>
+          {teachersLoading ? <p className="summary">Загрузка преподавателей...</p> : null}
+          {teachersUnavailable ? (
+            <p className="summary">`GET /admin/teachers` недоступен в текущем backend-контракте.</p>
+          ) : null}
+          {!teachersLoading && !teachersUnavailable ? (
+            teacherSummaries.length ? (
+              <div className="users-teachers-list">
+                {teacherSummaries.map((item) => {
+                  const teacher = teacherById.get(item.teacherId);
+                  return (
+                    <article key={item.teacherId} className="users-teacher-item">
+                      <p>
+                        <strong>{teacher?.display_name ?? item.teacherId}</strong>
+                      </p>
+                      <p>{teacher?.full_name ?? "Данные профиля недоступны"}</p>
+                      <p>{teacher?.email ?? "-"}</p>
+                      <p>Уроков с учеником: {item.bookingsTotal}</p>
+                      <p>
+                        Последний слот: {item.lastLessonUtc ? formatDateTime(item.lastLessonUtc) : "-"}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="summary">У ученика пока нет активных бронирований с преподавателями.</p>
+            )
+          ) : null}
+        </section>
+
+        <section className="teacher-schedule-block">
+          <h2>Выбранное время для занятий</h2>
+          <p className="summary">
+            Локальная зона ученика: <code>{selectedStudent?.timezone ?? "UTC"}</code>
+          </p>
+          {bookingsUnavailable ? (
+            <p className="summary">`GET /admin/bookings` недоступен в текущем backend-контракте.</p>
+          ) : preferredTimeSummaries.length ? (
+            <div className="bookings-table-wrap">
+              <table className="bookings-table">
+                <thead>
+                  <tr>
+                    <th>День недели</th>
+                    <th>Время</th>
+                    <th>Выборов</th>
+                    <th>Ближайшее занятие</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preferredTimeSummaries.map((item) => (
+                    <tr key={`${item.weekday}-${item.startTime}-${item.endTime}`}>
+                      <td>{item.weekday}</td>
+                      <td>
+                        {item.startTime} - {item.endTime}
+                      </td>
+                      <td>{item.count}</td>
+                      <td>
+                        {item.nextAtUtc
+                          ? formatDateTime(item.nextAtUtc, selectedStudent?.timezone)
+                          : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="summary">Пока нет подтверждённых или удерживаемых бронирований.</p>
+          )}
+
+          {upcomingBookings.length ? (
+            <div className="bookings-table-wrap">
+              <table className="bookings-table">
+                <thead>
+                  <tr>
+                    <th>Ближайшие занятия</th>
+                    <th>Преподаватель</th>
+                    <th>Статус</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcomingBookings.map((booking) => {
+                    const teacher = teacherById.get(booking.teacher_id);
+                    return (
+                      <tr key={booking.booking_id}>
+                        <td>
+                          {formatWeekday(booking.slot_start_at_utc, selectedStudent?.timezone ?? "UTC")} {" "}
+                          {formatTime(booking.slot_start_at_utc, selectedStudent?.timezone ?? "UTC")} -{" "}
+                          {formatTime(booking.slot_end_at_utc, selectedStudent?.timezone ?? "UTC")}
+                        </td>
+                        <td>{teacher?.display_name ?? booking.teacher_id}</td>
+                        <td>{booking.status}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </section>
       </article>
     </section>

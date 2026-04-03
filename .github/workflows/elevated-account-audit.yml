@@ -175,7 +175,7 @@ jobs:
           print(f"App env: {report['app_env']}")
           print(f"Total elevated accounts: {summary['total_elevated_accounts']}")
           print(f"Teachers/Admins: {summary['teachers_total']} / {summary['admins_total']}")
-          print(f"Provisioned via admin flow: {summary['provisioned_via_admin_flow']}")
+          print(f"Assigned via role change: {summary['assigned_via_admin_role_change']}")
           print(f"Legacy or unknown source: {summary['legacy_or_unknown_source']}")
           PY
 

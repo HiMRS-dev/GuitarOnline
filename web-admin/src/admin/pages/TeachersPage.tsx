@@ -130,7 +130,7 @@ export function TeachersPage() {
     try {
       const items: TeacherListItem[] = [];
       let offset = 0;
-      const limit = 200;
+      const limit = 100;
       while (true) {
         const page = await listTeachers(
           statusFilter === "all"

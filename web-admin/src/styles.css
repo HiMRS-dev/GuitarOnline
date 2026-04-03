@@ -297,6 +297,50 @@ button[disabled] {
   gap: 0.3rem;
 }
 
+.picker-search-suggestions {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.picker-suggestion-list {
+  display: grid;
+  gap: 0.4rem;
+  border: 1px solid #d8e2ec;
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+  background: #f9fbff;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.picker-suggestion-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.6rem;
+  border: 1px solid #dbe5ef;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 0.45rem;
+}
+
+.picker-suggestion-meta {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  color: #1d2f40;
+}
+
+.picker-suggestion-meta span {
+  color: #496177;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.picker-suggestion-item button {
+  white-space: nowrap;
+}
+
 .teacher-picker-list,
 .students-picker-list {
   max-height: min(52vh, 560px);
@@ -838,6 +882,15 @@ button[disabled] {
   .students-picker-list {
     max-height: 60vh;
     padding-right: 0;
+  }
+
+  .picker-suggestion-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .picker-suggestion-item button {
+    width: 100%;
   }
 
   .students-metrics-grid {

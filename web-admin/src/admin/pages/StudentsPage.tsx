@@ -317,6 +317,23 @@ export function StudentsPage() {
   }, [isPickerOpen, loadStudentsForPicker]);
 
   useEffect(() => {
+    if (isPickerOpen || !query.trim()) {
+      return;
+    }
+    if (students.length > 0 || studentsLoading || studentsUnavailable) {
+      return;
+    }
+    void loadStudentsForPicker();
+  }, [
+    isPickerOpen,
+    loadStudentsForPicker,
+    query,
+    students.length,
+    studentsLoading,
+    studentsUnavailable
+  ]);
+
+  useEffect(() => {
     if (!selectedStudentId) {
       setPackages([]);
       setBookings([]);
@@ -442,6 +459,13 @@ export function StudentsPage() {
       );
     });
   }, [activeFilter, query, students]);
+
+  const studentSuggestions = useMemo(() => {
+    if (isPickerOpen || !query.trim()) {
+      return [];
+    }
+    return filteredStudents.slice(0, 6);
+  }, [filteredStudents, isPickerOpen, query]);
 
   const teacherById = useMemo(
     () => new Map(teachers.map((teacher) => [teacher.teacher_id, teacher])),
@@ -591,6 +615,40 @@ export function StudentsPage() {
               placeholder="например, student@... или Иванов"
             />
           </label>
+          {query.trim() ? (
+            <div className="picker-search-suggestions">
+              {studentsLoading ? <p className="summary">Загружаем подсказки...</p> : null}
+              {!studentsLoading && !studentsUnavailable && studentSuggestions.length ? (
+                <div className="picker-suggestion-list">
+                  {studentSuggestions.map((student) => (
+                    <div key={student.user_id} className="picker-suggestion-item">
+                      <div className="picker-suggestion-meta">
+                        <strong>{student.full_name}</strong>
+                        <span>{student.email}</span>
+                        <span>{student.timezone}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStudentId(student.user_id);
+                          setSelectedStudentProfile(student);
+                          setQuery("");
+                        }}
+                      >
+                        Выбрать
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {!studentsLoading &&
+              !studentsUnavailable &&
+              !studentsError &&
+              studentSuggestions.length === 0 ? (
+                <p className="summary">Совпадений не найдено.</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="quick-filter-group" role="group" aria-label="Выбор ученика из списка">

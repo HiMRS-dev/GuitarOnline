@@ -176,11 +176,32 @@ export function TeachersPage() {
   }, [statusFilter]);
 
   useEffect(() => {
+    setPickerTeachers([]);
+  }, [statusFilter]);
+
+  useEffect(() => {
     if (!isPickerOpen) {
       return;
     }
     void loadTeachersForPicker();
   }, [isPickerOpen, loadTeachersForPicker]);
+
+  useEffect(() => {
+    if (isPickerOpen || !teacherSearch.trim()) {
+      return;
+    }
+    if (pickerTeachers.length > 0 || pickerLoading || pickerUnavailable) {
+      return;
+    }
+    void loadTeachersForPicker();
+  }, [
+    isPickerOpen,
+    loadTeachersForPicker,
+    pickerLoading,
+    pickerTeachers.length,
+    pickerUnavailable,
+    teacherSearch
+  ]);
 
   useEffect(() => {
     if (!selectedTeacherId) {
@@ -285,6 +306,13 @@ export function TeachersPage() {
       );
     });
   }, [pickerTeachers, teacherSearch]);
+
+  const teacherSuggestions = useMemo(() => {
+    if (isPickerOpen || !teacherSearch.trim()) {
+      return [];
+    }
+    return filteredPickerTeachers.slice(0, 6);
+  }, [filteredPickerTeachers, isPickerOpen, teacherSearch]);
 
   const selectedTeacherFromPicker = useMemo(
     () => pickerTeachers.find((item) => item.teacher_id === selectedTeacherId) ?? null,
@@ -463,6 +491,39 @@ export function TeachersPage() {
             placeholder="например, jazz или teacher@..."
           />
         </label>
+        {teacherSearch.trim() ? (
+          <div className="picker-search-suggestions">
+            {pickerLoading ? <p className="summary">Загружаем подсказки...</p> : null}
+            {!pickerLoading && !pickerUnavailable && teacherSuggestions.length ? (
+              <div className="picker-suggestion-list">
+                {teacherSuggestions.map((teacher) => (
+                  <div key={teacher.teacher_id} className="picker-suggestion-item">
+                    <div className="picker-suggestion-meta">
+                      <strong>{teacher.display_name}</strong>
+                      <span>{teacher.full_name}</span>
+                      <span>{teacher.email}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTeacherId(teacher.teacher_id);
+                        setTeacherSearch("");
+                      }}
+                    >
+                      Выбрать
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {!pickerLoading &&
+            !pickerUnavailable &&
+            !pickerError &&
+            teacherSuggestions.length === 0 ? (
+              <p className="summary">Совпадений не найдено.</p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div
           className="quick-filter-group"

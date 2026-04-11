@@ -58,7 +58,6 @@ jobs:
       DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
       PROD_ENV_FILE_B64: ${{ secrets.PROD_ENV_FILE_B64 }}
-      AUTO_DEPLOY_ENABLED: ${{ secrets.AUTO_DEPLOY_ENABLED }}
       OPERATION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.operation || 'deploy_live' }}
       REF_NAME: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.sha }}
       PROFILE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.profile || 'standard' }}
@@ -76,13 +75,8 @@ jobs:
         id: auto_deploy_guard
         run: |
           set -euo pipefail
-          if [ "${TRIGGER_SOURCE}" = "push" ] && [ "${AUTO_DEPLOY_ENABLED:-}" != "true" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Auto deploy skipped: AUTO_DEPLOY_ENABLED is not true."
-            exit 0
-          fi
           echo "enabled=true" >> "$GITHUB_OUTPUT"
-          echo "Auto deploy guard passed."
+          echo "Auto deploy is enabled for this run."
 
       - name: Print deployment context
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}

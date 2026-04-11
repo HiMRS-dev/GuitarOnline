@@ -181,33 +181,53 @@ export function PackagesPage() {
     let cancelled = false;
 
     async function loadMissingStudentNames() {
-      const resolvedNames = await Promise.all(
-        missingStudentIds.map(async (studentId) => {
-          try {
-            const params = new URLSearchParams({
-              role: "student",
-              limit: "20",
-              offset: "0",
-              q: studentId
-            });
-            const page = await apiClient.request<PageResponse<AdminStudentLookupItem>>(
-              `/admin/users?${params.toString()}`
-            );
-            const exactStudent = page.items.find((student) => student.user_id === studentId);
-            return [studentId, exactStudent?.full_name ?? null] as const;
-          } catch {
-            return [studentId, null] as const;
-          }
-        })
-      );
+      const unresolved = new Set(missingStudentIds);
+      const resolvedEntries: Array<readonly [string, string | null]> = [];
+      let offset = 0;
+      const limit = 100;
 
-      if (cancelled) {
+      try {
+        while (!cancelled && unresolved.size > 0) {
+          const params = new URLSearchParams({
+            role: "student",
+            limit: String(limit),
+            offset: String(offset)
+          });
+          const page = await apiClient.request<PageResponse<AdminStudentLookupItem>>(
+            `/admin/users?${params.toString()}`
+          );
+
+          for (const student of page.items) {
+            if (!unresolved.has(student.user_id)) {
+              continue;
+            }
+            resolvedEntries.push([student.user_id, student.full_name] as const);
+            unresolved.delete(student.user_id);
+          }
+
+          if (!page.items.length) {
+            break;
+          }
+          offset += page.items.length;
+          if (offset >= page.total) {
+            break;
+          }
+        }
+      } catch {
+        // Keep unresolved IDs as null to avoid endless retries on temporary API errors.
+      }
+
+      for (const missingId of unresolved) {
+        resolvedEntries.push([missingId, null] as const);
+      }
+
+      if (cancelled || !resolvedEntries.length) {
         return;
       }
 
       setStudentNamesById((current) => {
         const next = { ...current };
-        for (const [studentId, fullName] of resolvedNames) {
+        for (const [studentId, fullName] of resolvedEntries) {
           next[studentId] = fullName;
         }
         return next;

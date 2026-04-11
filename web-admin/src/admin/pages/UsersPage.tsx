@@ -527,17 +527,17 @@ export function UsersPage() {
         <h2>Список пользователей</h2>
         <div className="users-provision-form">
           <label className="teachers-picker-search">
-            <span>Search (email / full name / username)</span>
+            <span>Поиск (почта / ФИО / имя)</span>
             <input
               type="search"
               value={userQuery}
               onChange={(event) => setUserQuery(event.target.value)}
-              placeholder="for example, teacher@... or Ivanov"
+              placeholder="например, teacher@... или Иванов"
             />
           </label>
           {userQuery.trim() ? (
             <div className="picker-search-suggestions">
-              {loading ? <p className="summary">Loading suggestions...</p> : null}
+              {loading ? <p className="summary">Загружаем подсказки...</p> : null}
               {!loading && !usersUnavailable && userSuggestions.length ? (
                 <div className="picker-suggestion-list">
                   {userSuggestions.map((user) => (
@@ -554,19 +554,19 @@ export function UsersPage() {
                           setUserQuery(user.email);
                         }}
                       >
-                        Select
+                        Выбрать
                       </button>
                     </div>
                   ))}
                 </div>
               ) : null}
               {!loading && !usersUnavailable && !usersError && userSuggestions.length === 0 ? (
-                <p className="summary">No matches found.</p>
+                <p className="summary">Совпадений не найдено.</p>
               ) : null}
             </div>
           ) : null}
 
-          <div className="quick-filter-group" role="group" aria-label="User role filters">
+          <div className="quick-filter-group" role="group" aria-label="Фильтры ролей пользователей">
             {ROLE_FILTER_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -579,7 +579,7 @@ export function UsersPage() {
             ))}
           </div>
 
-          <div className="quick-filter-group" role="group" aria-label="User status filters">
+          <div className="quick-filter-group" role="group" aria-label="Фильтры статуса пользователей">
             {ACTIVE_FILTER_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -592,7 +592,7 @@ export function UsersPage() {
             ))}
           </div>
 
-          <div className="quick-filter-group" role="group" aria-label="User selection actions">
+          <div className="quick-filter-group" role="group" aria-label="Выбор пользователя">
             <button
               type="button"
               className="quick-filter"
@@ -603,13 +603,13 @@ export function UsersPage() {
                 setUserQuery("");
               }}
             >
-              Clear selection
+              Сбросить выбор
             </button>
           </div>
         </div>
 
         <p className="summary">
-          Selected: <strong>{selectedUser?.full_name ?? selectedUser?.email ?? "not selected"}</strong>
+          Выбран: <strong>{selectedUser?.full_name ?? selectedUser?.email ?? "не выбран"}</strong>
         </p>
 
         <p className="summary">Найдено пользователей: {usersTotal}</p>

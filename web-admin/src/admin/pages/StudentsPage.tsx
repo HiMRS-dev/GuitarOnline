@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { listAdminBookings } from "../../features/bookings/api";
 import type { AdminBooking } from "../../features/bookings/types";
-import { listAdminPackages } from "../../features/packages/api";
+import { cancelAdminPackage, listAdminPackages } from "../../features/packages/api";
 import type { AdminPackage } from "../../features/packages/types";
 import { listTeachers } from "../../features/teachers/api";
 import type { TeacherListItem } from "../../features/teachers/types";
@@ -226,6 +226,9 @@ export function StudentsPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [bookingsError, setBookingsError] = useState<string | null>(null);
   const [teachersError, setTeachersError] = useState<string | null>(null);
+  const [packagesActionError, setPackagesActionError] = useState<string | null>(null);
+  const [packagesActionSuccess, setPackagesActionSuccess] = useState<string | null>(null);
+  const [cancelPendingPackageId, setCancelPendingPackageId] = useState<string | null>(null);
 
   const [packages, setPackages] = useState<AdminPackage[]>([]);
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
@@ -368,6 +371,9 @@ export function StudentsPage() {
       setDetailError(null);
       setBookingsError(null);
       setBookingsUnavailable(false);
+      setPackagesActionError(null);
+      setPackagesActionSuccess(null);
+      setCancelPendingPackageId(null);
       return;
     }
 
@@ -376,6 +382,9 @@ export function StudentsPage() {
     setDetailError(null);
     setBookingsError(null);
     setBookingsUnavailable(false);
+    setPackagesActionError(null);
+    setPackagesActionSuccess(null);
+    setCancelPendingPackageId(null);
 
     Promise.allSettled([
       listAdminPackages({ studentId: selectedStudentId }),
@@ -392,7 +401,7 @@ export function StudentsPage() {
 
         const packagesResult = results[0];
         if (packagesResult.status === "fulfilled") {
-          setPackages(packagesResult.value.items);
+          setPackages(packagesResult.value.items.filter((pkg) => pkg.status !== "canceled"));
         } else {
           setPackages([]);
           const packageError = packagesResult.reason;
@@ -461,6 +470,34 @@ export function StudentsPage() {
     }
     return null;
   }, [selectedStudentId, selectedStudentProfile, students]);
+
+  async function handleCancelStudentPackage(pkg: AdminPackage) {
+    if (pkg.status === "canceled") {
+      return;
+    }
+
+    const shouldCancel = window.confirm(
+      `Удалить пакет ${pkg.package_id.slice(0, 8)}? Пакет будет переведен в статус "отменен".`
+    );
+    if (!shouldCancel) {
+      return;
+    }
+
+    setPackagesActionError(null);
+    setPackagesActionSuccess(null);
+    setCancelPendingPackageId(pkg.package_id);
+    try {
+      const canceledPackage = await cancelAdminPackage(pkg.package_id);
+      setPackagesActionSuccess(`Пакет удален: ${canceledPackage.package_id}`);
+      setPackages((current) => current.filter((item) => item.package_id !== pkg.package_id));
+    } catch (requestError) {
+      setPackagesActionError(
+        requestError instanceof Error ? requestError.message : "Не удалось удалить пакет"
+      );
+    } finally {
+      setCancelPendingPackageId(null);
+    }
+  }
 
   const packageSummary = useMemo(() => summarizePackages(packages), [packages]);
 
@@ -716,6 +753,8 @@ export function StudentsPage() {
         {detailError ? <p className="error-text">{detailError}</p> : null}
         {bookingsError ? <p className="error-text">{bookingsError}</p> : null}
         {teachersError ? <p className="error-text">{teachersError}</p> : null}
+        {packagesActionError ? <p className="error-text">{packagesActionError}</p> : null}
+        {packagesActionSuccess ? <p className="success-text">{packagesActionSuccess}</p> : null}
 
         {selectedStudent ? (
           <div className="teacher-detail students-detail">
@@ -768,6 +807,7 @@ export function StudentsPage() {
               <table className="bookings-table students-packages-table">
                 <thead>
                   <tr>
+                    <th>Действие</th>
                     <th>Пакет</th>
                     <th>Статус</th>
                     <th>Осталось</th>
@@ -777,18 +817,40 @@ export function StudentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {packages.map((pkg) => (
-                    <tr key={pkg.package_id}>
-                      <td>{pkg.package_id.slice(0, 8)}</td>
-                      <td>{formatPackageStatus(pkg.status)}</td>
-                      <td>{pkg.lessons_left}</td>
-                      <td>{pkg.lessons_reserved}</td>
-                      <td>
-                        {pkg.price_amount ? `${pkg.price_amount} ${pkg.price_currency ?? ""}` : "-"}
-                      </td>
-                      <td>{formatDateTime(pkg.expires_at_utc)}</td>
-                    </tr>
-                  ))}
+                  {packages.map((pkg) => {
+                    const isPending = cancelPendingPackageId === pkg.package_id;
+                    const isCanceled = pkg.status === "canceled";
+                    const hasReservedLessons = pkg.lessons_reserved > 0;
+                    const cancelDisabled = isPending || isCanceled || hasReservedLessons;
+
+                    return (
+                      <tr key={pkg.package_id}>
+                        <td>
+                          <button
+                            type="button"
+                            className="quick-filter"
+                            onClick={() => void handleCancelStudentPackage(pkg)}
+                            disabled={cancelDisabled}
+                            title={
+                              hasReservedLessons
+                                ? "Нельзя удалить пакет с зарезервированными уроками."
+                                : undefined
+                            }
+                          >
+                            {isPending ? "Удаляем..." : isCanceled ? "Удален" : "Удалить"}
+                          </button>
+                        </td>
+                        <td>{pkg.package_id.slice(0, 8)}</td>
+                        <td>{formatPackageStatus(pkg.status)}</td>
+                        <td>{pkg.lessons_left}</td>
+                        <td>{pkg.lessons_reserved}</td>
+                        <td>
+                          {pkg.price_amount ? `${pkg.price_amount} ${pkg.price_currency ?? ""}` : "-"}
+                        </td>
+                        <td>{formatDateTime(pkg.expires_at_utc)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

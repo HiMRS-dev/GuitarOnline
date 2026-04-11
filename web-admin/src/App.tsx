@@ -250,7 +250,7 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
   }, [onInvalidSession, tokens?.access_token]);
 
   if (state === "denied") {
-    return <Navigate to="/admin/login" replace />;
+    return <HardRedirect to="/admin/login" />;
   }
   if (state === "pending") {
     return (
@@ -264,4 +264,23 @@ function ProtectedAdminRoute({ tokens, onInvalidSession, children }: ProtectedAd
   }
 
   return <CurrentUserProvider user={currentUser}>{children}</CurrentUserProvider>;
+}
+
+type HardRedirectProps = {
+  to: string;
+};
+
+function HardRedirect({ to }: HardRedirectProps) {
+  useEffect(() => {
+    window.location.assign(to);
+  }, [to]);
+
+  return (
+    <main className="app-shell">
+      <section className="card">
+        <h2>Перенаправление...</h2>
+        <p className="summary">Открываем общую страницу входа и регистрации.</p>
+      </section>
+    </main>
+  );
 }

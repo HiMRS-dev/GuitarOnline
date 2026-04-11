@@ -803,6 +803,16 @@ async def admin_login_redirect() -> RedirectResponse:
     )
 
 
+@app.get("/admin/login", include_in_schema=False)
+@app.get("/admin/login/", include_in_schema=False)
+async def unified_auth_redirect_for_admin_login() -> RedirectResponse:
+    """Redirect admin login route to shared portal auth page."""
+    return RedirectResponse(
+        url="/portal?auth=login&next=/admin/kpi",
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
+
+
 @app.get("/admin/{path:path}", include_in_schema=False)
 async def admin_ui_page(path: str) -> FileResponse:
     """Serve business admin SPA shell."""

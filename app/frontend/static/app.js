@@ -1,4 +1,5 @@
 const API_PREFIX = "/api/v1";
+const ADMIN_DASHBOARD_PATH = "/admin/kpi";
 
 const state = {
   accessToken: null,
@@ -150,6 +151,17 @@ function getAuthModeFromQuery() {
     return mode;
   }
   return null;
+}
+
+function getSafePostLoginRedirectPath() {
+  const path = new URLSearchParams(window.location.search).get("next");
+  if (!path) {
+    return null;
+  }
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    return null;
+  }
+  return path;
 }
 
 function applyAuthMode(mode) {
@@ -304,8 +316,10 @@ async function handleLogin(event) {
     });
     persistTokens(tokenPair);
     form.password.value = "";
-    await bootstrapAuthenticatedSession();
-    setGlobalStatus("Вход выполнен. Данные обновлены.", "success");
+    const redirectedToAdmin = await bootstrapAuthenticatedSession();
+    if (!redirectedToAdmin) {
+      setGlobalStatus("Вход выполнен. Данные обновлены.", "success");
+    }
   } catch (error) {
     setGlobalStatus(`Ошибка входа: ${error.message}`, "error");
   }
@@ -328,11 +342,22 @@ async function handleLogout() {
 
 async function bootstrapAuthenticatedSession() {
   await loadProfile();
+  const shouldRedirectToAdmin =
+    isAdminRole() &&
+    (getSafePostLoginRedirectPath()?.startsWith("/admin") ?? false);
+  if (shouldRedirectToAdmin) {
+    const redirectPath = getSafePostLoginRedirectPath() ?? ADMIN_DASHBOARD_PATH;
+    setGlobalStatus("Вход выполнен. Перенаправляем в админку...", "success");
+    window.location.assign(redirectPath);
+    return true;
+  }
+
   showDashboardMode();
   activateTab("profile");
   applyRoleAwareTabs();
   await Promise.all([refreshSlots(), refreshBookings(), refreshPackages(), refreshLessons()]);
   renderAdminOperations();
+  return false;
 }
 
 async function refreshSlots() {
@@ -440,6 +465,11 @@ async function loadProfile() {
 }
 
 function renderProfile(user) {
+  const adminPanelLink =
+    user.role?.name === "admin"
+      ? `<p class="meta"><a href="${ADMIN_DASHBOARD_PATH}">Открыть админ-панель</a></p>`
+      : "";
+
   elements.profileContent.innerHTML = `
     <article class="card-item">
       <h4>${escapeHtml(user.email)}</h4>
@@ -448,6 +478,7 @@ function renderProfile(user) {
       <p class="meta"><strong>Таймзона:</strong> ${escapeHtml(user.timezone)}</p>
       <p class="meta"><strong>Активен:</strong> ${user.is_active ? "да" : "нет"}</p>
       <p class="meta"><strong>Создан:</strong> ${formatDateTime(user.created_at)}</p>
+      ${adminPanelLink}
     </article>
   `;
 }

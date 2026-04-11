@@ -13,7 +13,7 @@ const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const PACKAGE_STATUSES = ["", "active", "expired", "depleted", "canceled"];
+const PACKAGE_STATUSES = ["", "active", "expired", "depleted"];
 const PACKAGE_STATUS_LABELS: Record<string, string> = {
   active: "активен",
   expired: "истёк",
@@ -82,6 +82,7 @@ export function PackagesPage() {
   const [unavailable, setUnavailable] = useState(false);
 
   const [studentInput, setStudentInput] = useState("");
+  const [studentNamesById, setStudentNamesById] = useState<Record<string, string | null>>({});
   const [selectedStudent, setSelectedStudent] = useState<AdminStudentLookupItem | null>(null);
   const [studentSuggestions, setStudentSuggestions] = useState<AdminStudentLookupItem[]>([]);
   const [studentsLookupLoading, setStudentsLookupLoading] = useState(false);
@@ -101,7 +102,7 @@ export function PackagesPage() {
       const page = await listAdminPackages({
         status: statusFilter || undefined
       });
-      setPackages(page.items);
+      setPackages(page.items.filter((pkg) => pkg.status !== "canceled"));
     } catch (requestError) {
       if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
         setUnavailable(true);
@@ -164,6 +165,61 @@ export function PackagesPage() {
   useEffect(() => {
     void loadPackages();
   }, [loadPackages]);
+
+  useEffect(() => {
+    const missingStudentIds = Array.from(
+      new Set(
+        packages
+          .map((pkg) => pkg.student_id)
+          .filter((studentId) => !(studentId in studentNamesById))
+      )
+    );
+    if (!missingStudentIds.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadMissingStudentNames() {
+      const resolvedNames = await Promise.all(
+        missingStudentIds.map(async (studentId) => {
+          try {
+            const params = new URLSearchParams({
+              role: "student",
+              limit: "20",
+              offset: "0",
+              q: studentId
+            });
+            const page = await apiClient.request<PageResponse<AdminStudentLookupItem>>(
+              `/admin/users?${params.toString()}`
+            );
+            const exactStudent = page.items.find((student) => student.user_id === studentId);
+            return [studentId, exactStudent?.full_name ?? null] as const;
+          } catch {
+            return [studentId, null] as const;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      setStudentNamesById((current) => {
+        const next = { ...current };
+        for (const [studentId, fullName] of resolvedNames) {
+          next[studentId] = fullName;
+        }
+        return next;
+      });
+    }
+
+    void loadMissingStudentNames();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [packages, studentNamesById]);
 
   useEffect(() => {
     const normalizedInput = studentInput.trim();
@@ -276,7 +332,7 @@ export function PackagesPage() {
     try {
       const canceledPackage = await cancelAdminPackage(pkg.package_id);
       setActionSuccess(`Пакет удален: ${canceledPackage.package_id}`);
-      await loadPackages();
+      setPackages((current) => current.filter((item) => item.package_id !== pkg.package_id));
     } catch (requestError) {
       setActionError(requestError instanceof Error ? requestError.message : "Не удалось удалить пакет");
     } finally {
@@ -460,7 +516,7 @@ export function PackagesPage() {
                         </button>
                       </td>
                       <td>{pkg.package_id.slice(0, 8)}</td>
-                      <td>{pkg.student_id.slice(0, 8)}</td>
+                      <td>{studentNamesById[pkg.student_id] || pkg.student_id.slice(0, 8)}</td>
                       <td>{formatPackageStatus(pkg.status)}</td>
                       <td>{pkg.lessons_left}</td>
                       <td>{pkg.lessons_reserved}</td>

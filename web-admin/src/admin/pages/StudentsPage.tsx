@@ -13,6 +13,8 @@ const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 const ADMIN_STUDENT_FILTER_STORAGE_KEY = "go_admin_students_selected_id";
 const ADMIN_STUDENT_PROFILE_STORAGE_KEY = "go_admin_students_selected_profile";
 const ACTIVE_BOOKING_STATUSES = new Set<AdminBooking["status"]>(["hold", "confirmed"]);
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const PACKAGE_STATUS_LABELS: Record<AdminPackage["status"], string> = {
   active: "активен",
@@ -66,6 +68,26 @@ function canUseStorage(): boolean {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
+function isValidUuid(value: string | null | undefined): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value.trim());
+}
+
+function loadStoredSelectedStudentId(): string | null {
+  if (!canUseStorage()) {
+    return null;
+  }
+  const raw = window.localStorage.getItem(ADMIN_STUDENT_FILTER_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+  const normalized = raw.trim();
+  if (!isValidUuid(normalized)) {
+    window.localStorage.removeItem(ADMIN_STUDENT_FILTER_STORAGE_KEY);
+    return null;
+  }
+  return normalized;
+}
+
 function loadStoredSelectedStudent(): AdminStudentListItem | null {
   if (!canUseStorage()) {
     return null;
@@ -80,6 +102,7 @@ function loadStoredSelectedStudent(): AdminStudentListItem | null {
     const parsed = JSON.parse(raw) as Partial<AdminStudentListItem>;
     if (
       typeof parsed.user_id !== "string" ||
+      !isValidUuid(parsed.user_id) ||
       typeof parsed.email !== "string" ||
       typeof parsed.full_name !== "string" ||
       typeof parsed.timezone !== "string" ||
@@ -184,7 +207,7 @@ function summarizePackages(packages: AdminPackage[]): StudentPackageSummary {
 export function StudentsPage() {
   const [students, setStudents] = useState<AdminStudentListItem[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
-    () => localStorage.getItem(ADMIN_STUDENT_FILTER_STORAGE_KEY) || null
+    () => loadStoredSelectedStudentId()
   );
   const [selectedStudentProfile, setSelectedStudentProfile] = useState<AdminStudentListItem | null>(
     () => loadStoredSelectedStudent()
@@ -293,7 +316,7 @@ export function StudentsPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedStudentId) {
+    if (!selectedStudentId || !isValidUuid(selectedStudentId)) {
       localStorage.removeItem(ADMIN_STUDENT_FILTER_STORAGE_KEY);
       persistSelectedStudent(null);
       return;
@@ -302,7 +325,12 @@ export function StudentsPage() {
   }, [selectedStudentId]);
 
   useEffect(() => {
-    if (!selectedStudentId || !selectedStudentProfile || selectedStudentProfile.user_id !== selectedStudentId) {
+    if (
+      !selectedStudentId ||
+      !selectedStudentProfile ||
+      !isValidUuid(selectedStudentProfile.user_id) ||
+      selectedStudentProfile.user_id !== selectedStudentId
+    ) {
       persistSelectedStudent(null);
       return;
     }

@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiClientError, apiClient } from "../../shared/api/client";
 import type { PageResponse } from "../../shared/api/types";
@@ -31,7 +31,7 @@ function formatPackageStatus(status: string): string {
   return PACKAGE_STATUS_LABELS[status] ?? status;
 }
 
-function findStudentIdByInput(
+function resolveStudentId(
   value: string,
   students: AdminStudentLookupItem[]
 ): { studentId: string | null; ambiguous: boolean } {
@@ -40,31 +40,24 @@ function findStudentIdByInput(
     return { studentId: null, ambiguous: false };
   }
 
-  const exactById = students.find((student) => student.user_id.toLowerCase() === normalized);
-  if (exactById) {
-    return { studentId: exactById.user_id, ambiguous: false };
+  const exact = students.filter((student) => {
+    return (
+      student.user_id.toLowerCase() === normalized ||
+      student.email.toLowerCase() === normalized ||
+      student.full_name.toLowerCase() === normalized
+    );
+  });
+  if (exact.length === 1) {
+    return { studentId: exact[0].user_id, ambiguous: false };
   }
-
-  const exactByEmail = students.find((student) => student.email.toLowerCase() === normalized);
-  if (exactByEmail) {
-    return { studentId: exactByEmail.user_id, ambiguous: false };
-  }
-
-  const exactByFullName = students.filter((student) => student.full_name.toLowerCase() === normalized);
-  if (exactByFullName.length === 1) {
-    return { studentId: exactByFullName[0].user_id, ambiguous: false };
-  }
-  if (exactByFullName.length > 1) {
+  if (exact.length > 1) {
     return { studentId: null, ambiguous: true };
   }
 
-  const byPartialFullName = students.filter((student) =>
-    student.full_name.toLowerCase().includes(normalized)
-  );
-  if (byPartialFullName.length === 1) {
-    return { studentId: byPartialFullName[0].user_id, ambiguous: false };
+  if (students.length === 1) {
+    return { studentId: students[0].user_id, ambiguous: false };
   }
-  if (byPartialFullName.length > 1) {
+  if (students.length > 1) {
     return { studentId: null, ambiguous: true };
   }
 
@@ -82,8 +75,8 @@ export function PackagesPage() {
   const [unavailable, setUnavailable] = useState(false);
 
   const [studentInput, setStudentInput] = useState("");
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [studentsLookup, setStudentsLookup] = useState<AdminStudentLookupItem[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<AdminStudentLookupItem | null>(null);
+  const [studentSuggestions, setStudentSuggestions] = useState<AdminStudentLookupItem[]>([]);
   const [studentsLookupLoading, setStudentsLookupLoading] = useState(false);
   const [studentsLookupUnavailable, setStudentsLookupUnavailable] = useState(false);
   const [studentsLookupError, setStudentsLookupError] = useState<string | null>(null);
@@ -91,6 +84,8 @@ export function PackagesPage() {
   const [expiresAtUtc, setExpiresAtUtc] = useState("");
   const [priceAmount, setPriceAmount] = useState("149.00");
   const [priceCurrency, setPriceCurrency] = useState("USD");
+
+  const studentLookupRequestIdRef = useRef(0);
 
   const loadPackages = useCallback(async () => {
     setLoading(true);
@@ -111,72 +106,78 @@ export function PackagesPage() {
     }
   }, [statusFilter]);
 
-  const loadStudentsLookup = useCallback(async () => {
-    setStudentsLookupLoading(true);
-    setStudentsLookupError(null);
-    setStudentsLookupUnavailable(false);
+  const searchStudents = useCallback(
+    async (query: string): Promise<AdminStudentLookupItem[]> => {
+      const requestId = ++studentLookupRequestIdRef.current;
+      setStudentsLookupLoading(true);
+      setStudentsLookupError(null);
+      setStudentsLookupUnavailable(false);
 
-    try {
-      const items: AdminStudentLookupItem[] = [];
-      let offset = 0;
-      const limit = 100;
-
-      while (true) {
+      try {
+        const params = new URLSearchParams({
+          role: "student",
+          limit: "20",
+          offset: "0",
+          q: query
+        });
         const page = await apiClient.request<PageResponse<AdminStudentLookupItem>>(
-          `/admin/users?role=student&limit=${limit}&offset=${offset}`
+          `/admin/users?${params.toString()}`
         );
-        items.push(...page.items);
-        offset += page.items.length;
 
-        if (page.items.length < limit || items.length >= page.total) {
-          break;
+        if (requestId === studentLookupRequestIdRef.current) {
+          setStudentSuggestions(page.items);
+        }
+        return page.items;
+      } catch (requestError) {
+        if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
+          if (requestId === studentLookupRequestIdRef.current) {
+            setStudentsLookupUnavailable(true);
+            setStudentSuggestions([]);
+          }
+          return [];
+        }
+        if (requestId === studentLookupRequestIdRef.current) {
+          setStudentsLookupError(
+            requestError instanceof Error
+              ? requestError.message
+              : "Не удалось загрузить список студентов"
+          );
+          setStudentSuggestions([]);
+        }
+        return [];
+      } finally {
+        if (requestId === studentLookupRequestIdRef.current) {
+          setStudentsLookupLoading(false);
         }
       }
-
-      setStudentsLookup(items);
-    } catch (requestError) {
-      if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
-        setStudentsLookupUnavailable(true);
-        setStudentsLookup([]);
-        return;
-      }
-      setStudentsLookup([]);
-      setStudentsLookupError(
-        requestError instanceof Error ? requestError.message : "Не удалось загрузить список студентов"
-      );
-    } finally {
-      setStudentsLookupLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     void loadPackages();
   }, [loadPackages]);
 
   useEffect(() => {
-    void loadStudentsLookup();
-  }, [loadStudentsLookup]);
-
-  const selectedStudent = useMemo(
-    () => studentsLookup.find((student) => student.user_id === selectedStudentId) ?? null,
-    [selectedStudentId, studentsLookup]
-  );
-
-  const studentSuggestions = useMemo(() => {
-    if (!studentInput.trim()) {
-      return [];
+    const normalizedInput = studentInput.trim();
+    if (!normalizedInput || UUID_PATTERN.test(normalizedInput)) {
+      setStudentSuggestions([]);
+      setStudentsLookupError(null);
+      setStudentsLookupLoading(false);
+      return;
     }
-    const normalized = studentInput.trim().toLowerCase();
-    return studentsLookup
-      .filter((student) => {
-        return (
-          student.full_name.toLowerCase().includes(normalized) ||
-          student.email.toLowerCase().includes(normalized) ||
-          student.user_id.toLowerCase().includes(normalized)
-        );
-      })
-      .slice(0, 6);
-  }, [studentInput, studentsLookup]);
+
+    const timeoutId = window.setTimeout(() => {
+      void searchStudents(normalizedInput);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchStudents, studentInput]);
+
+  const showStudentSuggestions = useMemo(() => {
+    const normalized = studentInput.trim();
+    return normalized.length > 0 && !UUID_PATTERN.test(normalized);
+  }, [studentInput]);
 
   async function handleCreatePackage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -204,35 +205,31 @@ export function PackagesPage() {
       return;
     }
 
-    let resolvedStudentId = selectedStudentId;
+    let resolvedStudentId = selectedStudent?.user_id ?? null;
     if (!resolvedStudentId) {
       if (UUID_PATTERN.test(normalizedStudentInput)) {
         resolvedStudentId = normalizedStudentInput;
       } else {
-        if (studentsLookupLoading) {
-          setCreateError("Список студентов ещё загружается. Повторите через пару секунд.");
-          return;
-        }
+        const students = await searchStudents(normalizedStudentInput);
         if (studentsLookupUnavailable) {
           setCreateError("Поиск по ФИО недоступен. Укажите `student_id` вручную.");
           return;
         }
-        if (studentsLookupError && studentsLookup.length === 0) {
-          setCreateError("Не удалось загрузить студентов для поиска по ФИО. Введите `student_id`.");
+        if (studentsLookupError && students.length === 0) {
+          setCreateError("Не удалось выполнить поиск студента. Укажите `student_id` вручную.");
           return;
         }
 
-        const resolvedFromLookup = findStudentIdByInput(normalizedStudentInput, studentsLookup);
-        if (resolvedFromLookup.ambiguous) {
+        const resolved = resolveStudentId(normalizedStudentInput, students);
+        if (resolved.ambiguous) {
           setCreateError("Найдено несколько студентов. Уточните ФИО или выберите из подсказок.");
           return;
         }
-        if (!resolvedFromLookup.studentId) {
-          setCreateError("Студент по этому ФИО не найден. Укажите `student_id` или выберите подсказку.");
+        if (!resolved.studentId) {
+          setCreateError("Студент не найден. Укажите `student_id` или выберите подсказку.");
           return;
         }
-
-        resolvedStudentId = resolvedFromLookup.studentId;
+        resolvedStudentId = resolved.studentId;
       }
     }
 
@@ -281,12 +278,12 @@ export function PackagesPage() {
             value={studentInput}
             onChange={(event) => {
               setStudentInput(event.target.value);
-              setSelectedStudentId(null);
+              setSelectedStudent(null);
             }}
             placeholder="UUID student_id, ФИО или email"
           />
         </label>
-        {studentInput.trim() ? (
+        {showStudentSuggestions ? (
           <div className="picker-search-suggestions">
             {studentsLookupLoading ? <p className="summary">Загружаем подсказки...</p> : null}
             {!studentsLookupLoading && !studentsLookupUnavailable && studentSuggestions.length ? (
@@ -300,8 +297,9 @@ export function PackagesPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedStudentId(student.user_id);
+                        setSelectedStudent(student);
                         setStudentInput(student.full_name);
+                        setStudentSuggestions([]);
                       }}
                     >
                       Выбрать
@@ -320,7 +318,8 @@ export function PackagesPage() {
         ) : null}
         {selectedStudent ? (
           <p className="summary">
-            Выбран студент: <strong>{selectedStudent.full_name}</strong> (<code>{selectedStudent.user_id}</code>)
+            Выбран студент: <strong>{selectedStudent.full_name}</strong> (
+            <code>{selectedStudent.user_id}</code>)
           </p>
         ) : null}
         {studentsLookupUnavailable ? (

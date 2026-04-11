@@ -32,3 +32,9 @@ export async function createAdminPackage(
     body: payload
   });
 }
+
+export async function cancelAdminPackage(packageId: string): Promise<AdminPackage> {
+  return apiClient.request<AdminPackage>(`/admin/packages/${packageId}/cancel`, {
+    method: "POST"
+  });
+}

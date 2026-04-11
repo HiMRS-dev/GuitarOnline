@@ -237,6 +237,51 @@ class BillingService:
         )
         return package
 
+    async def cancel_admin_package(
+        self,
+        package_id: UUID,
+        actor: User,
+    ) -> LessonPackage:
+        """Cancel package via admin-only operation (soft-delete semantics)."""
+        if actor.role.name != RoleEnum.ADMIN:
+            raise UnauthorizedException("Only admin can cancel lesson packages")
+
+        package = await self.repository.get_package_by_id_for_update(package_id)
+        if package is None:
+            raise NotFoundException("Package not found")
+        if package.status == PackageStatusEnum.CANCELED:
+            return package
+        if package.lessons_reserved > 0:
+            raise BusinessRuleException("Cannot cancel package with reserved lessons")
+
+        previous_status = package.status
+        package = await self.repository.set_package_status(package, PackageStatusEnum.CANCELED)
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="admin.package.cancel",
+            entity_type="lesson_package",
+            entity_id=str(package.id),
+            payload={
+                "student_id": str(package.student_id),
+                "from_status": str(previous_status),
+                "to_status": str(package.status),
+                "lessons_left": package.lessons_left,
+                "lessons_reserved": package.lessons_reserved,
+            },
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(package.id),
+            event_type="billing.package.canceled",
+            payload={
+                "package_id": str(package.id),
+                "student_id": str(package.student_id),
+                "from_status": str(previous_status),
+                "to_status": str(package.status),
+            },
+        )
+        return package
+
     async def list_student_packages(
         self,
         student_id: UUID,

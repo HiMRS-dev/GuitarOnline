@@ -459,6 +459,54 @@ async def test_admin_create_package_endpoint_returns_401_403_and_201_by_role(
 
 
 @pytest.mark.asyncio
+async def test_admin_cancel_package_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    admin = await _register_and_login(api_client, "admin")
+    student = await _register_and_login(api_client, "student")
+    create_payload = {
+        "student_id": str(student.id),
+        "lessons_total": 6,
+        "expires_at_utc": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
+        "price_amount": "149.00",
+        "price_currency": "USD",
+    }
+
+    create_response = await api_client.post(
+        "/admin/packages",
+        headers=_auth_headers(admin.access_token),
+        json=create_payload,
+    )
+    _assert_status(create_response, 201)
+    package_id = create_response.json()["package_id"]
+
+    no_token_response = await api_client.post(f"/admin/packages/{package_id}/cancel")
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.post(
+        f"/admin/packages/{package_id}/cancel",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(student_response, 403)
+
+    admin_response = await api_client.post(
+        f"/admin/packages/{package_id}/cancel",
+        headers=_auth_headers(admin.access_token),
+    )
+    _assert_status(admin_response, 200)
+    body = admin_response.json()
+    assert body["package_id"] == package_id
+    assert body["status"] == "canceled"
+
+    second_cancel_response = await api_client.post(
+        f"/admin/packages/{package_id}/cancel",
+        headers=_auth_headers(admin.access_token),
+    )
+    _assert_status(second_cancel_response, 200)
+    assert second_cancel_response.json()["status"] == "canceled"
+
+
+@pytest.mark.asyncio
 async def test_admin_cancel_booking_endpoint_returns_401_403_and_200_by_role(
     api_client: httpx.AsyncClient,
 ) -> None:

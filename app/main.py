@@ -186,6 +186,9 @@ _OPENAPI_DESCRIPTION_RU: dict[str, str] = {
     "Create manual package with price snapshot under admin contract.": (
         "Создает пакет вручную со снимком цены в рамках админ-контракта."
     ),
+    "Cancel package via admin-only operation (soft delete for admin UI).": (
+        "Отменяет пакет через админ-операцию (мягкое удаление для админ-интерфейса)."
+    ),
     "Create notification.": "Создает уведомление.",
     "Create payment record.": "Создает запись платежа.",
     "Create teacher profile.": "Создает профиль преподавателя.",

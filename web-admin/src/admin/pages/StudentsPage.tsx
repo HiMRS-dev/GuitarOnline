@@ -652,8 +652,6 @@ export function StudentsPage() {
                     <div key={student.user_id} className="picker-suggestion-item">
                       <div className="picker-suggestion-meta">
                         <strong>{student.full_name}</strong>
-                        <span>{student.email}</span>
-                        <span>{student.timezone}</span>
                       </div>
                       <button
                         type="button"
@@ -937,9 +935,6 @@ export function StudentsPage() {
                       }}
                     >
                       <strong>{student.full_name}</strong>
-                      <span>{student.email}</span>
-                      <span>{student.timezone}</span>
-                      <span>{student.is_active ? "активен" : "отключён"}</span>
                     </button>
                   ))}
                 </div>

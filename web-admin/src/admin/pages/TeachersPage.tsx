@@ -499,9 +499,7 @@ export function TeachersPage() {
                 {teacherSuggestions.map((teacher) => (
                   <div key={teacher.teacher_id} className="picker-suggestion-item">
                     <div className="picker-suggestion-meta">
-                      <strong>{teacher.display_name}</strong>
-                      <span>{teacher.full_name}</span>
-                      <span>{teacher.email}</span>
+                      <strong>{teacher.full_name}</strong>
                     </div>
                     <button
                       type="button"
@@ -815,10 +813,7 @@ export function TeachersPage() {
                         setIsPickerOpen(false);
                       }}
                     >
-                      <strong>{teacher.display_name}</strong>
-                      <span>{teacher.full_name}</span>
-                      <span>{teacher.email}</span>
-                      <span>{formatTeacherStatus(teacher.status)}</span>
+                      <strong>{teacher.full_name}</strong>
                     </button>
                   ))}
                 </div>

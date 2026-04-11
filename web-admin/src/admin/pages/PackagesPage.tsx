@@ -1,10 +1,13 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import { ApiClientError } from "../../shared/api/client";
+import { ApiClientError, apiClient } from "../../shared/api/client";
+import type { PageResponse } from "../../shared/api/types";
 import { createAdminPackage, listAdminPackages } from "../../features/packages/api";
 import type { AdminPackage } from "../../features/packages/types";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const PACKAGE_STATUSES = ["", "active", "expired", "depleted", "canceled"];
 const PACKAGE_STATUS_LABELS: Record<string, string> = {
@@ -14,8 +17,58 @@ const PACKAGE_STATUS_LABELS: Record<string, string> = {
   canceled: "отменён"
 };
 
+type AdminStudentLookupItem = {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: "student";
+  is_active: boolean;
+  created_at_utc: string;
+  updated_at_utc: string;
+};
+
 function formatPackageStatus(status: string): string {
   return PACKAGE_STATUS_LABELS[status] ?? status;
+}
+
+function findStudentIdByInput(
+  value: string,
+  students: AdminStudentLookupItem[]
+): { studentId: string | null; ambiguous: boolean } {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return { studentId: null, ambiguous: false };
+  }
+
+  const exactById = students.find((student) => student.user_id.toLowerCase() === normalized);
+  if (exactById) {
+    return { studentId: exactById.user_id, ambiguous: false };
+  }
+
+  const exactByEmail = students.find((student) => student.email.toLowerCase() === normalized);
+  if (exactByEmail) {
+    return { studentId: exactByEmail.user_id, ambiguous: false };
+  }
+
+  const exactByFullName = students.filter((student) => student.full_name.toLowerCase() === normalized);
+  if (exactByFullName.length === 1) {
+    return { studentId: exactByFullName[0].user_id, ambiguous: false };
+  }
+  if (exactByFullName.length > 1) {
+    return { studentId: null, ambiguous: true };
+  }
+
+  const byPartialFullName = students.filter((student) =>
+    student.full_name.toLowerCase().includes(normalized)
+  );
+  if (byPartialFullName.length === 1) {
+    return { studentId: byPartialFullName[0].user_id, ambiguous: false };
+  }
+  if (byPartialFullName.length > 1) {
+    return { studentId: null, ambiguous: true };
+  }
+
+  return { studentId: null, ambiguous: false };
 }
 
 export function PackagesPage() {
@@ -28,7 +81,12 @@ export function PackagesPage() {
   const [createPending, setCreatePending] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
 
-  const [studentId, setStudentId] = useState("");
+  const [studentInput, setStudentInput] = useState("");
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [studentsLookup, setStudentsLookup] = useState<AdminStudentLookupItem[]>([]);
+  const [studentsLookupLoading, setStudentsLookupLoading] = useState(false);
+  const [studentsLookupUnavailable, setStudentsLookupUnavailable] = useState(false);
+  const [studentsLookupError, setStudentsLookupError] = useState<string | null>(null);
   const [lessonsTotal, setLessonsTotal] = useState("8");
   const [expiresAtUtc, setExpiresAtUtc] = useState("");
   const [priceAmount, setPriceAmount] = useState("149.00");
@@ -53,19 +111,84 @@ export function PackagesPage() {
     }
   }, [statusFilter]);
 
+  const loadStudentsLookup = useCallback(async () => {
+    setStudentsLookupLoading(true);
+    setStudentsLookupError(null);
+    setStudentsLookupUnavailable(false);
+
+    try {
+      const items: AdminStudentLookupItem[] = [];
+      let offset = 0;
+      const limit = 100;
+
+      while (true) {
+        const page = await apiClient.request<PageResponse<AdminStudentLookupItem>>(
+          `/admin/users?role=student&limit=${limit}&offset=${offset}`
+        );
+        items.push(...page.items);
+        offset += page.items.length;
+
+        if (page.items.length < limit || items.length >= page.total) {
+          break;
+        }
+      }
+
+      setStudentsLookup(items);
+    } catch (requestError) {
+      if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
+        setStudentsLookupUnavailable(true);
+        setStudentsLookup([]);
+        return;
+      }
+      setStudentsLookup([]);
+      setStudentsLookupError(
+        requestError instanceof Error ? requestError.message : "Не удалось загрузить список студентов"
+      );
+    } finally {
+      setStudentsLookupLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void loadPackages();
   }, [loadPackages]);
+
+  useEffect(() => {
+    void loadStudentsLookup();
+  }, [loadStudentsLookup]);
+
+  const selectedStudent = useMemo(
+    () => studentsLookup.find((student) => student.user_id === selectedStudentId) ?? null,
+    [selectedStudentId, studentsLookup]
+  );
+
+  const studentSuggestions = useMemo(() => {
+    if (!studentInput.trim()) {
+      return [];
+    }
+    const normalized = studentInput.trim().toLowerCase();
+    return studentsLookup
+      .filter((student) => {
+        return (
+          student.full_name.toLowerCase().includes(normalized) ||
+          student.email.toLowerCase().includes(normalized) ||
+          student.user_id.toLowerCase().includes(normalized)
+        );
+      })
+      .slice(0, 6);
+  }, [studentInput, studentsLookup]);
 
   async function handleCreatePackage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreateError(null);
     setCreateSuccess(null);
 
+    const normalizedStudentInput = studentInput.trim();
     const parsedLessonsTotal = Number(lessonsTotal);
     const parsedExpiresAt = new Date(expiresAtUtc);
-    if (!studentId.trim()) {
-      setCreateError("ID студента обязателен.");
+
+    if (!normalizedStudentInput) {
+      setCreateError("ID или ФИО студента обязательны.");
       return;
     }
     if (!Number.isInteger(parsedLessonsTotal) || parsedLessonsTotal <= 0) {
@@ -81,10 +204,42 @@ export function PackagesPage() {
       return;
     }
 
+    let resolvedStudentId = selectedStudentId;
+    if (!resolvedStudentId) {
+      if (UUID_PATTERN.test(normalizedStudentInput)) {
+        resolvedStudentId = normalizedStudentInput;
+      } else {
+        if (studentsLookupLoading) {
+          setCreateError("Список студентов ещё загружается. Повторите через пару секунд.");
+          return;
+        }
+        if (studentsLookupUnavailable) {
+          setCreateError("Поиск по ФИО недоступен. Укажите `student_id` вручную.");
+          return;
+        }
+        if (studentsLookupError && studentsLookup.length === 0) {
+          setCreateError("Не удалось загрузить студентов для поиска по ФИО. Введите `student_id`.");
+          return;
+        }
+
+        const resolvedFromLookup = findStudentIdByInput(normalizedStudentInput, studentsLookup);
+        if (resolvedFromLookup.ambiguous) {
+          setCreateError("Найдено несколько студентов. Уточните ФИО или выберите из подсказок.");
+          return;
+        }
+        if (!resolvedFromLookup.studentId) {
+          setCreateError("Студент по этому ФИО не найден. Укажите `student_id` или выберите подсказку.");
+          return;
+        }
+
+        resolvedStudentId = resolvedFromLookup.studentId;
+      }
+    }
+
     setCreatePending(true);
     try {
       const createdPackage = await createAdminPackage({
-        student_id: studentId.trim(),
+        student_id: resolvedStudentId,
         lessons_total: parsedLessonsTotal,
         expires_at_utc: parsedExpiresAt.toISOString(),
         price_amount: priceAmount.trim(),
@@ -93,9 +248,7 @@ export function PackagesPage() {
       setCreateSuccess(`Пакет создан: ${createdPackage.package_id}`);
       await loadPackages();
     } catch (requestError) {
-      setCreateError(
-        requestError instanceof Error ? requestError.message : "Не удалось создать пакет"
-      );
+      setCreateError(requestError instanceof Error ? requestError.message : "Не удалось создать пакет");
     } finally {
       setCreatePending(false);
     }
@@ -121,15 +274,60 @@ export function PackagesPage() {
 
       <form className="users-provision-form" onSubmit={handleCreatePackage}>
         <h2>Создать пакет</h2>
-        <label>
-          <span>ID студента</span>
+        <label className="teachers-picker-search">
+          <span>Студент (ID или ФИО)</span>
           <input
             type="text"
-            value={studentId}
-            onChange={(event) => setStudentId(event.target.value)}
-            placeholder="UUID student_id"
+            value={studentInput}
+            onChange={(event) => {
+              setStudentInput(event.target.value);
+              setSelectedStudentId(null);
+            }}
+            placeholder="UUID student_id, ФИО или email"
           />
         </label>
+        {studentInput.trim() ? (
+          <div className="picker-search-suggestions">
+            {studentsLookupLoading ? <p className="summary">Загружаем подсказки...</p> : null}
+            {!studentsLookupLoading && !studentsLookupUnavailable && studentSuggestions.length ? (
+              <div className="picker-suggestion-list">
+                {studentSuggestions.map((student) => (
+                  <div key={student.user_id} className="picker-suggestion-item">
+                    <div className="picker-suggestion-meta">
+                      <strong>{student.full_name}</strong>
+                      <span>{student.email}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedStudentId(student.user_id);
+                        setStudentInput(student.full_name);
+                      }}
+                    >
+                      Выбрать
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {!studentsLookupLoading &&
+            !studentsLookupUnavailable &&
+            !studentsLookupError &&
+            studentSuggestions.length === 0 ? (
+              <p className="summary">Совпадений не найдено.</p>
+            ) : null}
+          </div>
+        ) : null}
+        {selectedStudent ? (
+          <p className="summary">
+            Выбран студент: <strong>{selectedStudent.full_name}</strong> (<code>{selectedStudent.user_id}</code>)
+          </p>
+        ) : null}
+        {studentsLookupUnavailable ? (
+          <p className="summary">Поиск по ФИО недоступен. Можно создать пакет только по `student_id`.</p>
+        ) : null}
+        {studentsLookupError ? <p className="error-text">{studentsLookupError}</p> : null}
+
         <label>
           <span>Количество уроков</span>
           <input
@@ -210,11 +408,7 @@ export function PackagesPage() {
                     <td>{formatPackageStatus(pkg.status)}</td>
                     <td>{pkg.lessons_left}</td>
                     <td>{pkg.lessons_reserved}</td>
-                    <td>
-                      {pkg.price_amount
-                        ? `${pkg.price_amount} ${pkg.price_currency ?? ""}`
-                        : "-"}
-                    </td>
+                    <td>{pkg.price_amount ? `${pkg.price_amount} ${pkg.price_currency ?? ""}` : "-"}</td>
                     <td>{new Date(pkg.expires_at_utc).toISOString()}</td>
                   </tr>
                 ))}

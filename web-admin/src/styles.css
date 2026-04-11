@@ -581,6 +581,10 @@ button[disabled] {
   white-space: normal;
 }
 
+.users-table tbody tr.users-table-row-active td {
+  background: #eef4ff;
+}
+
 .users-table-cell-compact {
   min-width: 0;
   vertical-align: top;

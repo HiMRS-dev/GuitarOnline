@@ -15,6 +15,19 @@ type UserRole = "student" | "teacher" | "admin";
 type UserRoleFilter = "all" | UserRole;
 type UserActiveFilter = "all" | "active" | "inactive";
 
+const ROLE_FILTER_OPTIONS: Array<{ value: UserRoleFilter; label: string }> = [
+  { value: "all", label: "Все роли" },
+  { value: "student", label: "студент" },
+  { value: "teacher", label: "преподаватель" },
+  { value: "admin", label: "админ" }
+];
+
+const ACTIVE_FILTER_OPTIONS: Array<{ value: UserActiveFilter; label: string }> = [
+  { value: "all", label: "Все" },
+  { value: "active", label: "Только активные" },
+  { value: "inactive", label: "Только отключенные" }
+];
+
 type AdminUserListItem = {
   user_id: string;
   email: string;
@@ -164,6 +177,8 @@ export function UsersPage() {
   const [userRoleFilter, setUserRoleFilter] = useState<UserRoleFilter>("all");
   const [userActiveFilter, setUserActiveFilter] = useState<UserActiveFilter>("all");
   const [userQuery, setUserQuery] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<AdminUserListItem | null>(null);
   const deferredUserQuery = useDeferredValue(userQuery);
   const [secondaryBootstrapped, setSecondaryBootstrapped] = useState(false);
 
@@ -269,6 +284,17 @@ export function UsersPage() {
     return () => window.clearTimeout(timeoutId);
   }, [copyNotice]);
 
+  useEffect(() => {
+    if (!selectedUserId) {
+      setSelectedUserProfile(null);
+      return;
+    }
+    const selectedFromList = users.find((item) => item.user_id === selectedUserId);
+    if (selectedFromList) {
+      setSelectedUserProfile(selectedFromList);
+    }
+  }, [selectedUserId, users]);
+
   const latestTeachers = useMemo(
     () =>
       [...teachers]
@@ -279,6 +305,28 @@ export function UsersPage() {
         .slice(0, 12),
     [teachers]
   );
+
+  const selectedUser = useMemo(() => {
+    if (!selectedUserId) {
+      return null;
+    }
+    const fromList = users.find((item) => item.user_id === selectedUserId) ?? null;
+    if (fromList) {
+      return fromList;
+    }
+    if (selectedUserProfile && selectedUserProfile.user_id === selectedUserId) {
+      return selectedUserProfile;
+    }
+    return null;
+  }, [selectedUserId, selectedUserProfile, users]);
+
+  const userSuggestions = useMemo(() => {
+    if (!userQuery.trim()) {
+      return [];
+    }
+    return users.slice(0, 6);
+  }, [userQuery, users]);
+
   const canManageAdminRoles =
     normalizeEmail(currentAdmin?.email ?? null) === normalizeEmail(PRIVILEGED_ADMIN_EMAIL);
 
@@ -478,41 +526,91 @@ export function UsersPage() {
       <article className="card">
         <h2>Список пользователей</h2>
         <div className="users-provision-form">
-          <label>
-            <span>Роль</span>
-            <select
-              value={userRoleFilter}
-              onChange={(event) => setUserRoleFilter(event.target.value as UserRoleFilter)}
-            >
-              <option value="all">Все роли</option>
-              <option value="student">студент</option>
-              <option value="teacher">преподаватель</option>
-              <option value="admin">админ</option>
-            </select>
-          </label>
-
-          <label>
-            <span>Статус</span>
-            <select
-              value={userActiveFilter}
-              onChange={(event) => setUserActiveFilter(event.target.value as UserActiveFilter)}
-            >
-              <option value="all">Все</option>
-              <option value="active">Только активные</option>
-              <option value="inactive">Только отключенные</option>
-            </select>
-          </label>
-
-          <label>
-            <span>Поиск (почта / ФИО / имя)</span>
+          <label className="teachers-picker-search">
+            <span>Search (email / full name / username)</span>
             <input
               type="search"
               value={userQuery}
               onChange={(event) => setUserQuery(event.target.value)}
-              placeholder="например, teacher@... или Иванов"
+              placeholder="for example, teacher@... or Ivanov"
             />
           </label>
+          {userQuery.trim() ? (
+            <div className="picker-search-suggestions">
+              {loading ? <p className="summary">Loading suggestions...</p> : null}
+              {!loading && !usersUnavailable && userSuggestions.length ? (
+                <div className="picker-suggestion-list">
+                  {userSuggestions.map((user) => (
+                    <div key={user.user_id} className="picker-suggestion-item">
+                      <div className="picker-suggestion-meta">
+                        <strong>{user.full_name}</strong>
+                        <span>{user.email}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUserId(user.user_id);
+                          setSelectedUserProfile(user);
+                          setUserQuery(user.email);
+                        }}
+                      >
+                        Select
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {!loading && !usersUnavailable && !usersError && userSuggestions.length === 0 ? (
+                <p className="summary">No matches found.</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="quick-filter-group" role="group" aria-label="User role filters">
+            {ROLE_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={userRoleFilter === option.value ? "quick-filter active" : "quick-filter"}
+                onClick={() => setUserRoleFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="quick-filter-group" role="group" aria-label="User status filters">
+            {ACTIVE_FILTER_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={userActiveFilter === option.value ? "quick-filter active" : "quick-filter"}
+                onClick={() => setUserActiveFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="quick-filter-group" role="group" aria-label="User selection actions">
+            <button
+              type="button"
+              className="quick-filter"
+              disabled={!selectedUserId && !userQuery.trim()}
+              onClick={() => {
+                setSelectedUserId(null);
+                setSelectedUserProfile(null);
+                setUserQuery("");
+              }}
+            >
+              Clear selection
+            </button>
+          </div>
         </div>
+
+        <p className="summary">
+          Selected: <strong>{selectedUser?.full_name ?? selectedUser?.email ?? "not selected"}</strong>
+        </p>
 
         <p className="summary">Найдено пользователей: {usersTotal}</p>
         {usersError ? <p className="error-text">{usersError}</p> : null}
@@ -549,7 +647,10 @@ export function UsersPage() {
                   const roleInProgress = activeRoleUserId === user.user_id;
 
                   return (
-                    <tr key={user.user_id}>
+                    <tr
+                      key={user.user_id}
+                      className={selectedUserId === user.user_id ? "users-table-row-active" : undefined}
+                    >
                       <td className="users-table-cell-compact">
                         {renderRevealableValue(user.email, "почту", `email:${user.user_id}`, {
                           onClick: () => {

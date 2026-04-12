@@ -90,6 +90,7 @@ function bindEvents() {
   elements.bookingsContent?.addEventListener("click", handleBookingsActionClick);
   elements.packagesContent?.addEventListener("click", handlePackagesActionClick);
   elements.profileContent?.addEventListener("submit", handleProfileSave);
+  elements.profileContent?.addEventListener("click", handleProfileActionClick);
 
   for (const button of elements.tabButtons) {
     button.addEventListener("click", () => {
@@ -504,6 +505,33 @@ async function loadProfile() {
   renderProfile(user);
 }
 
+function handleProfileActionClick(event) {
+  if (!(event.target instanceof Element)) {
+    return;
+  }
+
+  const actionTrigger = event.target.closest("[data-profile-action]");
+  if (!actionTrigger) {
+    return;
+  }
+
+  const action = actionTrigger.dataset.profileAction;
+  if (action === "edit") {
+    if (!state.currentUser) {
+      return;
+    }
+    renderProfile(state.currentUser, { isEditing: true });
+    return;
+  }
+
+  if (action === "cancel") {
+    if (!state.currentUser) {
+      return;
+    }
+    renderProfile(state.currentUser);
+  }
+}
+
 async function handleProfileSave(event) {
   const form = event.target;
   if (!form || form.id !== "profile-form") {
@@ -553,21 +581,21 @@ async function handleProfileSave(event) {
   });
 }
 
-function renderProfile(user) {
+function renderProfile(user, options = {}) {
+  const isEditing = options.isEditing === true;
   const adminPanelLink =
     user.role?.name === "admin"
       ? `<p class="meta"><a href="${ADMIN_DASHBOARD_PATH}">\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0430\u0434\u043C\u0438\u043D-\u043F\u0430\u043D\u0435\u043B\u044C</a></p>`
       : "";
+  const fullNameValue = user.full_name ?? "";
+  const fullNameDisplay = fullNameValue.trim() ? fullNameValue : "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E";
   const ageValue = user.age === null || user.age === undefined ? "" : String(user.age);
-
-  elements.profileContent.innerHTML = `
-    <article class="card-item">
-      <h4>${escapeHtml(user.full_name || user.email)}</h4>
-      <p class="meta"><strong>\u041B\u043E\u0433\u0438\u043D:</strong> ${escapeHtml(user.email)}</p>
-      <p class="meta"><strong>\u0422\u0430\u0439\u043C\u0437\u043E\u043D\u0430:</strong> ${escapeHtml(user.timezone)}</p>
-      <p class="meta"><strong>\u0410\u043A\u0442\u0438\u0432\u0435\u043D:</strong> ${user.is_active ? "\u0434\u0430" : "\u043D\u0435\u0442"}</p>
-      <p class="meta"><strong>\u0421\u043E\u0437\u0434\u0430\u043D:</strong> ${formatDateTime(user.created_at)}</p>
-      ${adminPanelLink}
+  const ageDisplay = ageValue || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D";
+  const profileDetails = `
+      <p class="meta"><strong>\u0424\u0418\u041E:</strong> ${escapeHtml(fullNameDisplay)}</p>
+      <p class="meta"><strong>\u0412\u043E\u0437\u0440\u0430\u0441\u0442:</strong> ${escapeHtml(ageDisplay)}</p>
+  `;
+  const profileEditor = `
       <form id="profile-form" class="form-stack">
         <label>
           \u0424\u0418\u041E
@@ -576,7 +604,7 @@ function renderProfile(user) {
             type="text"
             minlength="1"
             maxlength="255"
-            value="${escapeHtml(user.full_name ?? "")}"
+            value="${escapeHtml(fullNameValue)}"
             required
           />
         </label>
@@ -592,9 +620,29 @@ function renderProfile(user) {
             placeholder="\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, 25"
           />
         </label>
-        <button type="submit">\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C</button>
+        <div class="action-row">
+          <button type="submit">\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C</button>
+          <button type="button" class="secondary" data-profile-action="cancel">\u041E\u0442\u043C\u0435\u043D\u0430</button>
+        </div>
       </form>
       <p class="hint">\u0418\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0432 \u0431\u0430\u0437\u0435 \u0434\u0430\u043D\u043D\u044B\u0445.</p>
+  `;
+  const profileViewActions = `
+      <div class="action-row">
+        <button type="button" class="secondary" data-profile-action="edit">\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C</button>
+      </div>
+  `;
+
+  elements.profileContent.innerHTML = `
+    <article class="card-item">
+      <h4>${escapeHtml(user.full_name || user.email)}</h4>
+      <p class="meta"><strong>\u041B\u043E\u0433\u0438\u043D:</strong> ${escapeHtml(user.email)}</p>
+      <p class="meta"><strong>\u0422\u0430\u0439\u043C\u0437\u043E\u043D\u0430:</strong> ${escapeHtml(user.timezone)}</p>
+      <p class="meta"><strong>\u0410\u043A\u0442\u0438\u0432\u0435\u043D:</strong> ${user.is_active ? "\u0434\u0430" : "\u043D\u0435\u0442"}</p>
+      <p class="meta"><strong>\u0421\u043E\u0437\u0434\u0430\u043D:</strong> ${formatDateTime(user.created_at)}</p>
+      ${adminPanelLink}
+      ${isEditing ? profileEditor : profileDetails}
+      ${isEditing ? "" : profileViewActions}
     </article>
   `;
 }

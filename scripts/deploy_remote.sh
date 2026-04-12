@@ -132,6 +132,67 @@ validate_proxy_tls_assets() {
   log "Proxy TLS preflight: certificate assets found in ${certs_dir}."
 }
 
+available_kb() {
+  local path="$1"
+  df -Pk "${path}" | awk 'NR==2 {print $4}'
+}
+
+prune_old_predeploy_backups() {
+  local backups_dir="${DEPLOY_PATH}/backups"
+  local keep="${PREDEPLOY_BACKUP_KEEP_COUNT:-5}"
+  local total=0
+  local removed=0
+  local i=0
+
+  if [ ! -d "${backups_dir}" ]; then
+    return
+  fi
+
+  mapfile -t predeploy_files < <(
+    find "${backups_dir}" -maxdepth 1 -type f -name 'predeploy-*.sql' -printf '%f\n' | sort -r
+  )
+  total="${#predeploy_files[@]}"
+  if [ "${total}" -le "${keep}" ]; then
+    return
+  fi
+
+  for ((i=keep; i<total; i++)); do
+    rm -f "${backups_dir}/${predeploy_files[${i}]}" || true
+    removed=$((removed + 1))
+  done
+
+  log "Pruned old pre-deploy backups: removed=${removed}, kept=${keep}."
+}
+
+reclaim_disk_if_low() {
+  local phase="$1"
+  local min_free_kb="${DEPLOY_MIN_FREE_KB:-1048576}"
+  local free_before=0
+  local free_after=0
+
+  free_before="$(available_kb "${DEPLOY_PATH}")"
+  if [ -z "${free_before}" ]; then
+    warn "Unable to determine free disk space during ${phase}."
+    return
+  fi
+
+  log "Free disk before ${phase}: ${free_before}KB (threshold=${min_free_kb}KB)."
+  if [ "${free_before}" -ge "${min_free_kb}" ]; then
+    return
+  fi
+
+  warn "Low disk space detected during ${phase}. Starting safe cleanup."
+  prune_old_predeploy_backups
+  docker container prune -f >/dev/null 2>&1 || warn "docker container prune failed; continuing."
+  docker image prune -af >/dev/null 2>&1 || warn "docker image prune failed; continuing."
+  docker builder prune -af >/dev/null 2>&1 || warn "docker builder prune failed; continuing."
+
+  free_after="$(available_kb "${DEPLOY_PATH}")"
+  if [ -n "${free_after}" ]; then
+    log "Free disk after ${phase} cleanup: ${free_after}KB."
+  fi
+}
+
 ensure_repo_checkout() {
   local current_origin
   local path_meta
@@ -275,6 +336,7 @@ trap rollback ERR
 log "=== Stage 2/6: Git sync ==="
 sync_ref
 log "Checked out SHA: $(git rev-parse HEAD)"
+reclaim_disk_if_low "pre-backup"
 
 if [ "${RUN_BACKUP:-true}" = "true" ]; then
   log "=== Stage 3/6: Pre-deploy backup ==="
@@ -293,6 +355,7 @@ else
 fi
 
 log "=== Stage 4/6: Compose pull/build/up ==="
+reclaim_disk_if_low "pre-build"
 log "Pulling latest service images where available"
 run_compose pull --ignore-pull-failures || true
 

@@ -278,6 +278,22 @@ export function StudentsPage() {
     }
   }, []);
 
+  const loadSelectedStudentProfile = useCallback(
+    async (studentId: string): Promise<AdminStudentListItem | null> => {
+      const params = new URLSearchParams({
+        role: "student",
+        limit: "20",
+        offset: "0",
+        q: studentId
+      });
+      const page = await apiClient.request<PageResponse<AdminStudentListItem>>(
+        `/admin/users?${params.toString()}`
+      );
+      return page.items.find((item) => item.user_id === studentId) ?? null;
+    },
+    []
+  );
+
   const loadTeachersLookup = useCallback(async () => {
     setTeachersLoading(true);
     setTeachersError(null);
@@ -319,8 +335,12 @@ export function StudentsPage() {
   }, []);
 
   useEffect(() => {
+    if (!canUseStorage()) {
+      return;
+    }
     if (!selectedStudentId || !isValidUuid(selectedStudentId)) {
       localStorage.removeItem(ADMIN_STUDENT_FILTER_STORAGE_KEY);
+      setSelectedStudentProfile(null);
       persistSelectedStudent(null);
       return;
     }
@@ -346,6 +366,64 @@ export function StudentsPage() {
     }
     void loadStudentsForPicker();
   }, [isPickerOpen, loadStudentsForPicker]);
+
+  useEffect(() => {
+    if (!selectedStudentId || !isValidUuid(selectedStudentId)) {
+      return;
+    }
+    const studentId = selectedStudentId;
+
+    let cancelled = false;
+
+    async function syncSelectedStudentProfile() {
+      try {
+        const freshStudent = await loadSelectedStudentProfile(studentId);
+        if (cancelled) {
+          return;
+        }
+        if (!freshStudent) {
+          setSelectedStudentProfile(null);
+          return;
+        }
+
+        setSelectedStudentProfile(freshStudent);
+        setStudents((current) => {
+          const foundIndex = current.findIndex((item) => item.user_id === freshStudent.user_id);
+          if (foundIndex === -1) {
+            return [freshStudent, ...current];
+          }
+          const currentItem = current[foundIndex];
+          if (
+            currentItem.full_name === freshStudent.full_name &&
+            currentItem.email === freshStudent.email &&
+            currentItem.timezone === freshStudent.timezone &&
+            currentItem.is_active === freshStudent.is_active &&
+            currentItem.created_at_utc === freshStudent.created_at_utc &&
+            currentItem.updated_at_utc === freshStudent.updated_at_utc
+          ) {
+            return current;
+          }
+
+          const next = [...current];
+          next[foundIndex] = freshStudent;
+          return next;
+        });
+      } catch (requestError) {
+        if (
+          requestError instanceof ApiClientError &&
+          UNAVAILABLE_STATUSES.has(requestError.status)
+        ) {
+          return;
+        }
+      }
+    }
+
+    void syncSelectedStudentProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSelectedStudentProfile, selectedStudentId]);
 
   useEffect(() => {
     if (isPickerOpen || !query.trim()) {

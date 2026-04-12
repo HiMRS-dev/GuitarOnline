@@ -167,22 +167,16 @@ export function PackagesPage() {
   }, [loadPackages]);
 
   useEffect(() => {
-    const missingStudentIds = Array.from(
-      new Set(
-        packages
-          .map((pkg) => pkg.student_id)
-          .filter((studentId) => !(studentId in studentNamesById))
-      )
-    );
-    if (!missingStudentIds.length) {
+    const visibleStudentIds = Array.from(new Set(packages.map((pkg) => pkg.student_id)));
+    if (!visibleStudentIds.length) {
       return;
     }
 
     let cancelled = false;
 
-    async function loadMissingStudentNames() {
-      const unresolved = new Set(missingStudentIds);
-      const resolvedEntries: Array<readonly [string, string | null]> = [];
+    async function syncStudentNames() {
+      const unresolved = new Set(visibleStudentIds);
+      const resolvedNames: Record<string, string | null> = {};
       let offset = 0;
       const limit = 100;
 
@@ -201,7 +195,7 @@ export function PackagesPage() {
             if (!unresolved.has(student.user_id)) {
               continue;
             }
-            resolvedEntries.push([student.user_id, student.full_name] as const);
+            resolvedNames[student.user_id] = student.full_name;
             unresolved.delete(student.user_id);
           }
 
@@ -214,32 +208,32 @@ export function PackagesPage() {
           }
         }
       } catch {
-        // Keep unresolved IDs as null to avoid endless retries on temporary API errors.
+        return;
       }
 
-      for (const missingId of unresolved) {
-        resolvedEntries.push([missingId, null] as const);
+      for (const studentId of unresolved) {
+        resolvedNames[studentId] = null;
       }
 
-      if (cancelled || !resolvedEntries.length) {
+      if (cancelled || Object.keys(resolvedNames).length === 0) {
         return;
       }
 
       setStudentNamesById((current) => {
         const next = { ...current };
-        for (const [studentId, fullName] of resolvedEntries) {
+        for (const [studentId, fullName] of Object.entries(resolvedNames)) {
           next[studentId] = fullName;
         }
         return next;
       });
     }
 
-    void loadMissingStudentNames();
+    void syncStudentNames();
 
     return () => {
       cancelled = true;
     };
-  }, [packages, studentNamesById]);
+  }, [packages]);
 
   useEffect(() => {
     const normalizedInput = studentInput.trim();

@@ -273,6 +273,29 @@ export function UsersPage() {
   }, [secondaryBootstrapped, loading, loadSecondaryData]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const refreshOnFocus = () => {
+      void loadUsersData();
+      void loadSecondaryData();
+    };
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === "visible") {
+        refreshOnFocus();
+      }
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
+    return () => {
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
+    };
+  }, [loadSecondaryData, loadUsersData]);
+
+  useEffect(() => {
     if (copyNotice === null) {
       return;
     }

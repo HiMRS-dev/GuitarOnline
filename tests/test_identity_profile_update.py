@@ -22,6 +22,7 @@ class FakeIdentityService:
             id=current_user.id,
             email=current_user.email,
             full_name=payload.full_name,
+            age=payload.age if "age" in payload.model_fields_set else current_user.age,
             timezone=current_user.timezone,
             is_active=current_user.is_active,
             role=current_user.role,
@@ -35,6 +36,7 @@ def _build_current_user():
         id=uuid4(),
         email="student-test@guitaronline.dev",
         full_name="Initial Name",
+        age=None,
         timezone="UTC",
         is_active=True,
         role=SimpleNamespace(id=uuid4(), name=RoleEnum.STUDENT),
@@ -57,13 +59,15 @@ def test_patch_me_updates_full_name() -> None:
 
     response = client.patch(
         "/api/v1/identity/users/me",
-        json={"full_name": "Updated Name"},
+        json={"full_name": "Updated Name", "age": 24},
     )
 
     assert response.status_code == 200
     assert response.json()["full_name"] == "Updated Name"
+    assert response.json()["age"] == 24
     assert len(service.updated_payloads) == 1
     assert service.updated_payloads[0].full_name == "Updated Name"
+    assert service.updated_payloads[0].age == 24
 
 
 def test_patch_me_rejects_extra_fields() -> None:

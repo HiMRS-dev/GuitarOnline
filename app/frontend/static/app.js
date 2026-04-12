@@ -1,6 +1,5 @@
 const API_PREFIX = "/api/v1";
 const ADMIN_DASHBOARD_PATH = "/admin/kpi";
-const PROFILE_AGE_STORAGE_KEY_PREFIX = "portal_profile_age:";
 
 const state = {
   accessToken: null,
@@ -505,52 +504,6 @@ async function loadProfile() {
   renderProfile(user);
 }
 
-function getProfileAgeStorageKey(user) {
-  const userId = user?.id ? String(user.id) : "";
-  if (!userId) {
-    return null;
-  }
-  return `${PROFILE_AGE_STORAGE_KEY_PREFIX}${userId}`;
-}
-
-function loadStoredProfileAge(user) {
-  const storageKey = getProfileAgeStorageKey(user);
-  if (!storageKey) {
-    return "";
-  }
-
-  try {
-    const storedValue = window.localStorage.getItem(storageKey);
-    if (!storedValue) {
-      return "";
-    }
-    const parsedAge = Number(storedValue);
-    if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) {
-      return "";
-    }
-    return String(parsedAge);
-  } catch (_) {
-    return "";
-  }
-}
-
-function saveStoredProfileAge(user, age) {
-  const storageKey = getProfileAgeStorageKey(user);
-  if (!storageKey) {
-    return;
-  }
-
-  try {
-    if (age === null) {
-      window.localStorage.removeItem(storageKey);
-      return;
-    }
-    window.localStorage.setItem(storageKey, String(age));
-  } catch (_) {
-    // Keep profile save flow stable even if browser storage is unavailable.
-  }
-}
-
 async function handleProfileSave(event) {
   const form = event.target;
   if (!form || form.id !== "profile-form") {
@@ -592,10 +545,9 @@ async function handleProfileSave(event) {
   await withButtonAction(submitButton, async () => {
     const updatedUser = await apiRequest("/identity/users/me", {
       method: "PATCH",
-      body: { full_name: normalizedFullName },
+      body: { full_name: normalizedFullName, age: normalizedAge },
     });
     state.currentUser = updatedUser;
-    saveStoredProfileAge(updatedUser, normalizedAge);
     renderProfile(updatedUser);
     setGlobalStatus("Профиль сохранен.", "success");
   });
@@ -606,7 +558,7 @@ function renderProfile(user) {
     user.role?.name === "admin"
       ? `<p class="meta"><a href="${ADMIN_DASHBOARD_PATH}">\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0430\u0434\u043C\u0438\u043D-\u043F\u0430\u043D\u0435\u043B\u044C</a></p>`
       : "";
-  const storedAgeValue = loadStoredProfileAge(user);
+  const ageValue = user.age === null || user.age === undefined ? "" : String(user.age);
 
   elements.profileContent.innerHTML = `
     <article class="card-item">
@@ -636,13 +588,13 @@ function renderProfile(user) {
             min="1"
             max="120"
             step="1"
-            value="${escapeHtml(storedAgeValue)}"
+            value="${escapeHtml(ageValue)}"
             placeholder="\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, 25"
           />
         </label>
         <button type="submit">\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C</button>
       </form>
-      <p class="hint">\u0412\u043E\u0437\u0440\u0430\u0441\u0442 \u0445\u0440\u0430\u043D\u0438\u0442\u0441\u044F \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u043E \u0432 \u044D\u0442\u043E\u043C \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435.</p>
+      <p class="hint">\u0418\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0432 \u0431\u0430\u0437\u0435 \u0434\u0430\u043D\u043D\u044B\u0445.</p>
     </article>
   `;
 }

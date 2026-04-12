@@ -56,9 +56,18 @@ class IdentityRepository:
         await self.session.refresh(user, attribute_names=["role"])
         return user
 
-    async def update_user(self, user: User, *, full_name: str | None = None) -> User:
+    async def update_user(
+        self,
+        user: User,
+        *,
+        full_name: str | None = None,
+        age: int | None = None,
+        update_age: bool = False,
+    ) -> User:
         if full_name is not None:
             user.full_name = full_name
+        if update_age:
+            user.age = age
 
         await self.session.flush()
         await self.session.refresh(user, attribute_names=["role"])

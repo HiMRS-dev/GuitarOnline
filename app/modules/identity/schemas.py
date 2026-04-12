@@ -35,6 +35,7 @@ class UserProfileUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     full_name: str = Field(min_length=1, max_length=255)
+    age: int | None = Field(default=None, ge=1, le=120)
 
 
 class LoginRequest(BaseModel):
@@ -66,6 +67,7 @@ class UserRead(BaseModel):
     id: UUID
     email: EmailStr
     full_name: str
+    age: int | None
     timezone: str
     is_active: bool
     role: RoleRead

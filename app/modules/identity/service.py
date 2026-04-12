@@ -179,10 +179,15 @@ class IdentityService:
         normalized_full_name = payload.full_name.strip()
         if not normalized_full_name:
             raise BusinessRuleException("Full name cannot be empty")
+        payload_data = payload.model_dump(exclude_unset=True)
+        should_update_age = "age" in payload_data
+        age_value = payload_data.get("age")
 
         updated_user = await self.repository.update_user(
             current_user,
             full_name=normalized_full_name,
+            age=age_value,
+            update_age=should_update_age,
         )
         await self._commit_if_supported()
         return updated_user

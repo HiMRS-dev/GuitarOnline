@@ -7,6 +7,8 @@ const state = {
   slots: [],
   bookings: [],
   packages: [],
+  packagePlans: [],
+  payments: [],
   lessons: [],
   adminOperations: {
     lastExpiredHolds: null,
@@ -84,6 +86,7 @@ function bindEvents() {
   elements.runExpirePackagesButton?.addEventListener("click", handleExpirePackages);
   elements.slotsContent?.addEventListener("click", handleSlotsActionClick);
   elements.bookingsContent?.addEventListener("click", handleBookingsActionClick);
+  elements.packagesContent?.addEventListener("click", handlePackagesActionClick);
 
   for (const button of elements.tabButtons) {
     button.addEventListener("click", () => {
@@ -110,6 +113,8 @@ function clearSession() {
   state.slots = [];
   state.bookings = [];
   state.packages = [];
+  state.packagePlans = [];
+  state.payments = [];
   state.lessons = [];
   state.adminOperations.lastExpiredHolds = null;
   state.adminOperations.lastExpiredPackages = null;
@@ -276,7 +281,9 @@ function applyRoleAwareTabs() {
 
 function getHoldEligiblePackages() {
   return state.packages.filter(
-    (pkg) => pkg.status === "active" && Number(pkg.lessons_left) > 0,
+    (pkg) =>
+      pkg.status === "active" &&
+      Number(pkg.lessons_left) - Number(pkg.lessons_reserved ?? 0) > 0,
   );
 }
 
@@ -401,6 +408,8 @@ async function refreshBookings() {
 async function refreshPackages() {
   if (!state.currentUser) {
     state.packages = [];
+    state.packagePlans = [];
+    state.payments = [];
     renderEmpty(elements.packagesContent, "Профиль не загружен.");
     renderSlotPackageControls();
     if (state.slots.length > 0) {
@@ -411,6 +420,8 @@ async function refreshPackages() {
 
   if (!isStudentRole()) {
     state.packages = [];
+    state.packagePlans = [];
+    state.payments = [];
     renderEmpty(
       elements.packagesContent,
       "Раздел пакетов доступен только для роли student.",
@@ -423,10 +434,15 @@ async function refreshPackages() {
   }
 
   try {
-    const page = await apiRequest(
-      `/billing/packages/students/${state.currentUser.id}?limit=20&offset=0`,
-    );
-    state.packages = page.items ?? [];
+    const [packagesPage, plansPayload, paymentsPage] = await Promise.all([
+      apiRequest(`/billing/packages/students/${state.currentUser.id}?limit=50&offset=0`),
+      apiRequest("/billing/plans"),
+      apiRequest(`/billing/payments/students/${state.currentUser.id}?limit=50&offset=0`),
+    ]);
+
+    state.packages = packagesPage.items ?? [];
+    state.packagePlans = Array.isArray(plansPayload) ? plansPayload : [];
+    state.payments = paymentsPage.items ?? [];
     renderPackages(state.packages);
     renderSlotPackageControls();
     if (state.slots.length > 0) {
@@ -434,6 +450,8 @@ async function refreshPackages() {
     }
   } catch (error) {
     state.packages = [];
+    state.packagePlans = [];
+    state.payments = [];
     renderEmpty(elements.packagesContent, `Не удалось загрузить пакеты: ${error.message}`);
     renderSlotPackageControls();
     if (state.slots.length > 0) {
@@ -580,7 +598,8 @@ function renderSlotPackageControls() {
   elements.slotPackageControls.hidden = false;
   elements.slotPackageSelect.innerHTML = eligiblePackages
     .map((pkg) => {
-      return `<option value="${escapeHtml(pkg.id)}">${escapeHtml(pkg.id)} (уроков: ${escapeHtml(pkg.lessons_left)})</option>`;
+      const availableLessons = Number(pkg.lessons_left) - Number(pkg.lessons_reserved ?? 0);
+      return `<option value="${escapeHtml(pkg.id)}">${escapeHtml(pkg.id)} (доступно уроков: ${escapeHtml(availableLessons)})</option>`;
     })
     .join("");
 
@@ -599,6 +618,39 @@ function renderSlots(slots) {
     renderEmpty(elements.slotsContent, "Открытых слотов пока нет.");
     return;
   }
+
+  const teacherStats = new Map();
+  for (const slot of slots) {
+    const teacherId = String(slot.teacher_id);
+    const existing = teacherStats.get(teacherId) ?? {
+      count: 0,
+      nextStartAt: null,
+    };
+    existing.count += 1;
+    if (!existing.nextStartAt || new Date(slot.start_at).getTime() < new Date(existing.nextStartAt).getTime()) {
+      existing.nextStartAt = slot.start_at;
+    }
+    teacherStats.set(teacherId, existing);
+  }
+
+  const teacherOverview = Array.from(teacherStats.entries())
+    .sort((left, right) => {
+      const byCount = right[1].count - left[1].count;
+      if (byCount !== 0) {
+        return byCount;
+      }
+      return left[0].localeCompare(right[0]);
+    })
+    .map(([teacherId, stats]) => {
+      return `
+        <article class="card-item">
+          <h4>Преподаватель ${escapeHtml(teacherId)}</h4>
+          <p class="meta"><strong>Свободных окон:</strong> ${escapeHtml(stats.count)}</p>
+          <p class="meta"><strong>Ближайшее окно:</strong> ${formatDateTime(stats.nextStartAt)}</p>
+        </article>
+      `;
+    })
+    .join("");
 
   const canCreateHold = isStudentRole() && getHoldEligiblePackages().length > 0;
   const cards = slots
@@ -620,11 +672,20 @@ function renderSlots(slots) {
     })
     .join("");
 
-  const hint = isStudentRole() && !canCreateHold
-    ? "<p class=\"hint\">Для hold нужен активный пакет с оставшимися уроками.</p>"
+  const holdHint = isStudentRole() && !canCreateHold
+    ? '<p class="hint">Для hold нужен активный пакет с оставшимися уроками.</p>'
     : "";
 
-  elements.slotsContent.innerHTML = `${hint}${cards}`;
+  elements.slotsContent.innerHTML = `
+    <article class="card-item">
+      <h4>Свободные окна по преподавателям</h4>
+      <p class="meta"><strong>Всего преподавателей:</strong> ${escapeHtml(teacherStats.size)}</p>
+      <p class="meta"><strong>Всего доступных слотов:</strong> ${escapeHtml(slots.length)}</p>
+    </article>
+    ${teacherOverview}
+    ${holdHint}
+    ${cards}
+  `;
 }
 
 function renderBookings(bookings) {
@@ -715,24 +776,108 @@ function renderBookings(bookings) {
 }
 
 function renderPackages(packages) {
-  if (packages.length === 0) {
-    renderEmpty(elements.packagesContent, "У вас пока нет пакетов.");
-    return;
-  }
+  const totalLessonsPurchased = packages.reduce((sum, item) => sum + Number(item.lessons_total ?? 0), 0);
+  const totalLessonsLeft = packages.reduce((sum, item) => sum + Number(item.lessons_left ?? 0), 0);
+  const totalLessonsReserved = packages.reduce((sum, item) => sum + Number(item.lessons_reserved ?? 0), 0);
+  const activePackagesCount = packages.filter((item) => String(item.status).toLowerCase() === "active").length;
 
-  elements.packagesContent.innerHTML = packages
-    .map((item) => {
-      return `
-        <article class="card-item">
-          <h4>Пакет ${escapeHtml(item.id)}</h4>
-          <p class="meta"><strong>Статус:</strong> ${escapeHtml(item.status)}</p>
-          <p class="meta"><strong>Уроков всего:</strong> ${escapeHtml(item.lessons_total)}</p>
-          <p class="meta"><strong>Осталось уроков:</strong> ${escapeHtml(item.lessons_left)}</p>
-          <p class="meta"><strong>Действует до:</strong> ${formatDateTime(item.expires_at)}</p>
-        </article>
-      `;
-    })
-    .join("");
+  const summary = `
+    <article class="card-item">
+      <h4>Сводка по пакетам</h4>
+      <p class="meta"><strong>Пакетов куплено:</strong> ${escapeHtml(packages.length)}</p>
+      <p class="meta"><strong>Уроков куплено:</strong> ${escapeHtml(totalLessonsPurchased)}</p>
+      <p class="meta"><strong>Уроков осталось:</strong> ${escapeHtml(totalLessonsLeft)}</p>
+      <p class="meta"><strong>В резерве:</strong> ${escapeHtml(totalLessonsReserved)}</p>
+      <p class="meta"><strong>Активных пакетов:</strong> ${escapeHtml(activePackagesCount)}</p>
+    </article>
+  `;
+
+  const plansMarkup = state.packagePlans.length === 0
+    ? '<div class="empty-note">Тарифы для покупки временно недоступны.</div>'
+    : state.packagePlans
+        .map((plan) => {
+          const priceLabel = `${plan.price_amount} ${plan.price_currency}`;
+          return `
+            <article class="card-item">
+              <h4>${escapeHtml(plan.title)}</h4>
+              <p class="meta">${escapeHtml(plan.description ?? "")}</p>
+              <p class="meta"><strong>Уроков:</strong> ${escapeHtml(plan.lessons_total)}</p>
+              <p class="meta"><strong>Срок:</strong> ${escapeHtml(plan.duration_days)} дней</p>
+              <p class="meta"><strong>Цена:</strong> ${escapeHtml(priceLabel)}</p>
+              <div class="action-row">
+                <button
+                  type="button"
+                  class="action-btn"
+                  data-action="purchase-plan"
+                  data-plan-id="${escapeHtml(plan.id)}"
+                >
+                  Купить пакет
+                </button>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+
+  const packageListMarkup = packages.length === 0
+    ? '<div class="empty-note">У вас пока нет пакетов.</div>'
+    : packages
+        .map((item) => {
+          const packagePrice =
+            item.price_amount === null || item.price_amount === undefined
+              ? "-"
+              : `${item.price_amount} ${item.price_currency ?? ""}`.trim();
+          return `
+            <article class="card-item">
+              <h4>Пакет ${escapeHtml(item.id)}</h4>
+              <p class="meta"><strong>Статус:</strong> ${escapeHtml(item.status)}</p>
+              <p class="meta"><strong>Уроков всего:</strong> ${escapeHtml(item.lessons_total)}</p>
+              <p class="meta"><strong>Осталось уроков:</strong> ${escapeHtml(item.lessons_left)}</p>
+              <p class="meta"><strong>В резерве:</strong> ${escapeHtml(item.lessons_reserved)}</p>
+              <p class="meta"><strong>Стоимость:</strong> ${escapeHtml(packagePrice)}</p>
+              <p class="meta"><strong>Действует до:</strong> ${formatDateTime(item.expires_at)}</p>
+            </article>
+          `;
+        })
+        .join("");
+
+  const paymentsMarkup = state.payments.length === 0
+    ? '<div class="empty-note">История покупок пока пустая.</div>'
+    : state.payments
+        .map((payment) => {
+          const amountLabel = `${payment.amount} ${payment.currency}`;
+          return `
+            <article class="card-item">
+              <h4>Платеж ${escapeHtml(payment.id)}</h4>
+              <p class="meta"><strong>Пакет:</strong> ${escapeHtml(payment.package_id)}</p>
+              <p class="meta"><strong>Статус:</strong> ${escapeHtml(payment.status)}</p>
+              <p class="meta"><strong>Сумма:</strong> ${escapeHtml(amountLabel)}</p>
+              <p class="meta"><strong>Провайдер:</strong> ${escapeHtml(payment.provider_name)}</p>
+              <p class="meta"><strong>Оплачен:</strong> ${formatDateTime(payment.paid_at)}</p>
+              <p class="meta"><strong>Создан:</strong> ${formatDateTime(payment.created_at)}</p>
+            </article>
+          `;
+        })
+        .join("");
+
+  elements.packagesContent.innerHTML = `
+    ${summary}
+    <article class="card-item">
+      <h4>Покупка пакетов</h4>
+      <p class="meta">Выберите тариф и купите пакет занятий.</p>
+    </article>
+    ${plansMarkup}
+    <article class="card-item">
+      <h4>Мои пакеты</h4>
+      <p class="meta">Текущие и архивные пакеты занятий.</p>
+    </article>
+    ${packageListMarkup}
+    <article class="card-item">
+      <h4>История покупок</h4>
+      <p class="meta">Все ваши платежи по пакетам.</p>
+    </article>
+    ${paymentsMarkup}
+  `;
 }
 
 async function handleSlotsActionClick(event) {
@@ -857,6 +1002,41 @@ async function handleBookingsActionClick(event) {
   });
 }
 
+async function handlePackagesActionClick(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) {
+    return;
+  }
+
+  const action = button.dataset.action;
+  if (action !== "purchase-plan") {
+    return;
+  }
+
+  if (!isStudentRole()) {
+    setGlobalStatus("Покупка пакетов доступна только для роли student.", "error");
+    return;
+  }
+
+  const planId = button.dataset.planId ?? "";
+  if (!planId) {
+    setGlobalStatus("Не удалось определить выбранный тариф.", "error");
+    return;
+  }
+
+  await withButtonAction(button, async () => {
+    const purchase = await apiRequest("/billing/packages/purchase", {
+      method: "POST",
+      body: {
+        plan_id: planId,
+      },
+    });
+
+    setGlobalStatus(`Пакет куплен: ${purchase.package.id}`, "success");
+    await refreshAfterBillingMutation();
+  });
+}
+
 async function handleExpireHolds(event) {
   if (!isAdminRole()) {
     setGlobalStatus("Операция доступна только для роли admin.", "error");
@@ -899,6 +1079,10 @@ async function handleExpirePackages(event) {
 
 async function refreshAfterBookingMutation() {
   await Promise.all([refreshSlots(), refreshBookings(), refreshPackages(), refreshLessons()]);
+}
+
+async function refreshAfterBillingMutation() {
+  await Promise.all([refreshSlots(), refreshPackages()]);
 }
 
 async function withButtonAction(button, action) {
@@ -965,10 +1149,12 @@ function translateBackendMessage(message) {
     "Package not found": "Пакет не найден.",
     "Package does not belong to current student": "Пакет не принадлежит текущему студенту.",
     "Package does not belong to current user": "Пакет не принадлежит текущему пользователю.",
+    "Package plan not found": "Выбранный тариф не найден.",
     "Package is not active": "Пакет не активен.",
     "Package is expired": "Срок действия пакета истек.",
     "No lessons left in package": "В пакете не осталось уроков.",
     "No lessons left": "В пакете не осталось уроков.",
+    "Only students can purchase packages": "Покупка пакетов доступна только студентам.",
     "Only students can hold bookings": "Только студенты могут создавать HOLD-бронирования.",
     "Booking not found": "Бронирование не найдено.",
     "Only HOLD booking can be confirmed": "Подтвердить можно только бронирование в статусе HOLD.",

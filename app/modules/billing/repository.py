@@ -93,6 +93,24 @@ class BillingRepository:
         await self.session.flush()
         return payment
 
+    async def list_payments_by_student(
+        self,
+        student_id: UUID,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Payment], int]:
+        base_stmt: Select[tuple[Payment]] = (
+            select(Payment)
+            .join(LessonPackage, LessonPackage.id == Payment.package_id)
+            .where(LessonPackage.student_id == student_id)
+        )
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = int((await self.session.scalar(count_stmt)) or 0)
+
+        stmt = base_stmt.order_by(Payment.created_at.desc()).limit(limit).offset(offset)
+        items = (await self.session.scalars(stmt)).all()
+        return items, total
+
     async def get_payment_by_id(self, payment_id: UUID) -> Payment | None:
         stmt = select(Payment).where(Payment.id == payment_id)
         return await self.session.scalar(stmt)

@@ -32,6 +32,7 @@ class FakePayment:
     provider_payment_id: str | None = None
     external_reference: str | None = None
     paid_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -133,6 +134,22 @@ class FakeBillingRepository:
         )
         self._payments[payment.id] = payment
         return payment
+
+    async def list_payments_by_student(
+        self,
+        student_id: UUID,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[FakePayment], int]:
+        items = [
+            payment
+            for payment in self._payments.values()
+            if (package := self._packages.get(payment.package_id)) is not None
+            and package.student_id == student_id
+        ]
+        items.sort(key=lambda item: item.created_at, reverse=True)
+        total = len(items)
+        return items[offset : offset + limit], total
 
     async def set_package_status(
         self,
@@ -748,3 +765,92 @@ async def test_handle_payment_webhook_returns_none_when_provider_ignores_payload
     assert len(provider.webhook_calls) == 1
     assert audit_repo.audit_logs == []
     assert audit_repo.outbox_events == []
+
+
+@pytest.mark.asyncio
+async def test_list_package_plans_returns_predefined_catalog() -> None:
+    service, _ = make_service()
+
+    plans = service.list_package_plans()
+
+    assert len(plans) >= 3
+    assert plans[0].id == "starter-4"
+    assert plans[0].lessons_total > 0
+    assert plans[0].duration_days > 0
+
+
+@pytest.mark.asyncio
+async def test_purchase_package_creates_package_and_succeeded_payment() -> None:
+    student = make_actor(RoleEnum.STUDENT)
+    service, audit_repo = make_service()
+
+    plan, package, payment = await service.purchase_package(
+        plan_id="starter-4",
+        provider_name="manual_paid",
+        actor=student,
+    )
+
+    assert package.student_id == student.id
+    assert package.lessons_total == plan.lessons_total
+    assert package.price_amount == plan.price_amount
+    assert package.price_currency == plan.price_currency
+    assert payment.package_id == package.id
+    assert payment.amount == plan.price_amount
+    assert payment.currency == plan.price_currency
+    assert payment.status == PaymentStatusEnum.SUCCEEDED
+    assert any(log["action"] == "billing.package.purchase" for log in audit_repo.audit_logs)
+    assert any(log["action"] == "billing.payment.purchase.capture" for log in audit_repo.audit_logs)
+
+
+@pytest.mark.asyncio
+async def test_purchase_package_requires_student_role() -> None:
+    admin = make_actor(RoleEnum.ADMIN)
+    service, _ = make_service()
+
+    with pytest.raises(UnauthorizedException):
+        await service.purchase_package(
+            plan_id="starter-4",
+            provider_name="manual_paid",
+            actor=admin,
+        )
+
+
+@pytest.mark.asyncio
+async def test_purchase_package_rejects_unknown_plan() -> None:
+    student = make_actor(RoleEnum.STUDENT)
+    service, _ = make_service()
+
+    with pytest.raises(billing_service_module.NotFoundException):
+        await service.purchase_package(
+            plan_id="unknown-plan",
+            provider_name="manual_paid",
+            actor=student,
+        )
+
+
+@pytest.mark.asyncio
+async def test_list_student_payments_returns_history_for_owner() -> None:
+    student = make_actor(RoleEnum.STUDENT)
+    another_student = make_actor(RoleEnum.STUDENT)
+    service, _ = make_service()
+
+    await service.purchase_package(
+        plan_id="starter-4",
+        provider_name="manual_paid",
+        actor=student,
+    )
+    await service.purchase_package(
+        plan_id="starter-4",
+        provider_name="manual_paid",
+        actor=another_student,
+    )
+
+    items, total = await service.list_student_payments(
+        student_id=student.id,
+        actor=student,
+        limit=20,
+        offset=0,
+    )
+
+    assert total == 1
+    assert len(items) == 1

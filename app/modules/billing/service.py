@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -22,8 +23,51 @@ from app.shared.exceptions import BusinessRuleException, NotFoundException, Unau
 from app.shared.utils import ensure_utc, utc_now
 
 
+@dataclass(frozen=True, slots=True)
+class PackagePlan:
+    """Predefined package catalog plan."""
+
+    id: str
+    title: str
+    description: str
+    lessons_total: int
+    duration_days: int
+    price_amount: Decimal
+    price_currency: str = "USD"
+
+
 class BillingService:
     """Billing domain service."""
+
+    _PACKAGE_PLANS: tuple[PackagePlan, ...] = (
+        PackagePlan(
+            id="starter-4",
+            title="Старт 4",
+            description="4 урока на 30 дней для мягкого старта.",
+            lessons_total=4,
+            duration_days=30,
+            price_amount=Decimal("49.00"),
+            price_currency="USD",
+        ),
+        PackagePlan(
+            id="standard-8",
+            title="Стандарт 8",
+            description="8 уроков на 45 дней.",
+            lessons_total=8,
+            duration_days=45,
+            price_amount=Decimal("89.00"),
+            price_currency="USD",
+        ),
+        PackagePlan(
+            id="intensive-12",
+            title="Интенсив 12",
+            description="12 уроков на 60 дней.",
+            lessons_total=12,
+            duration_days=60,
+            price_amount=Decimal("129.00"),
+            price_currency="USD",
+        ),
+    )
 
     def __init__(
         self,
@@ -34,6 +78,18 @@ class BillingService:
         self.repository = repository
         self.audit_repository = audit_repository
         self.provider_registry = provider_registry or PaymentProviderRegistry()
+
+    @classmethod
+    def _resolve_package_plan(cls, plan_id: str) -> PackagePlan:
+        normalized_id = plan_id.strip().lower()
+        for plan in cls._PACKAGE_PLANS:
+            if plan.id == normalized_id:
+                return plan
+        raise NotFoundException("Package plan not found")
+
+    def list_package_plans(self) -> list[PackagePlan]:
+        """Return package plans that can be purchased by students."""
+        return list(self._PACKAGE_PLANS)
 
     @staticmethod
     def _available_lessons(package: LessonPackage) -> int:
@@ -297,6 +353,91 @@ class BillingService:
             limit=limit,
             offset=offset,
         )
+
+    async def list_student_payments(
+        self,
+        student_id: UUID,
+        actor: User,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[Payment], int]:
+        """List purchase history payments for student."""
+        if actor.role.name != RoleEnum.ADMIN and actor.id != student_id:
+            raise UnauthorizedException("Access denied")
+        return await self.repository.list_payments_by_student(
+            student_id=student_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def purchase_package(
+        self,
+        *,
+        plan_id: str,
+        provider_name: str,
+        actor: User,
+    ) -> tuple[PackagePlan, LessonPackage, Payment]:
+        """Purchase predefined package plan as student."""
+        if actor.role.name != RoleEnum.STUDENT:
+            raise UnauthorizedException("Only students can purchase packages")
+
+        plan = self._resolve_package_plan(plan_id)
+        expires_at = utc_now() + timedelta(days=plan.duration_days)
+        package = await self.repository.create_package(
+            student_id=actor.id,
+            lessons_total=plan.lessons_total,
+            expires_at=expires_at,
+            price_amount=plan.price_amount,
+            price_currency=plan.price_currency,
+        )
+        await self.audit_repository.create_audit_log(
+            actor_id=actor.id,
+            action="billing.package.purchase",
+            entity_type="lesson_package",
+            entity_id=str(package.id),
+            payload={
+                "plan_id": plan.id,
+                "student_id": str(package.student_id),
+                "lessons_total": package.lessons_total,
+                "price_amount": str(package.price_amount),
+                "price_currency": package.price_currency,
+                "expires_at": package.expires_at.isoformat(),
+            },
+        )
+        await self.audit_repository.create_outbox_event(
+            aggregate_type="billing",
+            aggregate_id=str(package.id),
+            event_type="billing.package.created",
+            payload={
+                "package_id": str(package.id),
+                "student_id": str(package.student_id),
+                "lessons_total": package.lessons_total,
+                "price_amount": str(package.price_amount),
+                "price_currency": package.price_currency,
+                "plan_id": plan.id,
+            },
+        )
+
+        payment = await self.create_payment(
+            PaymentCreate(
+                package_id=package.id,
+                amount=plan.price_amount,
+                currency=plan.price_currency,
+                provider_name=provider_name,
+                external_reference=f"package-purchase-{plan.id}-{package.id}",
+            ),
+            actor,
+        )
+        if payment.status != PaymentStatusEnum.SUCCEEDED:
+            payment = await self._set_payment_status(
+                payment=payment,
+                status=PaymentStatusEnum.SUCCEEDED,
+                actor_id=actor.id,
+                action="billing.payment.purchase.capture",
+                payload_extra={"plan_id": plan.id},
+            )
+
+        return plan, package, payment
 
     async def get_active_package(self, package_id: UUID, student_id: UUID) -> LessonPackage:
         """Return active package with all business checks."""

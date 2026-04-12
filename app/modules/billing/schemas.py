@@ -60,6 +60,25 @@ class PackageRead(BaseModel):
     updated_at: datetime
 
 
+class PackagePlanRead(BaseModel):
+    """Package plan catalog item for student purchase flow."""
+
+    id: str
+    title: str
+    description: str
+    lessons_total: int = Field(ge=1)
+    duration_days: int = Field(ge=1)
+    price_amount: Decimal = Field(gt=0)
+    price_currency: str = Field(default="USD", min_length=3, max_length=3)
+
+
+class PackagePurchaseRequest(BaseModel):
+    """Purchase request for predefined package plan."""
+
+    plan_id: str = Field(min_length=1, max_length=64)
+    provider_name: str = Field(default="manual_paid", min_length=1, max_length=64)
+
+
 class PaymentCreate(BaseModel):
     """Create payment request."""
 
@@ -92,3 +111,11 @@ class PaymentRead(BaseModel):
     paid_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class PackagePurchaseRead(BaseModel):
+    """Purchase response payload with package and payment snapshots."""
+
+    plan: PackagePlanRead
+    package: PackageRead
+    payment: PaymentRead

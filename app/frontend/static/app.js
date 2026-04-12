@@ -18,6 +18,8 @@ const state = {
 };
 
 const elements = {
+  layout: document.querySelector(".layout"),
+  authPanel: document.querySelector(".auth-panel"),
   registerForm: document.getElementById("register-form"),
   loginForm: document.getElementById("login-form"),
   logoutButton: document.getElementById("logout-btn"),
@@ -132,6 +134,12 @@ function moveToAuthState(message = "Сессия истекла. Выполни�
 }
 
 function showAuthMode() {
+  if (elements.layout) {
+    elements.layout.classList.remove("dashboard-only");
+  }
+  if (elements.authPanel) {
+    elements.authPanel.hidden = false;
+  }
   elements.dashboardPanel.hidden = true;
   elements.logoutButton.hidden = true;
   elements.profileContent.innerHTML = "";
@@ -194,6 +202,12 @@ function applyAuthMode(mode) {
 }
 
 function showDashboardMode() {
+  if (elements.layout) {
+    elements.layout.classList.add("dashboard-only");
+  }
+  if (elements.authPanel) {
+    elements.authPanel.hidden = true;
+  }
   elements.dashboardPanel.hidden = false;
   elements.logoutButton.hidden = false;
 }

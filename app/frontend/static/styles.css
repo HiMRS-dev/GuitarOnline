@@ -160,6 +160,10 @@ button:hover,
   gap: 14px;
 }
 
+.layout.dashboard-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 16px;

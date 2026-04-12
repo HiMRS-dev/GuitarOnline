@@ -216,6 +216,13 @@ cd "${DEPLOY_PATH}"
 log "Deploy user: $(id -un)"
 log "Origin URL: $(git remote get-url origin 2>/dev/null || echo '<unset>')"
 log "Requested ref: ${REF_NAME}"
+
+TMPDIR="${DEPLOY_PATH}/.tmp/deploy"
+mkdir -p "${TMPDIR}"
+find "${TMPDIR}" -mindepth 1 -maxdepth 1 -type f -name '.tmp-compose-build-metadataFile-*' -delete 2>/dev/null || true
+export TMPDIR
+log "Using TMPDIR=${TMPDIR} for compose temporary files."
+
 if [ ! -f "${DEPLOY_PATH}/.env" ]; then
   die "Missing ${DEPLOY_PATH}/.env. Ensure PROD_ENV_FILE_B64 is configured and upload step succeeded."
 fi

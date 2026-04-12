@@ -244,20 +244,20 @@ sync_ref() {
 
   if git show-ref --verify --quiet "refs/remotes/origin/${REF_NAME}"; then
     log "Checking out branch origin/${REF_NAME}"
-    git checkout -B "${REF_NAME}" "origin/${REF_NAME}"
+    git checkout -f -B "${REF_NAME}" "origin/${REF_NAME}"
     git pull --ff-only origin "${REF_NAME}"
     return
   fi
 
   if git show-ref --verify --quiet "refs/tags/${REF_NAME}"; then
     log "Checking out tag ${REF_NAME} in detached mode"
-    git checkout --detach "refs/tags/${REF_NAME}"
+    git checkout --detach -f "refs/tags/${REF_NAME}"
     return
   fi
 
   if git rev-parse --verify --quiet "${REF_NAME}^{commit}" >/dev/null 2>&1; then
     log "Checking out commit ${REF_NAME} in detached mode"
-    git checkout --detach "${REF_NAME}"
+    git checkout --detach -f "${REF_NAME}"
     return
   fi
 

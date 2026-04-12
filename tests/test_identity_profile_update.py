@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -38,8 +38,8 @@ def _build_current_user():
         timezone="UTC",
         is_active=True,
         role=SimpleNamespace(id=uuid4(), name=RoleEnum.STUDENT),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(datetime.UTC),
+        updated_at=datetime.now(datetime.UTC),
     )
 
 

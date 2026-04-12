@@ -515,6 +515,10 @@ function handleProfileActionClick(event) {
     return;
   }
 
+  if (!isStudentRole()) {
+    return;
+  }
+
   const action = actionTrigger.dataset.profileAction;
   if (action === "edit") {
     if (!state.currentUser) {
@@ -538,6 +542,10 @@ async function handleProfileSave(event) {
     return;
   }
   event.preventDefault();
+
+  if (!isStudentRole()) {
+    return;
+  }
 
   const fullNameInput = form.full_name;
   const ageInput = form.age;
@@ -582,20 +590,22 @@ async function handleProfileSave(event) {
 }
 
 function renderProfile(user, options = {}) {
-  const isEditing = options.isEditing === true;
+  const roleName = user.role?.name ?? "";
+  const isStudentProfile = roleName === "student";
+  const isEditing = isStudentProfile && options.isEditing === true;
   const adminPanelLink =
-    user.role?.name === "admin"
+    roleName === "admin"
       ? `<p class="meta"><a href="${ADMIN_DASHBOARD_PATH}">\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0430\u0434\u043C\u0438\u043D-\u043F\u0430\u043D\u0435\u043B\u044C</a></p>`
       : "";
   const fullNameValue = user.full_name ?? "";
   const fullNameDisplay = fullNameValue.trim() ? fullNameValue : "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D\u043E";
   const ageValue = user.age === null || user.age === undefined ? "" : String(user.age);
   const ageDisplay = ageValue || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D";
-  const profileDetails = `
+  const studentProfileDetails = `
       <p class="meta"><strong>\u0424\u0418\u041E:</strong> ${escapeHtml(fullNameDisplay)}</p>
       <p class="meta"><strong>\u0412\u043E\u0437\u0440\u0430\u0441\u0442:</strong> ${escapeHtml(ageDisplay)}</p>
   `;
-  const profileEditor = `
+  const studentProfileEditor = `
       <form id="profile-form" class="form-stack">
         <label>
           \u0424\u0418\u041E
@@ -627,11 +637,20 @@ function renderProfile(user, options = {}) {
       </form>
       <p class="hint">\u0418\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u044F \u043F\u0440\u043E\u0444\u0438\u043B\u044F \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u0432 \u0431\u0430\u0437\u0435 \u0434\u0430\u043D\u043D\u044B\u0445.</p>
   `;
-  const profileViewActions = `
+  const studentProfileViewActions = `
       <div class="action-row">
         <button type="button" class="secondary" data-profile-action="edit">\u0418\u0437\u043C\u0435\u043D\u0438\u0442\u044C</button>
       </div>
   `;
+  const nonStudentProfileDetails = `
+      <p class="meta"><strong>ID:</strong> ${escapeHtml(user.id ?? "-")}</p>
+      <p class="meta"><strong>\u0420\u043E\u043B\u044C:</strong> ${escapeHtml(roleName || "-")}</p>
+  `;
+  const roleSpecificSection = isStudentProfile
+    ? isEditing
+      ? studentProfileEditor
+      : `${studentProfileDetails}${studentProfileViewActions}`
+    : nonStudentProfileDetails;
 
   elements.profileContent.innerHTML = `
     <article class="card-item">
@@ -641,8 +660,7 @@ function renderProfile(user, options = {}) {
       <p class="meta"><strong>\u0410\u043A\u0442\u0438\u0432\u0435\u043D:</strong> ${user.is_active ? "\u0434\u0430" : "\u043D\u0435\u0442"}</p>
       <p class="meta"><strong>\u0421\u043E\u0437\u0434\u0430\u043D:</strong> ${formatDateTime(user.created_at)}</p>
       ${adminPanelLink}
-      ${isEditing ? profileEditor : profileDetails}
-      ${isEditing ? "" : profileViewActions}
+      ${roleSpecificSection}
     </article>
   `;
 }

@@ -20,4 +20,4 @@ def test_admin_login_route_redirects_to_shared_portal_auth() -> None:
     for path in ("/admin/login", "/admin/login/"):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 307
-        assert response.headers.get("location") == "/portal?auth=login&next=/admin/kpi"
+        assert response.headers.get("location") == "/portal?auth=login&next=/admin/kpi&entry=admin"

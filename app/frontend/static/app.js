@@ -164,6 +164,11 @@ function getSafePostLoginRedirectPath() {
   return path;
 }
 
+function isAdminEntryRequested() {
+  const entry = new URLSearchParams(window.location.search).get("entry");
+  return entry === "admin";
+}
+
 function applyAuthMode(mode) {
   if (!elements.registerSection || !elements.loginSection) {
     return;
@@ -342,11 +347,13 @@ async function handleLogout() {
 
 async function bootstrapAuthenticatedSession() {
   await loadProfile();
+  const requestedRedirectPath = getSafePostLoginRedirectPath();
   const shouldRedirectToAdmin =
     isAdminRole() &&
-    (getSafePostLoginRedirectPath()?.startsWith("/admin") ?? false);
+    ((requestedRedirectPath?.startsWith("/admin") ?? false) || isAdminEntryRequested());
   if (shouldRedirectToAdmin) {
-    const redirectPath = getSafePostLoginRedirectPath() ?? ADMIN_DASHBOARD_PATH;
+    const redirectPath =
+      requestedRedirectPath?.startsWith("/admin") ? requestedRedirectPath : ADMIN_DASHBOARD_PATH;
     setGlobalStatus("Вход выполнен. Перенаправляем в админку...", "success");
     window.location.assign(redirectPath);
     return true;

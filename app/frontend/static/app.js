@@ -1,5 +1,6 @@
 const API_PREFIX = "/api/v1";
 const ADMIN_DASHBOARD_PATH = "/admin/kpi";
+const PROFILE_AGE_STORAGE_KEY_PREFIX = "portal_profile_age:";
 
 const state = {
   accessToken: null,
@@ -89,6 +90,7 @@ function bindEvents() {
   elements.slotsContent?.addEventListener("click", handleSlotsActionClick);
   elements.bookingsContent?.addEventListener("click", handleBookingsActionClick);
   elements.packagesContent?.addEventListener("click", handlePackagesActionClick);
+  elements.profileContent?.addEventListener("submit", handleProfileSave);
 
   for (const button of elements.tabButtons) {
     button.addEventListener("click", () => {
@@ -503,21 +505,144 @@ async function loadProfile() {
   renderProfile(user);
 }
 
+function getProfileAgeStorageKey(user) {
+  const userId = user?.id ? String(user.id) : "";
+  if (!userId) {
+    return null;
+  }
+  return `${PROFILE_AGE_STORAGE_KEY_PREFIX}${userId}`;
+}
+
+function loadStoredProfileAge(user) {
+  const storageKey = getProfileAgeStorageKey(user);
+  if (!storageKey) {
+    return "";
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(storageKey);
+    if (!storedValue) {
+      return "";
+    }
+    const parsedAge = Number(storedValue);
+    if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) {
+      return "";
+    }
+    return String(parsedAge);
+  } catch (_) {
+    return "";
+  }
+}
+
+function saveStoredProfileAge(user, age) {
+  const storageKey = getProfileAgeStorageKey(user);
+  if (!storageKey) {
+    return;
+  }
+
+  try {
+    if (age === null) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+    window.localStorage.setItem(storageKey, String(age));
+  } catch (_) {
+    // Keep profile save flow stable even if browser storage is unavailable.
+  }
+}
+
+async function handleProfileSave(event) {
+  const form = event.target;
+  if (!form || form.id !== "profile-form") {
+    return;
+  }
+  event.preventDefault();
+
+  const fullNameInput = form.full_name;
+  const ageInput = form.age;
+  if (!fullNameInput || !ageInput) {
+    return;
+  }
+
+  const normalizedFullName = fullNameInput.value.trim();
+  if (!normalizedFullName) {
+    setGlobalStatus("Поле ФИО обязательно.", "error");
+    fullNameInput.focus();
+    return;
+  }
+
+  const rawAgeValue = ageInput.value.trim();
+  let normalizedAge = null;
+  if (rawAgeValue) {
+    const parsedAge = Number(rawAgeValue);
+    const isInvalidAge = !Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120;
+    if (isInvalidAge) {
+      setGlobalStatus("Возраст должен быть целым числом от 1 до 120.", "error");
+      ageInput.focus();
+      return;
+    }
+    normalizedAge = parsedAge;
+  }
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  if (!submitButton) {
+    return;
+  }
+
+  await withButtonAction(submitButton, async () => {
+    const updatedUser = await apiRequest("/identity/users/me", {
+      method: "PATCH",
+      body: { full_name: normalizedFullName },
+    });
+    state.currentUser = updatedUser;
+    saveStoredProfileAge(updatedUser, normalizedAge);
+    renderProfile(updatedUser);
+    setGlobalStatus("Профиль сохранен.", "success");
+  });
+}
+
 function renderProfile(user) {
   const adminPanelLink =
     user.role?.name === "admin"
-      ? `<p class="meta"><a href="${ADMIN_DASHBOARD_PATH}">Открыть админ-панель</a></p>`
+      ? `<p class="meta"><a href="${ADMIN_DASHBOARD_PATH}">\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0430\u0434\u043C\u0438\u043D-\u043F\u0430\u043D\u0435\u043B\u044C</a></p>`
       : "";
+  const storedAgeValue = loadStoredProfileAge(user);
 
   elements.profileContent.innerHTML = `
     <article class="card-item">
-      <h4>${escapeHtml(user.email)}</h4>
-      <p class="meta"><strong>ID:</strong> ${escapeHtml(user.id)}</p>
-      <p class="meta"><strong>Роль:</strong> ${escapeHtml(user.role.name)}</p>
-      <p class="meta"><strong>Таймзона:</strong> ${escapeHtml(user.timezone)}</p>
-      <p class="meta"><strong>Активен:</strong> ${user.is_active ? "да" : "нет"}</p>
-      <p class="meta"><strong>Создан:</strong> ${formatDateTime(user.created_at)}</p>
+      <h4>${escapeHtml(user.full_name || user.email)}</h4>
+      <p class="meta"><strong>\u041B\u043E\u0433\u0438\u043D:</strong> ${escapeHtml(user.email)}</p>
+      <p class="meta"><strong>\u0422\u0430\u0439\u043C\u0437\u043E\u043D\u0430:</strong> ${escapeHtml(user.timezone)}</p>
+      <p class="meta"><strong>\u0410\u043A\u0442\u0438\u0432\u0435\u043D:</strong> ${user.is_active ? "\u0434\u0430" : "\u043D\u0435\u0442"}</p>
+      <p class="meta"><strong>\u0421\u043E\u0437\u0434\u0430\u043D:</strong> ${formatDateTime(user.created_at)}</p>
       ${adminPanelLink}
+      <form id="profile-form" class="form-stack">
+        <label>
+          \u0424\u0418\u041E
+          <input
+            name="full_name"
+            type="text"
+            minlength="1"
+            maxlength="255"
+            value="${escapeHtml(user.full_name ?? "")}"
+            required
+          />
+        </label>
+        <label>
+          \u0412\u043E\u0437\u0440\u0430\u0441\u0442
+          <input
+            name="age"
+            type="number"
+            min="1"
+            max="120"
+            step="1"
+            value="${escapeHtml(storedAgeValue)}"
+            placeholder="\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440, 25"
+          />
+        </label>
+        <button type="submit">\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u043F\u0440\u043E\u0444\u0438\u043B\u044C</button>
+      </form>
+      <p class="hint">\u0412\u043E\u0437\u0440\u0430\u0441\u0442 \u0445\u0440\u0430\u043D\u0438\u0442\u0441\u044F \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u043E \u0432 \u044D\u0442\u043E\u043C \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0435.</p>
     </article>
   `;
 }
@@ -1186,6 +1311,7 @@ function translateBackendMessage(message) {
     "Only admin or teacher can update lessons": "Только admin или teacher может изменять уроки.",
     "Teacher can update only own lessons": "Teacher может изменять только свои уроки.",
     "Lesson not found": "Урок не найден.",
+    "Full name cannot be empty": "\u041F\u043E\u043B\u0435 \u0424\u0418\u041E \u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E.",
   };
 
   if (normalized in directTranslations) {
@@ -1231,6 +1357,8 @@ function translateValidationPath(pathItems) {
     path: "путь",
     email: "email",
     password: "пароль",
+    full_name: "\u0424\u0418\u041E",
+    age: "\u0432\u043E\u0437\u0440\u0430\u0441\u0442",
     timezone: "таймзона",
     role: "роль",
     slot_id: "ID слота",

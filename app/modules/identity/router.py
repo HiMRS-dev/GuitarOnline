@@ -15,6 +15,7 @@ from app.modules.identity.schemas import (
     RefreshRequest,
     TokenPair,
     UserCreate,
+    UserProfileUpdate,
     UserRead,
 )
 from app.modules.identity.service import (
@@ -128,3 +129,14 @@ async def logout(
 async def get_me(current_user=Depends(get_current_user)) -> UserRead:
     """Return profile of authenticated user."""
     return UserRead.model_validate(current_user)
+
+
+@router.patch("/users/me", response_model=UserRead)
+async def update_me(
+    payload: UserProfileUpdate,
+    current_user=Depends(get_current_user),
+    service: IdentityService = Depends(get_identity_service),
+) -> UserRead:
+    """Update authenticated user profile fields."""
+    updated_user = await service.update_current_user_profile(current_user, payload)
+    return UserRead.model_validate(updated_user)

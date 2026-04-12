@@ -29,6 +29,14 @@ class UserCreate(BaseModel):
     timezone: str = Field(default="UTC", max_length=64)
 
 
+class UserProfileUpdate(BaseModel):
+    """User profile update request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str = Field(min_length=1, max_length=255)
+
+
 class LoginRequest(BaseModel):
     """Credentials for login."""
 

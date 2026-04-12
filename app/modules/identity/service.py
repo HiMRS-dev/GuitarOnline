@@ -21,8 +21,13 @@ from app.core.security import (
 )
 from app.modules.identity.models import User
 from app.modules.identity.repository import IdentityRepository
-from app.modules.identity.schemas import LoginRequest, TokenPair, UserCreate
-from app.shared.exceptions import ConflictException, NotFoundException, UnauthorizedException
+from app.modules.identity.schemas import LoginRequest, TokenPair, UserCreate, UserProfileUpdate
+from app.shared.exceptions import (
+    BusinessRuleException,
+    ConflictException,
+    NotFoundException,
+    UnauthorizedException,
+)
 from app.shared.utils import utc_now
 
 settings = get_settings()
@@ -164,6 +169,23 @@ class IdentityService:
             raise UnauthorizedException("User is inactive")
 
         return user
+
+    async def update_current_user_profile(
+        self,
+        current_user: User,
+        payload: UserProfileUpdate,
+    ) -> User:
+        """Update editable fields in current user's profile."""
+        normalized_full_name = payload.full_name.strip()
+        if not normalized_full_name:
+            raise BusinessRuleException("Full name cannot be empty")
+
+        updated_user = await self.repository.update_user(
+            current_user,
+            full_name=normalized_full_name,
+        )
+        await self._commit_if_supported()
+        return updated_user
 
 
 async def get_identity_service(session: AsyncSession = Depends(get_db_session)) -> IdentityService:

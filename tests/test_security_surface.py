@@ -11,7 +11,7 @@ from app.modules.identity.rate_limit import (
     enforce_refresh_rate_limit,
     enforce_register_rate_limit,
 )
-from app.modules.identity.schemas import TokenPair, UserCreate, UserRead
+from app.modules.identity.schemas import TokenPair, UserCreate, UserProfileUpdate, UserRead
 
 
 def _route(path: str, method: str) -> APIRoute:
@@ -55,10 +55,12 @@ def test_identity_response_models_are_minimized() -> None:
     register_route = _route("/api/v1/identity/auth/register", "POST")
     login_route = _route("/api/v1/identity/auth/login", "POST")
     me_route = _route("/api/v1/identity/users/me", "GET")
+    update_me_route = _route("/api/v1/identity/users/me", "PATCH")
 
     assert register_route.response_model is UserRead
     assert login_route.response_model is TokenPair
     assert me_route.response_model is UserRead
+    assert update_me_route.response_model is UserRead
 
     forbidden_fields = {"password", "password_hash", "role_id", "secret_key"}
     for field_name in forbidden_fields:
@@ -68,6 +70,7 @@ def test_identity_response_models_are_minimized() -> None:
 
 def test_public_registration_request_schema_does_not_expose_role() -> None:
     assert "role" not in UserCreate.model_fields
+    assert "role" not in UserProfileUpdate.model_fields
 
 
 def test_admin_role_change_response_model_is_minimized() -> None:

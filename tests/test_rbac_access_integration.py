@@ -157,6 +157,32 @@ async def test_teacher_lessons_endpoint_returns_401_403_and_200_by_role(
 
 
 @pytest.mark.asyncio
+async def test_teacher_students_endpoint_returns_401_403_and_200_by_role(
+    api_client: httpx.AsyncClient,
+) -> None:
+    teacher = await _register_and_login(api_client, "teacher")
+    student = await _register_and_login(api_client, "student")
+
+    no_token_response = await api_client.get("/booking/teacher/students")
+    _assert_status(no_token_response, 401)
+
+    student_response = await api_client.get(
+        "/booking/teacher/students",
+        headers=_auth_headers(student.access_token),
+    )
+    _assert_status(student_response, 403)
+
+    teacher_response = await api_client.get(
+        "/booking/teacher/students",
+        headers=_auth_headers(teacher.access_token),
+    )
+    _assert_status(teacher_response, 200)
+    payload = teacher_response.json()
+    assert "items" in payload
+    assert isinstance(payload["items"], list)
+
+
+@pytest.mark.asyncio
 async def test_me_lessons_alias_endpoint_returns_401_403_and_200_by_role(
     api_client: httpx.AsyncClient,
 ) -> None:

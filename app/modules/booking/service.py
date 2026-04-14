@@ -26,6 +26,7 @@ from app.modules.booking.schemas import (
     BookingCancelRequest,
     BookingHoldRequest,
     BookingRescheduleRequest,
+    TeacherStudentListItemRead,
 )
 from app.modules.identity.models import User
 from app.modules.lessons.repository import LessonsRepository
@@ -435,6 +436,24 @@ class BookingService:
     ) -> tuple[list[Booking], int]:
         """List bookings for actor according to role."""
         return await self.booking_repository.list_bookings(actor.id, actor.role.name, limit, offset)
+
+    async def list_teacher_students_with_packages(
+        self,
+        actor: User,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[TeacherStudentListItemRead], int]:
+        """List active students for teacher dashboard with package balances."""
+        if actor.role.name != RoleEnum.TEACHER:
+            raise UnauthorizedException("Only teacher can list own students")
+
+        items, total = await self.booking_repository.list_teacher_students_with_packages(
+            teacher_id=actor.id,
+            limit=limit,
+            offset=offset,
+        )
+        serialized = [TeacherStudentListItemRead.model_validate(item) for item in items]
+        return serialized, total
 
 
 async def get_booking_service(session: AsyncSession = Depends(get_db_session)) -> BookingService:

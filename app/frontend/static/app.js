@@ -6,6 +6,7 @@ const state = {
   currentUser: null,
   slots: [],
   bookings: [],
+  students: [],
   packages: [],
   packagePlans: [],
   payments: [],
@@ -28,6 +29,7 @@ const elements = {
   profileContent: document.getElementById("profile-content"),
   slotsContent: document.getElementById("slots-content"),
   bookingsContent: document.getElementById("bookings-content"),
+  studentsContent: document.getElementById("students-content"),
   packagesContent: document.getElementById("packages-content"),
   lessonsContent: document.getElementById("lessons-content"),
   adminActionsContent: document.getElementById("admin-actions-content"),
@@ -35,6 +37,7 @@ const elements = {
   tabContents: Array.from(document.querySelectorAll(".tab-content")),
   refreshSlotsButton: document.getElementById("refresh-slots-btn"),
   refreshBookingsButton: document.getElementById("refresh-bookings-btn"),
+  refreshStudentsButton: document.getElementById("refresh-students-btn"),
   refreshPackagesButton: document.getElementById("refresh-packages-btn"),
   refreshLessonsButton: document.getElementById("refresh-lessons-btn"),
   runExpireHoldsButton: document.getElementById("run-expire-holds-btn"),
@@ -82,6 +85,7 @@ function bindEvents() {
   elements.logoutButton?.addEventListener("click", handleLogout);
   elements.refreshSlotsButton?.addEventListener("click", () => refreshSlots());
   elements.refreshBookingsButton?.addEventListener("click", () => refreshBookings());
+  elements.refreshStudentsButton?.addEventListener("click", () => refreshStudents());
   elements.refreshPackagesButton?.addEventListener("click", () => refreshPackages());
   elements.refreshLessonsButton?.addEventListener("click", () => refreshLessons());
   elements.runExpireHoldsButton?.addEventListener("click", handleExpireHolds);
@@ -116,6 +120,7 @@ function clearSession() {
   state.currentUser = null;
   state.slots = [];
   state.bookings = [];
+  state.students = [];
   state.packages = [];
   state.packagePlans = [];
   state.payments = [];
@@ -147,6 +152,7 @@ function showAuthMode() {
   elements.profileContent.innerHTML = "";
   elements.slotsContent.innerHTML = "";
   elements.bookingsContent.innerHTML = "";
+  elements.studentsContent.innerHTML = "";
   elements.packagesContent.innerHTML = "";
   elements.lessonsContent.innerHTML = "";
   elements.adminActionsContent.innerHTML = "";
@@ -241,6 +247,35 @@ function isAdminRole() {
   return getCurrentRole() === "admin";
 }
 
+function isProfileEditableRole() {
+  return isStudentRole() || isTeacherRole();
+}
+
+function getTabButton(tabName) {
+  return elements.tabButtons.find((button) => button.dataset.tab === tabName) ?? null;
+}
+
+function syncRoleAwareLabels() {
+  const bookingsButton = getTabButton("bookings");
+  const bookingsHeading = document.querySelector("#tab-bookings h3");
+  if (isTeacherRole()) {
+    if (bookingsButton) {
+      bookingsButton.textContent = "Забронированные слоты";
+    }
+    if (bookingsHeading) {
+      bookingsHeading.textContent = "Забронированные слоты";
+    }
+    return;
+  }
+
+  if (bookingsButton) {
+    bookingsButton.textContent = "Мои бронирования";
+  }
+  if (bookingsHeading) {
+    bookingsHeading.textContent = "Мои бронирования";
+  }
+}
+
 function isTabVisible(tabName, roleName) {
   if (!roleName) {
     return tabName === "profile";
@@ -248,10 +283,11 @@ function isTabVisible(tabName, roleName) {
 
   const visibilityMap = {
     profile: ["student", "teacher", "admin"],
-    slots: ["student"],
-    bookings: ["student"],
+    slots: ["student", "teacher"],
+    bookings: ["student", "teacher"],
+    students: ["teacher"],
     packages: ["student"],
-    lessons: ["teacher"],
+    lessons: [],
     "admin-ops": ["admin"],
   };
 
@@ -262,6 +298,7 @@ function isTabVisible(tabName, roleName) {
 function applyRoleAwareTabs() {
   const roleName = getCurrentRole();
   let firstVisibleTab = null;
+  syncRoleAwareLabels();
 
   for (const button of elements.tabButtons) {
     const tabName = button.dataset.tab ?? "";
@@ -377,14 +414,21 @@ async function bootstrapAuthenticatedSession() {
   showDashboardMode();
   activateTab("profile");
   applyRoleAwareTabs();
-  await Promise.all([refreshSlots(), refreshBookings(), refreshPackages(), refreshLessons()]);
+  await Promise.all([refreshSlots(), refreshBookings(), refreshStudents(), refreshPackages()]);
   renderAdminOperations();
   return false;
 }
 
 async function refreshSlots() {
   try {
-    const page = await apiRequest("/scheduling/slots/open?limit=20&offset=0", {
+    const queryParams = new URLSearchParams();
+    queryParams.set("limit", isTeacherRole() ? "50" : "20");
+    queryParams.set("offset", "0");
+    if (isTeacherRole() && state.currentUser?.id) {
+      queryParams.set("teacher_id", state.currentUser.id);
+    }
+
+    const page = await apiRequest(`/scheduling/slots/open?${queryParams.toString()}`, {
       auth: false,
       retryOnUnauthorized: false,
     });
@@ -403,6 +447,18 @@ async function refreshBookings() {
     return;
   }
 
+  if (isTeacherRole()) {
+    try {
+      const page = await apiRequest("/teacher/lessons?limit=50&offset=0");
+      state.lessons = page.items ?? [];
+      renderTeacherBookedSlots(state.lessons);
+    } catch (error) {
+      state.lessons = [];
+      renderEmpty(elements.bookingsContent, `Не удалось загрузить забронированные слоты: ${error.message}`);
+    }
+    return;
+  }
+
   try {
     const page = await apiRequest("/booking/my?limit=20&offset=0");
     state.bookings = page.items ?? [];
@@ -410,6 +466,23 @@ async function refreshBookings() {
   } catch (error) {
     state.bookings = [];
     renderEmpty(elements.bookingsContent, `Не удалось загрузить бронирования: ${error.message}`);
+  }
+}
+
+async function refreshStudents() {
+  if (!isTeacherRole()) {
+    state.students = [];
+    renderEmpty(elements.studentsContent, "Раздел учеников доступен только преподавателю.");
+    return;
+  }
+
+  try {
+    const page = await apiRequest("/booking/teacher/students?limit=50&offset=0");
+    state.students = page.items ?? [];
+    renderStudents(state.students);
+  } catch (error) {
+    state.students = [];
+    renderEmpty(elements.studentsContent, `Не удалось загрузить учеников: ${error.message}`);
   }
 }
 
@@ -482,7 +555,7 @@ async function refreshLessons() {
   }
 
   try {
-    const page = await apiRequest("/lessons/my?limit=20&offset=0");
+    const page = await apiRequest("/teacher/lessons?limit=20&offset=0");
     state.lessons = page.items ?? [];
     renderLessons(state.lessons);
   } catch (error) {
@@ -507,7 +580,7 @@ function handleProfileActionClick(event) {
     return;
   }
 
-  if (!isStudentRole()) {
+  if (!isProfileEditableRole()) {
     return;
   }
 
@@ -535,7 +608,7 @@ async function handleProfileSave(event) {
   }
   event.preventDefault();
 
-  if (!isStudentRole()) {
+  if (!isProfileEditableRole()) {
     return;
   }
 
@@ -583,8 +656,8 @@ async function handleProfileSave(event) {
 
 function renderProfile(user, options = {}) {
   const roleName = user.role?.name ?? "";
-  const isStudentProfile = roleName === "student";
-  const isEditing = isStudentProfile && options.isEditing === true;
+  const isEditableProfile = roleName === "student" || roleName === "teacher";
+  const isEditing = isEditableProfile && options.isEditing === true;
   const adminPanelLink =
     roleName === "admin"
       ? `<p class="meta"><a href="${ADMIN_DASHBOARD_PATH}">\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u0430\u0434\u043C\u0438\u043D-\u043F\u0430\u043D\u0435\u043B\u044C</a></p>`
@@ -638,7 +711,7 @@ function renderProfile(user, options = {}) {
       <p class="meta"><strong>ID:</strong> ${escapeHtml(user.id ?? "-")}</p>
       <p class="meta"><strong>\u0420\u043E\u043B\u044C:</strong> ${escapeHtml(roleName || "-")}</p>
   `;
-  const roleSpecificSection = isStudentProfile
+  const roleSpecificSection = isEditableProfile
     ? isEditing
       ? studentProfileEditor
       : `${studentProfileDetails}${studentProfileViewActions}`
@@ -763,6 +836,11 @@ function renderSlotPackageControls() {
 function renderSlots(slots) {
   renderSlotPackageControls();
 
+  if (isTeacherRole()) {
+    renderTeacherOpenSlots(slots);
+    return;
+  }
+
   if (slots.length === 0) {
     renderEmpty(elements.slotsContent, "Открытых слотов пока нет.");
     return;
@@ -837,7 +915,46 @@ function renderSlots(slots) {
   `;
 }
 
+function renderTeacherOpenSlots(slots) {
+  if (slots.length === 0) {
+    renderEmpty(elements.slotsContent, "У вас пока нет открытых слотов.");
+    return;
+  }
+
+  const sortedSlots = [...slots].sort(
+    (left, right) => new Date(left.start_at).getTime() - new Date(right.start_at).getTime(),
+  );
+  const nextStartAt = sortedSlots[0]?.start_at ?? null;
+
+  const slotCards = sortedSlots
+    .map((slot) => {
+      return `
+        <article class="card-item">
+          <h4>Слот ${escapeHtml(slot.id)}</h4>
+          <p class="meta"><strong>Начало:</strong> ${formatDateTime(slot.start_at)}</p>
+          <p class="meta"><strong>Окончание:</strong> ${formatDateTime(slot.end_at)}</p>
+          <p class="meta"><strong>Статус:</strong> ${escapeHtml(slot.status)}</p>
+        </article>
+      `;
+    })
+    .join("");
+
+  elements.slotsContent.innerHTML = `
+    <article class="card-item">
+      <h4>Мои открытые слоты</h4>
+      <p class="meta"><strong>Всего открытых слотов:</strong> ${escapeHtml(sortedSlots.length)}</p>
+      <p class="meta"><strong>Ближайший слот:</strong> ${formatDateTime(nextStartAt)}</p>
+    </article>
+    ${slotCards}
+  `;
+}
+
 function renderBookings(bookings) {
+  if (isTeacherRole()) {
+    renderTeacherBookedSlots(bookings);
+    return;
+  }
+
   if (bookings.length === 0) {
     renderEmpty(elements.bookingsContent, "У вас пока нет бронирований.");
     return;
@@ -922,6 +1039,89 @@ function renderBookings(bookings) {
       `;
     })
     .join("");
+}
+
+function renderTeacherBookedSlots(lessons) {
+  if (lessons.length === 0) {
+    renderEmpty(elements.bookingsContent, "У вас пока нет забронированных слотов.");
+    return;
+  }
+
+  const sortedLessons = [...lessons].sort(
+    (left, right) =>
+      new Date(left.scheduled_start_at).getTime() - new Date(right.scheduled_start_at).getTime(),
+  );
+
+  const cards = sortedLessons
+    .map((lesson) => {
+      return `
+        <article class="card-item">
+          <h4>Бронирование ${escapeHtml(lesson.booking_id ?? lesson.id)}</h4>
+          <p class="meta"><strong>Студент:</strong> ${escapeHtml(lesson.student_id)}</p>
+          <p class="meta"><strong>Слот:</strong> ${formatDateTime(lesson.scheduled_start_at)} - ${formatDateTime(lesson.scheduled_end_at)}</p>
+          <p class="meta"><strong>Статус урока:</strong> ${escapeHtml(lesson.status)}</p>
+          <p class="meta"><strong>Тема:</strong> ${escapeHtml(lesson.topic ?? "-")}</p>
+        </article>
+      `;
+    })
+    .join("");
+
+  elements.bookingsContent.innerHTML = `
+    <article class="card-item">
+      <h4>Забронированные слоты</h4>
+      <p class="meta"><strong>Всего слотов:</strong> ${escapeHtml(sortedLessons.length)}</p>
+    </article>
+    ${cards}
+  `;
+}
+
+function renderStudents(students) {
+  if (students.length === 0) {
+    renderEmpty(elements.studentsContent, "Активных учеников пока нет.");
+    return;
+  }
+
+  const studentsMarkup = students
+    .map((student) => {
+      const packages = Array.isArray(student.packages) ? student.packages : [];
+      const packageMarkup = packages.length === 0
+        ? "<p class=\"hint\">Активных пакетов нет.</p>"
+        : packages
+            .map((pkg) => {
+              return `
+                <article class="card-item">
+                  <h4>Пакет ${escapeHtml(pkg.package_id)}</h4>
+                  <p class="meta"><strong>Статус:</strong> ${escapeHtml(pkg.status)}</p>
+                  <p class="meta"><strong>Всего уроков:</strong> ${escapeHtml(pkg.lessons_total)}</p>
+                  <p class="meta"><strong>Осталось:</strong> ${escapeHtml(pkg.lessons_left)}</p>
+                  <p class="meta"><strong>В резерве:</strong> ${escapeHtml(pkg.lessons_reserved)}</p>
+                  <p class="meta"><strong>Доступно:</strong> ${escapeHtml(pkg.lessons_available)}</p>
+                  <p class="meta"><strong>Действует до:</strong> ${formatDateTime(pkg.expires_at)}</p>
+                </article>
+              `;
+            })
+            .join("");
+
+      return `
+        <article class="card-item">
+          <h4>${escapeHtml(student.student_full_name || student.student_email)}</h4>
+          <p class="meta"><strong>Email:</strong> ${escapeHtml(student.student_email)}</p>
+          <p class="meta"><strong>ID:</strong> ${escapeHtml(student.student_id)}</p>
+          <p class="meta"><strong>Активных бронирований:</strong> ${escapeHtml(student.active_bookings_count)}</p>
+          <p class="meta"><strong>Последнее бронирование:</strong> ${formatDateTime(student.last_booking_at)}</p>
+        </article>
+        ${packageMarkup}
+      `;
+    })
+    .join("");
+
+  elements.studentsContent.innerHTML = `
+    <article class="card-item">
+      <h4>Активные ученики</h4>
+      <p class="meta"><strong>Всего учеников:</strong> ${escapeHtml(students.length)}</p>
+    </article>
+    ${studentsMarkup}
+  `;
 }
 
 function renderPackages(packages) {
@@ -1316,6 +1516,7 @@ function translateBackendMessage(message) {
     "You cannot manage this booking": "У вас нет прав управлять этим бронированием.",
     "Only admin can run hold expiration": "Только admin может запускать истечение HOLD-бронирований.",
     "Only admin can expire packages": "Только admin может запускать истечение пакетов.",
+    "Only teacher can list own students": "Только преподаватель может просматривать список своих учеников.",
     "Only admin can create lesson packages": "Только admin может создавать пакеты уроков.",
     "Only admin or teacher can create lessons": "Только admin или teacher может создавать уроки.",
     "Only admin or teacher can update lessons": "Только admin или teacher может изменять уроки.",

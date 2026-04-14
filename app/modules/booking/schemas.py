@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.enums import BookingStatusEnum
+from app.core.enums import BookingStatusEnum, PackageStatusEnum
 
 
 class BookingHoldRequest(BaseModel):
@@ -49,3 +49,26 @@ class BookingRead(BaseModel):
     rescheduled_from_booking_id: UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class TeacherStudentPackageBalanceRead(BaseModel):
+    """Teacher-facing package balance snapshot for one student."""
+
+    package_id: UUID
+    status: PackageStatusEnum
+    lessons_total: int
+    lessons_left: int
+    lessons_reserved: int
+    lessons_available: int
+    expires_at: datetime
+
+
+class TeacherStudentListItemRead(BaseModel):
+    """Teacher-facing active student snapshot with package balances."""
+
+    student_id: UUID
+    student_email: str
+    student_full_name: str
+    active_bookings_count: int
+    last_booking_at: datetime
+    packages: list[TeacherStudentPackageBalanceRead]

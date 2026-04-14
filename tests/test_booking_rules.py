@@ -79,9 +79,14 @@ class FakeBookingRepository:
         self,
         slots: dict[UUID, FakeSlot],
         bookings: dict[UUID, FakeBooking] | None = None,
+        teacher_students_with_packages: tuple[list[dict], int] | None = None,
     ) -> None:
         self._slots = slots
         self._bookings: dict[UUID, FakeBooking] = bookings or {}
+        if teacher_students_with_packages is None:
+            self._teacher_students_with_packages = ([], 0)
+        else:
+            self._teacher_students_with_packages = teacher_students_with_packages
 
     async def create_booking_hold(
         self,
@@ -136,6 +141,15 @@ class FakeBookingRepository:
             if booking.rescheduled_from_booking_id == booking_id:
                 return booking
         return None
+
+    async def list_teacher_students_with_packages(
+        self,
+        teacher_id: UUID,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict], int]:
+        _ = teacher_id, limit, offset
+        return self._teacher_students_with_packages
 
 
 class FakeSchedulingRepository:
@@ -273,6 +287,7 @@ def make_service(
     packages: dict[UUID, FakePackage],
     bookings: dict[UUID, FakeBooking] | None = None,
     lessons: dict[UUID, FakeLesson] | None = None,
+    teacher_students_with_packages: tuple[list[dict], int] | None = None,
 ) -> tuple[
     BookingService,
     FakeBookingRepository,
@@ -281,7 +296,11 @@ def make_service(
     FakeLessonsRepository,
     FakeAuditRepository,
 ]:
-    booking_repo = FakeBookingRepository(slots=slots, bookings=bookings)
+    booking_repo = FakeBookingRepository(
+        slots=slots,
+        bookings=bookings,
+        teacher_students_with_packages=teacher_students_with_packages,
+    )
     scheduling_repo = FakeSchedulingRepository(slots=slots)
     billing_repo = FakeBillingRepository(packages=packages)
     lessons_repo = FakeLessonsRepository(lessons=lessons)
@@ -1322,6 +1341,63 @@ async def test_reschedule_returns_existing_successor_on_retry(
     assert billing_repo.consume_reserved_calls == 0
     assert len(booking_repo._bookings) == 2
     assert len(audit_repo.events) == 0
+
+
+@pytest.mark.asyncio
+async def test_list_teacher_students_with_packages_requires_teacher_role() -> None:
+    service, _, _, _, _, _ = make_service(
+        slots={},
+        packages={},
+        teacher_students_with_packages=([], 0),
+    )
+    actor = make_actor(uuid4(), RoleEnum.STUDENT)
+
+    with pytest.raises(UnauthorizedException, match="Only teacher can list own students"):
+        await service.list_teacher_students_with_packages(actor, limit=20, offset=0)
+
+
+@pytest.mark.asyncio
+async def test_list_teacher_students_with_packages_returns_repository_payload() -> None:
+    teacher_id = uuid4()
+    student_id = uuid4()
+    package_id = uuid4()
+    now = datetime(2026, 2, 20, 12, 0, tzinfo=UTC)
+    payload = [
+        {
+            "student_id": student_id,
+            "student_email": "student@example.com",
+            "student_full_name": "Student Example",
+            "active_bookings_count": 2,
+            "last_booking_at": now,
+            "packages": [
+                {
+                    "package_id": package_id,
+                    "status": PackageStatusEnum.ACTIVE,
+                    "lessons_total": 8,
+                    "lessons_left": 6,
+                    "lessons_reserved": 1,
+                    "lessons_available": 5,
+                    "expires_at": now + timedelta(days=30),
+                },
+            ],
+        },
+    ]
+    service, _, _, _, _, _ = make_service(
+        slots={},
+        packages={},
+        teacher_students_with_packages=(payload, 1),
+    )
+    actor = make_actor(teacher_id, RoleEnum.TEACHER)
+
+    items, total = await service.list_teacher_students_with_packages(actor, limit=20, offset=0)
+
+    assert total == 1
+    assert len(items) == 1
+    assert items[0].student_id == student_id
+    assert items[0].active_bookings_count == 2
+    assert len(items[0].packages) == 1
+    assert items[0].packages[0].package_id == package_id
+    assert items[0].packages[0].lessons_available == 5
 
 
 @pytest.mark.asyncio

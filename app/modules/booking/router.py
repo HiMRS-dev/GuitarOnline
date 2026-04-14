@@ -12,6 +12,7 @@ from app.modules.booking.schemas import (
     BookingHoldRequest,
     BookingRead,
     BookingRescheduleRequest,
+    TeacherStudentListItemRead,
 )
 from app.modules.booking.service import BookingService, get_booking_service
 from app.modules.identity.service import require_roles
@@ -85,3 +86,18 @@ async def list_my_bookings(
     items, total = await service.list_bookings(current_user, pagination.limit, pagination.offset)
     serialized = [BookingRead.model_validate(item) for item in items]
     return build_page(serialized, total, pagination)
+
+
+@router.get("/teacher/students", response_model=Page[TeacherStudentListItemRead])
+async def list_teacher_students(
+    pagination=Depends(get_pagination_params),
+    service: BookingService = Depends(get_booking_service),
+    current_user=Depends(require_roles(RoleEnum.TEACHER)),
+) -> Page[TeacherStudentListItemRead]:
+    """List active teacher students with package balance snapshots."""
+    items, total = await service.list_teacher_students_with_packages(
+        current_user,
+        pagination.limit,
+        pagination.offset,
+    )
+    return build_page(items, total, pagination)

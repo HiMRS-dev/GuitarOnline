@@ -38,6 +38,7 @@ class FakeIdentityRepository:
             RoleEnum.ADMIN: FakeRole(id=uuid4(), name=RoleEnum.ADMIN),
         }
         self.users_by_email: dict[str, FakeUser] = {}
+        self.backfill_calls = 0
 
     async def get_user_by_email(self, email: str) -> FakeUser | None:
         return self.users_by_email.get(email)
@@ -63,6 +64,10 @@ class FakeIdentityRepository:
         )
         self.users_by_email[email] = user
         return user
+
+    async def backfill_missing_full_names(self) -> int:
+        self.backfill_calls += 1
+        return 3
 
 
 @pytest.mark.asyncio
@@ -116,3 +121,14 @@ def test_user_create_rejects_public_role_field() -> None:
             timezone="UTC",
             role=RoleEnum.ADMIN,
         )
+
+
+@pytest.mark.asyncio
+async def test_ensure_users_full_names_calls_repository_backfill() -> None:
+    repository = FakeIdentityRepository()
+    service = IdentityService(repository)  # type: ignore[arg-type]
+
+    updated_count = await service.ensure_users_full_names()
+
+    assert updated_count == 3
+    assert repository.backfill_calls == 1

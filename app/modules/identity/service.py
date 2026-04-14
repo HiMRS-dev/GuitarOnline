@@ -57,6 +57,13 @@ class IdentityService:
             if role is None:
                 await self.repository.create_role(role_name)
 
+    async def ensure_users_full_names(self) -> int:
+        """Backfill deterministic full names for users with empty profile names."""
+        backfill = getattr(self.repository, "backfill_missing_full_names", None)
+        if not callable(backfill):
+            return 0
+        return int(await backfill())
+
     async def register(self, payload: UserCreate) -> User:
         """Register new user."""
         existing_user = await self.repository.get_user_by_email(payload.email)

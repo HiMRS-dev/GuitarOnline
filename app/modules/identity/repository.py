@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -55,6 +55,25 @@ class IdentityRepository:
         await self.session.flush()
         await self.session.refresh(user, attribute_names=["role"])
         return user
+
+    async def backfill_missing_full_names(self) -> int:
+        """Populate deterministic full names for users with empty profile name."""
+        stmt = select(User).where(func.length(func.trim(func.coalesce(User.full_name, ""))) == 0)
+        users = list((await self.session.scalars(stmt)).all())
+        if not users:
+            return 0
+
+        updated_count = 0
+        for user in users:
+            generated_full_name = build_default_full_name(user.email)
+            if not generated_full_name:
+                continue
+            user.full_name = generated_full_name
+            updated_count += 1
+
+        if updated_count > 0:
+            await self.session.flush()
+        return updated_count
 
     async def update_user(
         self,

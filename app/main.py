@@ -589,8 +589,11 @@ async def lifespan(_: FastAPI):
         try:
             service = IdentityService(IdentityRepository(session))
             await service.ensure_default_roles()
+            updated_full_names = await service.ensure_users_full_names()
             await session.commit()
             logger.info("Default roles ensured")
+            if updated_full_names > 0:
+                logger.info("Backfilled missing user full names: %s", updated_full_names)
         except Exception:
             await session.rollback()
             logger.exception("Failed during startup initialization")

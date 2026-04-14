@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import RoleEnum, SlotStatusEnum
 from app.modules.identity.models import Role, User
 from app.modules.scheduling.models import AvailabilitySlot, TeacherWeeklyScheduleWindow
+from app.modules.teachers.models import TeacherProfile
 
 
 class SchedulingRepository:
@@ -88,6 +89,40 @@ class SchedulingRepository:
         stmt = base_stmt.order_by(AvailabilitySlot.start_at.asc()).limit(limit).offset(offset)
         items = (await self.session.scalars(stmt)).all()
         return items, total
+
+    async def list_teacher_full_names(self, teacher_ids: list[UUID]) -> dict[UUID, str]:
+        """Return best-effort teacher names keyed by user id."""
+        if not teacher_ids:
+            return {}
+
+        stmt = (
+            select(
+                User.id,
+                User.full_name,
+                User.email,
+                TeacherProfile.display_name,
+            )
+            .outerjoin(TeacherProfile, TeacherProfile.user_id == User.id)
+            .where(User.id.in_(teacher_ids))
+        )
+        rows = (await self.session.execute(stmt)).all()
+        names: dict[UUID, str] = {}
+        for user_id, full_name, email, display_name in rows:
+            full_name_value = str(full_name or "").strip()
+            if full_name_value:
+                names[user_id] = full_name_value
+                continue
+
+            display_name_value = str(display_name or "").strip()
+            if display_name_value:
+                names[user_id] = display_name_value
+                continue
+
+            email_value = str(email or "").strip()
+            local_part = email_value.split("@", 1)[0].strip() if email_value else ""
+            names[user_id] = local_part or str(user_id)
+
+        return names
 
     async def set_slot_status(
         self,

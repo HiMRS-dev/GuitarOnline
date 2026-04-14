@@ -32,6 +32,7 @@ class SlotRead(BaseModel):
 
     id: UUID
     teacher_id: UUID
+    teacher_full_name: str | None = None
     created_by_admin_id: UUID
     start_at: datetime
     end_at: datetime

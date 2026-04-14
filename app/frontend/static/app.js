@@ -846,14 +846,26 @@ function renderSlots(slots) {
     return;
   }
 
+  const resolveTeacherDisplayName = (slot) => {
+    const fullName = typeof slot.teacher_full_name === "string" ? slot.teacher_full_name.trim() : "";
+    if (fullName.length > 0) {
+      return fullName;
+    }
+    return String(slot.teacher_id);
+  };
+
   const teacherStats = new Map();
   for (const slot of slots) {
     const teacherId = String(slot.teacher_id);
     const existing = teacherStats.get(teacherId) ?? {
       count: 0,
       nextStartAt: null,
+      displayName: resolveTeacherDisplayName(slot),
     };
     existing.count += 1;
+    if (existing.displayName === teacherId) {
+      existing.displayName = resolveTeacherDisplayName(slot);
+    }
     if (!existing.nextStartAt || new Date(slot.start_at).getTime() < new Date(existing.nextStartAt).getTime()) {
       existing.nextStartAt = slot.start_at;
     }
@@ -866,12 +878,12 @@ function renderSlots(slots) {
       if (byCount !== 0) {
         return byCount;
       }
-      return left[0].localeCompare(right[0]);
+      return left[1].displayName.localeCompare(right[1].displayName);
     })
-    .map(([teacherId, stats]) => {
+    .map(([, stats]) => {
       return `
         <article class="card-item">
-          <h4>Преподаватель ${escapeHtml(teacherId)}</h4>
+          <h4>Преподаватель ${escapeHtml(stats.displayName)}</h4>
           <p class="meta"><strong>Свободных окон:</strong> ${escapeHtml(stats.count)}</p>
           <p class="meta"><strong>Ближайшее окно:</strong> ${formatDateTime(stats.nextStartAt)}</p>
         </article>
@@ -889,7 +901,7 @@ function renderSlots(slots) {
       return `
         <article class="card-item">
           <h4>Слот ${escapeHtml(slot.id)}</h4>
-          <p class="meta"><strong>Преподаватель:</strong> ${escapeHtml(slot.teacher_id)}</p>
+          <p class="meta"><strong>Преподаватель:</strong> ${escapeHtml(resolveTeacherDisplayName(slot))}</p>
           <p class="meta"><strong>Начало:</strong> ${formatDateTime(slot.start_at)}</p>
           <p class="meta"><strong>Окончание:</strong> ${formatDateTime(slot.end_at)}</p>
           <p class="meta"><strong>Статус:</strong> ${escapeHtml(slot.status)}</p>

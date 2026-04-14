@@ -288,13 +288,31 @@ class SchedulingService:
         teacher_id: UUID | None,
         limit: int,
         offset: int,
-    ) -> tuple[list[AvailabilitySlot], int]:
+    ) -> tuple[list[dict[str, object]], int]:
         """List open slots with pagination."""
-        return await self.repository.list_open_slots(
+        items, total = await self.repository.list_open_slots(
             teacher_id=teacher_id,
             limit=limit,
             offset=offset,
         )
+        teacher_ids = list({slot.teacher_id for slot in items})
+        teacher_full_names = await self.repository.list_teacher_full_names(teacher_ids)
+        serialized_items: list[dict[str, object]] = []
+        for slot in items:
+            serialized_items.append(
+                {
+                    "id": slot.id,
+                    "teacher_id": slot.teacher_id,
+                    "teacher_full_name": teacher_full_names.get(slot.teacher_id),
+                    "created_by_admin_id": slot.created_by_admin_id,
+                    "start_at": slot.start_at,
+                    "end_at": slot.end_at,
+                    "status": slot.status,
+                    "created_at": slot.created_at,
+                    "updated_at": slot.updated_at,
+                },
+            )
+        return serialized_items, total
 
     async def get_slot_for_booking(self, slot_id: UUID) -> AvailabilitySlot:
         """Return slot that can be used for booking hold."""

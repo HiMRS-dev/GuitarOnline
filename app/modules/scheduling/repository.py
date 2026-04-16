@@ -175,7 +175,9 @@ class SchedulingRepository:
 
         seed = int.from_bytes(user_id.bytes, byteorder="big", signed=False)
         last_name = _SYNTHETIC_LAST_NAMES[seed % len(_SYNTHETIC_LAST_NAMES)]
-        first_name = _SYNTHETIC_FIRST_NAMES[(seed // len(_SYNTHETIC_LAST_NAMES)) % len(_SYNTHETIC_FIRST_NAMES)]
+        first_name = _SYNTHETIC_FIRST_NAMES[
+            (seed // len(_SYNTHETIC_LAST_NAMES)) % len(_SYNTHETIC_FIRST_NAMES)
+        ]
         middle_name = _SYNTHETIC_MIDDLE_NAMES[
             (seed // (len(_SYNTHETIC_LAST_NAMES) * len(_SYNTHETIC_FIRST_NAMES)))
             % len(_SYNTHETIC_MIDDLE_NAMES)

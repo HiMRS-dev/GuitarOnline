@@ -146,7 +146,9 @@ class BookingService:
             booking_end_at = slot_end_at
         else:
             if requested_start_at is None or requested_end_at is None:
-                raise BusinessRuleException("Both start_at and end_at are required for custom booking")
+                raise BusinessRuleException(
+                    "Both start_at and end_at are required for custom booking",
+                )
             booking_start_at = requested_start_at
             booking_end_at = requested_end_at
 

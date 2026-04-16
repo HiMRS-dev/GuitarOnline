@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -22,6 +22,7 @@ from app.shared.utils import ensure_utc, utc_now
 
 settings = get_settings()
 MOSCOW_TIMEZONE = "Europe/Moscow"
+AUTO_SLOT_HORIZON_DAYS = 21
 
 
 class SchedulingService:
@@ -101,6 +102,24 @@ class SchedulingService:
             windows=windows,
         )
 
+    async def get_current_teacher_weekly_schedule(
+        self,
+        *,
+        actor: User,
+    ) -> dict[str, object]:
+        """Return persistent weekly working schedule for current teacher."""
+        if actor.role.name != RoleEnum.TEACHER:
+            raise UnauthorizedException("Only teacher can view own schedule")
+
+        teacher_id = actor.id
+        timezone_name = await self._resolve_teacher_timezone(teacher_id=teacher_id)
+        windows = await self.repository.list_teacher_weekly_schedule_windows(teacher_id)
+        return self._build_teacher_weekly_schedule_payload(
+            teacher_id=teacher_id,
+            timezone_name=timezone_name,
+            windows=windows,
+        )
+
     async def replace_teacher_weekly_schedule(
         self,
         *,
@@ -121,6 +140,12 @@ class SchedulingService:
             teacher_id=teacher_id,
             windows=normalized_windows,
         )
+        generated_slots_count = await self._materialize_open_slots_from_weekly_schedule(
+            teacher_id=teacher_id,
+            timezone_name=timezone_name,
+            windows=normalized_windows,
+            created_by_admin_id=actor.id,
+        )
 
         await self.audit_repository.create_audit_log(
             actor_id=actor.id,
@@ -139,6 +164,7 @@ class SchedulingService:
                     }
                     for weekday, start_local_time, end_local_time in normalized_windows
                 ],
+                "generated_open_slots_count": generated_slots_count,
             },
         )
 
@@ -283,6 +309,68 @@ class SchedulingService:
                 return True
         return False
 
+    async def _materialize_open_slots_from_weekly_schedule(
+        self,
+        *,
+        teacher_id: UUID,
+        timezone_name: str,
+        windows: list[tuple[int, time, time]],
+        created_by_admin_id: UUID,
+    ) -> int:
+        """Generate upcoming OPEN slots from teacher weekly schedule windows."""
+        if not windows:
+            return 0
+
+        teacher_zone = self._load_timezone(timezone_name)
+        min_duration = timedelta(minutes=settings.slot_min_duration_minutes)
+        now_utc = utc_now()
+        local_today = now_utc.astimezone(teacher_zone).date()
+
+        generated_slots_count = 0
+        processed_candidates = 0
+        for day_offset in range(AUTO_SLOT_HORIZON_DAYS):
+            local_date = local_today + timedelta(days=day_offset)
+            weekday = local_date.weekday()
+            day_windows = [item for item in windows if item[0] == weekday]
+            if not day_windows:
+                continue
+
+            for _, start_local_time, end_local_time in day_windows:
+                processed_candidates += 1
+                if processed_candidates > settings.slot_bulk_create_max_slots:
+                    return generated_slots_count
+
+                start_local = datetime.combine(local_date, start_local_time, tzinfo=teacher_zone)
+                end_local = datetime.combine(local_date, end_local_time, tzinfo=teacher_zone)
+                start_at_utc = start_local.astimezone(UTC)
+                end_at_utc = end_local.astimezone(UTC)
+
+                if end_at_utc <= now_utc:
+                    continue
+                if start_at_utc <= now_utc:
+                    next_minute = (now_utc + timedelta(minutes=1)).replace(second=0, microsecond=0)
+                    start_at_utc = next_minute
+                if end_at_utc - start_at_utc < min_duration:
+                    continue
+
+                overlapping_slot = await self.repository.find_overlapping_slot(
+                    teacher_id=teacher_id,
+                    start_at=start_at_utc,
+                    end_at=end_at_utc,
+                )
+                if overlapping_slot is not None:
+                    continue
+
+                await self.repository.create_slot(
+                    teacher_id=teacher_id,
+                    created_by_admin_id=created_by_admin_id,
+                    start_at=start_at_utc,
+                    end_at=end_at_utc,
+                )
+                generated_slots_count += 1
+
+        return generated_slots_count
+
     async def list_open_slots(
         self,
         teacher_id: UUID | None,
@@ -340,8 +428,8 @@ class SchedulingService:
         if timezone_name is None:
             raise NotFoundException("Teacher not found")
         try:
-            ZoneInfo(timezone_name)
-        except ZoneInfoNotFoundError as exc:
+            self._load_timezone(timezone_name)
+        except BusinessRuleException as exc:
             raise BusinessRuleException("Teacher timezone is invalid") from exc
         return timezone_name
 
@@ -394,8 +482,8 @@ class SchedulingService:
         timezone_name: str,
         windows: list[TeacherWeeklyScheduleWindow],
     ) -> dict[str, object]:
-        teacher_zone = ZoneInfo(timezone_name)
-        moscow_zone = ZoneInfo(MOSCOW_TIMEZONE)
+        teacher_zone = self._load_timezone(timezone_name)
+        moscow_zone = self._load_timezone(MOSCOW_TIMEZONE)
 
         serialized_windows: list[dict[str, object]] = []
         for window in windows:
@@ -453,7 +541,7 @@ class SchedulingService:
 
     @staticmethod
     def _next_local_date_for_weekday(*, weekday: int, timezone_name: str) -> date:
-        local_today = utc_now().astimezone(ZoneInfo(timezone_name)).date()
+        local_today = utc_now().astimezone(SchedulingService._load_timezone(timezone_name)).date()
         days_ahead = (weekday - local_today.weekday()) % 7
         return local_today + timedelta(days=days_ahead)
 
@@ -480,6 +568,20 @@ class SchedulingService:
             ),
         )
         return serialized
+
+    @staticmethod
+    def _load_timezone(timezone_name: str):
+        normalized = timezone_name.strip()
+        if not normalized:
+            raise BusinessRuleException("Teacher timezone is invalid")
+        if normalized.upper() in {"UTC", "ETC/UTC", "GMT"}:
+            return UTC
+        try:
+            return ZoneInfo(normalized)
+        except ZoneInfoNotFoundError as exc:
+            if normalized == MOSCOW_TIMEZONE:
+                return timezone(timedelta(hours=3))
+            raise BusinessRuleException("Teacher timezone is invalid") from exc
 
 
 async def get_scheduling_service(

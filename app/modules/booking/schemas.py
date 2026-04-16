@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import BookingStatusEnum, PackageStatusEnum
+from app.shared.utils import ensure_utc
 
 
 class BookingHoldRequest(BaseModel):
@@ -15,6 +16,16 @@ class BookingHoldRequest(BaseModel):
 
     slot_id: UUID
     package_id: UUID
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+
+    @field_validator("start_at", "end_at", mode="after")
+    @classmethod
+    def normalize_optional_datetime_to_utc(cls, value: datetime | None) -> datetime | None:
+        """Normalize optional incoming datetimes to UTC."""
+        if value is None:
+            return None
+        return ensure_utc(value)
 
 
 class BookingCancelRequest(BaseModel):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -39,3 +39,26 @@ class SlotRead(BaseModel):
     status: SlotStatusEnum
     created_at: datetime
     updated_at: datetime
+
+
+class TeacherWeeklyScheduleWindowRead(BaseModel):
+    """Teacher weekly schedule window in local timezone with Moscow projection."""
+
+    schedule_window_id: UUID
+    weekday: int
+    start_local_time: time
+    end_local_time: time
+    moscow_start_weekday: int
+    moscow_end_weekday: int
+    moscow_start_time: time
+    moscow_end_time: time
+    created_at_utc: datetime
+    updated_at_utc: datetime
+
+
+class TeacherWeeklyScheduleRead(BaseModel):
+    """Teacher weekly schedule response."""
+
+    teacher_id: UUID
+    timezone: str
+    windows: list[TeacherWeeklyScheduleWindowRead]

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.core.enums import RoleEnum
 from app.modules.identity.service import require_roles
-from app.modules.scheduling.schemas import SlotCreate, SlotRead
+from app.modules.scheduling.schemas import SlotCreate, SlotRead, TeacherWeeklyScheduleRead
 from app.modules.scheduling.service import SchedulingService, get_scheduling_service
 from app.shared.pagination import Page, build_page, get_pagination_params
 
@@ -36,3 +36,13 @@ async def list_open_slots(
     items, total = await service.list_open_slots(teacher_id, pagination.limit, pagination.offset)
     serialized = [SlotRead.model_validate(item) for item in items]
     return build_page(serialized, total, pagination)
+
+
+@router.get("/teachers/me/schedule", response_model=TeacherWeeklyScheduleRead)
+async def get_my_teacher_schedule(
+    service: SchedulingService = Depends(get_scheduling_service),
+    current_user=Depends(require_roles(RoleEnum.TEACHER)),
+) -> TeacherWeeklyScheduleRead:
+    """Get current teacher weekly working schedule."""
+    payload = await service.get_current_teacher_weekly_schedule(actor=current_user)
+    return TeacherWeeklyScheduleRead.model_validate(payload)

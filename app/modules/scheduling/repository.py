@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, time
 from uuid import UUID
 
@@ -12,6 +13,41 @@ from app.core.enums import RoleEnum, SlotStatusEnum
 from app.modules.identity.models import Role, User
 from app.modules.scheduling.models import AvailabilitySlot, TeacherWeeklyScheduleWindow
 from app.modules.teachers.models import TeacherProfile
+
+_SYNTHETIC_LAST_NAMES: tuple[str, ...] = (
+    "Иванов",
+    "Петров",
+    "Смирнов",
+    "Васильев",
+    "Кузнецов",
+    "Попов",
+    "Соколов",
+    "Лебедев",
+)
+_SYNTHETIC_FIRST_NAMES: tuple[str, ...] = (
+    "Алексей",
+    "Сергей",
+    "Павел",
+    "Дмитрий",
+    "Илья",
+    "Егор",
+    "Кирилл",
+    "Максим",
+)
+_SYNTHETIC_MIDDLE_NAMES: tuple[str, ...] = (
+    "Андреевич",
+    "Сергеевич",
+    "Павлович",
+    "Игоревич",
+    "Николаевич",
+    "Олегович",
+    "Дмитриевич",
+    "Ильич",
+)
+_UUID_LIKE_LOCAL_PART = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 
 class SchedulingRepository:
@@ -119,10 +155,69 @@ class SchedulingRepository:
                 continue
 
             email_value = str(email or "").strip()
-            local_part = email_value.split("@", 1)[0].strip() if email_value else ""
-            names[user_id] = local_part or str(user_id)
+            names[user_id] = self._build_synthetic_teacher_full_name(
+                user_id=user_id,
+                email=email_value,
+            )
 
         return names
+
+    @staticmethod
+    def _build_synthetic_teacher_full_name(*, user_id: UUID, email: str) -> str:
+        """Build deterministic teacher FIO fallback when profile full name is missing."""
+        local_part = email.split("@", 1)[0].strip().lower() if email else ""
+
+        if local_part and not _UUID_LIKE_LOCAL_PART.fullmatch(local_part):
+            tokens = [token for token in re.split(r"[^a-z0-9]+", local_part) if token]
+            if tokens:
+                cleaned = " ".join(token.capitalize() for token in tokens[:2])
+                return f"Иванов {cleaned} Петрович"
+
+        seed = int.from_bytes(user_id.bytes, byteorder="big", signed=False)
+        last_name = _SYNTHETIC_LAST_NAMES[seed % len(_SYNTHETIC_LAST_NAMES)]
+        first_name = _SYNTHETIC_FIRST_NAMES[(seed // len(_SYNTHETIC_LAST_NAMES)) % len(_SYNTHETIC_FIRST_NAMES)]
+        middle_name = _SYNTHETIC_MIDDLE_NAMES[
+            (seed // (len(_SYNTHETIC_LAST_NAMES) * len(_SYNTHETIC_FIRST_NAMES)))
+            % len(_SYNTHETIC_MIDDLE_NAMES)
+        ]
+        return f"{last_name} {first_name} {middle_name}"
+
+    async def split_open_slot_for_booking(
+        self,
+        *,
+        slot: AvailabilitySlot,
+        booking_start_at: datetime,
+        booking_end_at: datetime,
+    ) -> AvailabilitySlot:
+        """Split OPEN slot into [left OPEN] + [booking interval] + [right OPEN]."""
+        original_start = slot.start_at
+        original_end = slot.end_at
+        if booking_start_at > original_start:
+            self.session.add(
+                AvailabilitySlot(
+                    teacher_id=slot.teacher_id,
+                    created_by_admin_id=slot.created_by_admin_id,
+                    start_at=original_start,
+                    end_at=booking_start_at,
+                    status=SlotStatusEnum.OPEN,
+                ),
+            )
+
+        if booking_end_at < original_end:
+            self.session.add(
+                AvailabilitySlot(
+                    teacher_id=slot.teacher_id,
+                    created_by_admin_id=slot.created_by_admin_id,
+                    start_at=booking_end_at,
+                    end_at=original_end,
+                    status=SlotStatusEnum.OPEN,
+                ),
+            )
+
+        slot.start_at = booking_start_at
+        slot.end_at = booking_end_at
+        await self.session.flush()
+        return slot
 
     async def set_slot_status(
         self,

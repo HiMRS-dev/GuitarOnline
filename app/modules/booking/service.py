@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from fastapi import Depends
@@ -125,15 +125,44 @@ class BookingService:
         slot_id: UUID,
         package_id: UUID,
         student_id: UUID,
+        requested_start_at: datetime | None = None,
+        requested_end_at: datetime | None = None,
     ) -> Booking:
         """Create HOLD booking for specific student without actor-role checks."""
         slot = await self.scheduling_repository.get_slot_by_id_for_update(slot_id)
         if slot is None:
             raise NotFoundException("Slot not found")
+        await self.scheduling_repository.lock_teacher_for_slot_mutation(slot.teacher_id)
         if slot.status != SlotStatusEnum.OPEN:
             raise BusinessRuleException("Slot is not available")
-        if slot.start_at <= utc_now():
+        now = utc_now()
+        if slot.start_at <= now:
             raise BusinessRuleException("Cannot book a slot in the past")
+
+        slot_start_at = slot.start_at
+        slot_end_at = slot.end_at
+        if requested_start_at is None and requested_end_at is None:
+            booking_start_at = slot_start_at
+            booking_end_at = slot_end_at
+        else:
+            if requested_start_at is None or requested_end_at is None:
+                raise BusinessRuleException("Both start_at and end_at are required for custom booking")
+            booking_start_at = requested_start_at
+            booking_end_at = requested_end_at
+
+        if booking_end_at <= booking_start_at:
+            raise BusinessRuleException("Booking end_at must be after start_at")
+        if booking_start_at < slot_start_at or booking_end_at > slot_end_at:
+            raise BusinessRuleException("Requested booking interval must be inside selected slot")
+        if booking_start_at <= now:
+            raise BusinessRuleException("Cannot book a slot in the past")
+
+        booking_duration_minutes = int((booking_end_at - booking_start_at).total_seconds() // 60)
+        if booking_duration_minutes < settings.slot_min_duration_minutes:
+            raise BusinessRuleException(
+                f"Booking duration must be at least {settings.slot_min_duration_minutes} minutes",
+            )
+
         active_booking = await self.booking_repository.get_active_booking_for_slot(slot.id)
         if active_booking is not None:
             raise BusinessRuleException("Slot is not available")
@@ -150,7 +179,14 @@ class BookingService:
         if self._available_lessons(package) <= 0:
             raise BusinessRuleException("No lessons left in package")
 
-        hold_expires_at = utc_now() + timedelta(minutes=settings.booking_hold_minutes)
+        if booking_start_at != slot_start_at or booking_end_at != slot_end_at:
+            slot = await self.scheduling_repository.split_open_slot_for_booking(
+                slot=slot,
+                booking_start_at=booking_start_at,
+                booking_end_at=booking_end_at,
+            )
+
+        hold_expires_at = now + timedelta(minutes=settings.booking_hold_minutes)
         await self.scheduling_repository.set_slot_status(slot, SlotStatusEnum.HOLD)
 
         booking = await self.booking_repository.create_booking_hold(
@@ -169,6 +205,8 @@ class BookingService:
                 "booking_id": str(booking.id),
                 "slot_id": str(slot.id),
                 "student_id": str(student_id),
+                "booking_start_at_utc": slot.start_at.isoformat(),
+                "booking_end_at_utc": slot.end_at.isoformat(),
             },
         )
 
@@ -183,6 +221,8 @@ class BookingService:
             slot_id=payload.slot_id,
             package_id=payload.package_id,
             student_id=actor.id,
+            requested_start_at=payload.start_at,
+            requested_end_at=payload.end_at,
         )
 
     async def confirm_booking(self, booking_id: UUID, actor: User) -> Booking:

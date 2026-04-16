@@ -155,6 +155,7 @@ class FakeBookingRepository:
 class FakeSchedulingRepository:
     def __init__(self, slots: dict[UUID, FakeSlot]) -> None:
         self._slots = slots
+        self.locked_teacher_ids: list[UUID] = []
 
     async def get_slot_by_id(self, slot_id: UUID) -> FakeSlot | None:
         return self._slots.get(slot_id)
@@ -162,8 +163,45 @@ class FakeSchedulingRepository:
     async def get_slot_by_id_for_update(self, slot_id: UUID) -> FakeSlot | None:
         return self._slots.get(slot_id)
 
+    async def lock_teacher_for_slot_mutation(self, teacher_id: UUID) -> None:
+        self.locked_teacher_ids.append(teacher_id)
+
     async def set_slot_status(self, slot: FakeSlot, status: SlotStatusEnum) -> FakeSlot:
         slot.status = status
+        return slot
+
+    async def split_open_slot_for_booking(
+        self,
+        *,
+        slot: FakeSlot,
+        booking_start_at: datetime,
+        booking_end_at: datetime,
+    ) -> FakeSlot:
+        original_start = slot.start_at
+        original_end = slot.end_at
+
+        if booking_start_at > original_start:
+            left_slot_id = uuid4()
+            self._slots[left_slot_id] = FakeSlot(
+                id=left_slot_id,
+                teacher_id=slot.teacher_id,
+                start_at=original_start,
+                end_at=booking_start_at,
+                status=SlotStatusEnum.OPEN,
+            )
+
+        if booking_end_at < original_end:
+            right_slot_id = uuid4()
+            self._slots[right_slot_id] = FakeSlot(
+                id=right_slot_id,
+                teacher_id=slot.teacher_id,
+                start_at=booking_end_at,
+                end_at=original_end,
+                status=SlotStatusEnum.OPEN,
+            )
+
+        slot.start_at = booking_start_at
+        slot.end_at = booking_end_at
         return slot
 
 
@@ -352,6 +390,121 @@ async def test_hold_sets_10_minute_expiration(monkeypatch: pytest.MonkeyPatch) -
     assert booking.status == BookingStatusEnum.HOLD
     assert booking.hold_expires_at == fixed_now + timedelta(minutes=settings.booking_hold_minutes)
     assert slot.status == SlotStatusEnum.HOLD
+
+
+@pytest.mark.asyncio
+async def test_hold_allows_custom_interval_and_splits_source_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=22),
+        end_at=fixed_now + timedelta(hours=28),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=10,
+        lessons_left=10,
+    )
+    custom_start = fixed_now + timedelta(hours=23)
+    custom_end = fixed_now + timedelta(hours=24)
+
+    service, booking_repo, _, scheduling_repo, _, _ = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    booking = await service.hold_booking(
+        BookingHoldRequest(
+            slot_id=slot_id,
+            package_id=package_id,
+            start_at=custom_start,
+            end_at=custom_end,
+        ),
+        actor,
+    )
+
+    assert booking.status == BookingStatusEnum.HOLD
+    assert booking.slot_id == slot_id
+    assert booking.slot.start_at == custom_start
+    assert booking.slot.end_at == custom_end
+    assert booking_repo._bookings[booking.id].slot.start_at == custom_start
+    assert booking_repo._bookings[booking.id].slot.end_at == custom_end
+    assert scheduling_repo.locked_teacher_ids == [teacher_id]
+    split_remainders = [
+        item
+        for item in scheduling_repo._slots.values()
+        if item.id != slot_id and item.teacher_id == teacher_id
+    ]
+    assert len(split_remainders) == 2
+    assert sorted(item.start_at for item in split_remainders) == [
+        fixed_now + timedelta(hours=22),
+        fixed_now + timedelta(hours=24),
+    ]
+    assert sorted(item.end_at for item in split_remainders) == [
+        fixed_now + timedelta(hours=23),
+        fixed_now + timedelta(hours=28),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_hold_rejects_custom_interval_outside_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 2, 19, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(booking_service_module, "utc_now", lambda: fixed_now)
+
+    student_id = uuid4()
+    teacher_id = uuid4()
+    slot_id = uuid4()
+    package_id = uuid4()
+
+    slot = FakeSlot(
+        id=slot_id,
+        teacher_id=teacher_id,
+        start_at=fixed_now + timedelta(hours=24),
+        end_at=fixed_now + timedelta(hours=30),
+        status=SlotStatusEnum.OPEN,
+    )
+    package = FakePackage(
+        id=package_id,
+        student_id=student_id,
+        status=PackageStatusEnum.ACTIVE,
+        expires_at=fixed_now + timedelta(days=7),
+        lessons_total=10,
+        lessons_left=10,
+    )
+
+    service, _, _, _, _, _ = make_service(
+        slots={slot_id: slot},
+        packages={package_id: package},
+    )
+    actor = make_actor(student_id, RoleEnum.STUDENT)
+
+    with pytest.raises(BusinessRuleException, match="inside selected slot"):
+        await service.hold_booking(
+            BookingHoldRequest(
+                slot_id=slot_id,
+                package_id=package_id,
+                start_at=fixed_now + timedelta(hours=23),
+                end_at=fixed_now + timedelta(hours=24),
+            ),
+            actor,
+        )
 
 
 @pytest.mark.asyncio

@@ -1883,7 +1883,7 @@
   - `React-admin` resource registered:
     - `teachers` (`List` + `Show`) with filters `status/q/tag`,
   - all non-connected resources/mutations remain explicitly blocked for next phase (`ADM-05`).
-- `ADM-05` in progress (`2026-04-25`):
+- `ADM-05` progress trail (`2026-04-25`):
   - first read-only expansion added:
     - resource `students` (via `/api/v1/admin/users?role=student`) connected in `React-admin`,
     - implemented list flows in dataProvider (`getList/getMany/getManyReference`) for `students`,
@@ -1895,8 +1895,18 @@
       - `POST /api/v1/admin/users/{user_id}/activate`,
       - `POST /api/v1/admin/users/{user_id}/deactivate`,
     - action button added in students grid (`Activate`/`Deactivate`).
+- `ADM-05` completed (`2026-04-25`):
+  - key resources connected in `React-admin`:
+    - `teachers` (`list/show`),
+    - `students` (`list`),
+    - `slots` (`list`),
+    - `bookings` (`list`),
+    - `packages` (`list`),
+  - controlled mutations enabled with backend role checks:
+    - `students`: activate/deactivate,
+    - `packages`: cancel.
 - Next step:
-  - continue `ADM-05` (connect next key resources and add controlled mutations).
+  - start `ADM-06` (`/internal-admin` SQLAdmin surface with strict auth boundary).
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

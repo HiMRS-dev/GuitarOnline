@@ -4,6 +4,8 @@ import { Admin, Resource } from "react-admin";
 
 import { getCurrentUser } from "../features/auth/api";
 import { adminPlatformDataProvider } from "./dataProvider";
+import { BookingsList } from "./resources/bookings";
+import { PackagesList } from "./resources/packages";
 import { SlotsList } from "./resources/slots";
 import { StudentsList } from "./resources/students";
 import { TeachersList, TeachersShow } from "./resources/teachers";
@@ -37,9 +39,13 @@ function AdminPlatformDashboard() {
       <p className="eyebrow">React-admin Shell</p>
       <h1>Admin Platform (beta)</h1>
       <p className="summary">
-        React-admin dataProvider is connected for teachers, students, and slots in
-        read-mostly mode. Student activate/deactivate mutation is enabled with
-        backend role checks.
+        React-admin dataProvider is connected for teachers, students, slots,
+        bookings, and packages. Student activate/deactivate and package cancel
+        mutations are enabled with backend role checks.
+      </p>
+      <p className="summary">
+        Next step (`ADM-06`) is internal SQLAdmin surface for support/debug,
+        while legacy admin flow remains available for rollout safety.
       </p>
     </article>
   );
@@ -92,6 +98,8 @@ export function AdminPlatformShell({ onSignOut }: AdminPlatformShellProps) {
         <Resource name="teachers" list={TeachersList} show={TeachersShow} />
         <Resource name="students" list={StudentsList} />
         <Resource name="slots" list={SlotsList} />
+        <Resource name="bookings" list={BookingsList} />
+        <Resource name="packages" list={PackagesList} />
       </Admin>
     </div>
   );

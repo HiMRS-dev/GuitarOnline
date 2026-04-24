@@ -64,6 +64,47 @@ export type SlotRaRecord = SlotApiRecord & {
   id: string;
 };
 
+type BookingApiRecord = {
+  booking_id: string;
+  slot_id: string;
+  student_id: string;
+  teacher_id: string;
+  package_id: string | null;
+  status: string;
+  slot_start_at_utc: string;
+  slot_end_at_utc: string;
+  hold_expires_at_utc: string | null;
+  confirmed_at_utc: string | null;
+  canceled_at_utc: string | null;
+  cancellation_reason: string | null;
+  refund_returned: boolean;
+  rescheduled_from_booking_id: string | null;
+  created_at_utc: string;
+  updated_at_utc: string;
+};
+
+export type BookingRaRecord = BookingApiRecord & {
+  id: string;
+};
+
+type PackageApiRecord = {
+  package_id: string;
+  student_id: string;
+  lessons_total: number;
+  lessons_left: number;
+  lessons_reserved: number;
+  price_amount: string | null;
+  price_currency: string | null;
+  expires_at_utc: string;
+  status: string;
+  created_at_utc: string;
+  updated_at_utc: string;
+};
+
+export type PackageRaRecord = PackageApiRecord & {
+  id: string;
+};
+
 function toTeacherRecord(record: TeacherApiRecord): TeacherRaRecord {
   return {
     ...record,
@@ -82,6 +123,20 @@ function toSlotRecord(record: SlotApiRecord): SlotRaRecord {
   return {
     ...record,
     id: record.slot_id
+  };
+}
+
+function toBookingRecord(record: BookingApiRecord): BookingRaRecord {
+  return {
+    ...record,
+    id: record.booking_id
+  };
+}
+
+function toPackageRecord(record: PackageApiRecord): PackageRaRecord {
+  return {
+    ...record,
+    id: record.package_id
   };
 }
 
@@ -122,6 +177,27 @@ type SlotsListQueryParams = {
 };
 
 type StudentUpdateParams = {
+  id: string | number;
+  data?: Record<string, unknown>;
+};
+
+type BookingsListQueryParams = {
+  pagination?: {
+    page?: number;
+    perPage?: number;
+  };
+  filter?: Record<string, unknown>;
+};
+
+type PackagesListQueryParams = {
+  pagination?: {
+    page?: number;
+    perPage?: number;
+  };
+  filter?: Record<string, unknown>;
+};
+
+type PackageUpdateParams = {
   id: string | number;
   data?: Record<string, unknown>;
 };
@@ -208,6 +284,62 @@ function buildSlotsListQuery(params: SlotsListQueryParams): string {
   return query.toString();
 }
 
+function buildBookingsListQuery(params: BookingsListQueryParams): string {
+  const page = params.pagination?.page ?? 1;
+  const perPage = params.pagination?.perPage ?? 20;
+  const offset = (page - 1) * perPage;
+
+  const query = new URLSearchParams({
+    limit: String(perPage),
+    offset: String(offset)
+  });
+
+  const teacherId = toStringFilterValue(params.filter?.teacher_id);
+  if (teacherId !== null) {
+    query.set("teacher_id", teacherId);
+  }
+  const studentId = toStringFilterValue(params.filter?.student_id);
+  if (studentId !== null) {
+    query.set("student_id", studentId);
+  }
+  const status = toStringFilterValue(params.filter?.status);
+  if (status !== null) {
+    query.set("status", status);
+  }
+  const fromUtc = toStringFilterValue(params.filter?.from_utc);
+  if (fromUtc !== null) {
+    query.set("from_utc", fromUtc);
+  }
+  const toUtc = toStringFilterValue(params.filter?.to_utc);
+  if (toUtc !== null) {
+    query.set("to_utc", toUtc);
+  }
+
+  return query.toString();
+}
+
+function buildPackagesListQuery(params: PackagesListQueryParams): string {
+  const page = params.pagination?.page ?? 1;
+  const perPage = params.pagination?.perPage ?? 20;
+  const offset = (page - 1) * perPage;
+
+  const query = new URLSearchParams({
+    limit: String(perPage),
+    offset: String(offset)
+  });
+
+  const studentId = toStringFilterValue(params.filter?.student_id);
+  if (studentId !== null) {
+    query.set("student_id", studentId);
+  }
+  const status = toStringFilterValue(params.filter?.status);
+  if (status !== null) {
+    query.set("status", status);
+  }
+
+  return query.toString();
+}
+
 function unsupportedResourceError(resource: string): Error {
   return new Error(`[admin-platform] Resource "${resource}" is not connected yet.`);
 }
@@ -237,6 +369,24 @@ async function getSlotsList(params: SlotsListQueryParams) {
   const response = await apiClient.request<PageResponse<SlotApiRecord>>(`/admin/slots?${query}`);
   return {
     data: response.items.map(toSlotRecord),
+    total: response.total
+  };
+}
+
+async function getBookingsList(params: BookingsListQueryParams) {
+  const query = buildBookingsListQuery(params);
+  const response = await apiClient.request<PageResponse<BookingApiRecord>>(`/admin/bookings?${query}`);
+  return {
+    data: response.items.map(toBookingRecord),
+    total: response.total
+  };
+}
+
+async function getPackagesList(params: PackagesListQueryParams) {
+  const query = buildPackagesListQuery(params);
+  const response = await apiClient.request<PageResponse<PackageApiRecord>>(`/admin/packages?${query}`);
+  return {
+    data: response.items.map(toPackageRecord),
     total: response.total
   };
 }
@@ -306,6 +456,42 @@ function asSlotGetManyReferenceResult<RecordType extends RaRecord>(
   return result as unknown as GetManyReferenceResult<RecordType>;
 }
 
+function asBookingGetListResult<RecordType extends RaRecord>(
+  result: GetListResult<BookingRaRecord>
+): GetListResult<RecordType> {
+  return result as unknown as GetListResult<RecordType>;
+}
+
+function asBookingGetManyReferenceResult<RecordType extends RaRecord>(
+  result: GetManyReferenceResult<BookingRaRecord>
+): GetManyReferenceResult<RecordType> {
+  return result as unknown as GetManyReferenceResult<RecordType>;
+}
+
+function asPackageGetListResult<RecordType extends RaRecord>(
+  result: GetListResult<PackageRaRecord>
+): GetListResult<RecordType> {
+  return result as unknown as GetListResult<RecordType>;
+}
+
+function asPackageGetManyReferenceResult<RecordType extends RaRecord>(
+  result: GetManyReferenceResult<PackageRaRecord>
+): GetManyReferenceResult<RecordType> {
+  return result as unknown as GetManyReferenceResult<RecordType>;
+}
+
+function asPackageGetOneResult<RecordType extends RaRecord>(
+  result: GetOneResult<PackageRaRecord>
+): GetOneResult<RecordType> {
+  return result as unknown as GetOneResult<RecordType>;
+}
+
+function asPackageGetManyResult<RecordType extends RaRecord>(
+  result: GetManyResult<PackageRaRecord>
+): GetManyResult<RecordType> {
+  return result as unknown as GetManyResult<RecordType>;
+}
+
 export const adminPlatformDataProvider: DataProvider = {
   async getList(resource, params) {
     if (resource === "teachers") {
@@ -316,6 +502,12 @@ export const adminPlatformDataProvider: DataProvider = {
     }
     if (resource === "slots") {
       return asSlotGetListResult(await getSlotsList(params));
+    }
+    if (resource === "bookings") {
+      return asBookingGetListResult(await getBookingsList(params));
+    }
+    if (resource === "packages") {
+      return asPackageGetListResult(await getPackagesList(params));
     }
     throw unsupportedResourceError(resource);
   },
@@ -345,6 +537,16 @@ export const adminPlatformDataProvider: DataProvider = {
         .map(toStudentRecord);
       return asStudentGetManyResult({ data: rows });
     }
+    if (resource === "packages") {
+      const response = await apiClient.request<PageResponse<PackageApiRecord>>(
+        `/admin/packages?limit=100&offset=0`
+      );
+      const idSet = new Set(params.ids.map((id) => String(id)));
+      const rows = response.items
+        .filter((item) => idSet.has(item.package_id))
+        .map(toPackageRecord);
+      return asPackageGetManyResult({ data: rows });
+    }
     throw unsupportedResourceError(resource);
   },
   async getManyReference(resource, params) {
@@ -356,6 +558,12 @@ export const adminPlatformDataProvider: DataProvider = {
     }
     if (resource === "slots") {
       return asSlotGetManyReferenceResult(await getSlotsList(params));
+    }
+    if (resource === "bookings") {
+      return asBookingGetManyReferenceResult(await getBookingsList(params));
+    }
+    if (resource === "packages") {
+      return asPackageGetManyReferenceResult(await getPackagesList(params));
     }
     throw unsupportedResourceError(resource);
   },
@@ -372,6 +580,20 @@ export const adminPlatformDataProvider: DataProvider = {
         : `/admin/users/${typedParams.id}/deactivate`;
       const updated = await apiClient.request<UserApiRecord>(endpoint, { method: "POST" });
       return asStudentGetOneResult({ data: toStudentRecord(updated) });
+    }
+    if (resource === "packages") {
+      const typedParams = params as PackageUpdateParams;
+      const nextStatus = typedParams.data?.status;
+      if (nextStatus !== "canceled") {
+        throw new Error('[admin-platform] packages.update currently supports only status="canceled"');
+      }
+      const updated = await apiClient.request<PackageApiRecord>(
+        `/admin/packages/${typedParams.id}/cancel`,
+        {
+          method: "POST"
+        }
+      );
+      return asPackageGetOneResult({ data: toPackageRecord(updated) });
     }
     throw unsupportedResourceError(resource);
   },

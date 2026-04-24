@@ -426,7 +426,7 @@ async function bootstrapAuthenticatedSession() {
 async function refreshSlots() {
   try {
     const queryParams = new URLSearchParams();
-    queryParams.set("limit", isTeacherRole() ? "50" : "20");
+    queryParams.set("limit", isTeacherRole() ? "50" : "100");
     queryParams.set("offset", "0");
     if (isTeacherRole() && state.currentUser?.id) {
       queryParams.set("teacher_id", state.currentUser.id);
@@ -1597,10 +1597,23 @@ function formatDateTime(value) {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat("ru-RU", {
+
+  const formatterOptions = {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(date);
+  };
+  const userTimezone =
+    typeof state.currentUser?.timezone === "string" ? state.currentUser.timezone.trim() : "";
+  if (userTimezone) {
+    try {
+      new Intl.DateTimeFormat("ru-RU", { timeZone: userTimezone }).format(date);
+      formatterOptions.timeZone = userTimezone;
+    } catch (_) {
+      // Keep browser timezone fallback when profile timezone is invalid.
+    }
+  }
+
+  return new Intl.DateTimeFormat("ru-RU", formatterOptions).format(date);
 }
 
 function formatDateTimeInputValue(value) {

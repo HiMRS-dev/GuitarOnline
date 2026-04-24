@@ -1,3 +1,6 @@
+const rawApiBaseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+
 export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() ||
-  "http://localhost:8000/api/v1";
+  rawApiBaseUrl && rawApiBaseUrl.length > 0
+    ? rawApiBaseUrl.replace(/\/+$/, "")
+    : "/api/v1";

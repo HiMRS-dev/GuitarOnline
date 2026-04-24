@@ -6,12 +6,16 @@ React + TypeScript admin UI scaffold powered by Vite.
 
 1. Install dependencies:
    - `npm install`
-2. Copy env template:
-   - `.env.example` -> `.env`
+2. Optional env for local API target (`web-admin/.env`):
+   - `VITE_API_BASE_URL=/api/v1`
+   - `VITE_DEV_API_TARGET=http://localhost:8000`
 3. Start dev server:
    - `npm run dev`
 
-Default API base URL is provided by `VITE_API_BASE_URL`.
+By default admin UI uses relative API base `"/api/v1"` and Vite dev proxy
+for `"/api/*"` requests to `VITE_DEV_API_TARGET` (fallback: `http://localhost:8000`).
+
+Use absolute `VITE_API_BASE_URL` only when you intentionally need a different backend.
 Public app base path is configured with `VITE_BASE_PATH` (`/` for local dev, `/admin/`
 for reverse-proxy deployment).
 

@@ -33,6 +33,11 @@ const TeachersPage = lazy(() =>
 const UsersPage = lazy(() =>
   import("./admin/pages/UsersPage").then((module) => ({ default: module.UsersPage }))
 );
+const AdminPlatformShell = lazy(() =>
+  import("./admin-platform/AdminPlatformShell").then((module) => ({
+    default: module.AdminPlatformShell
+  }))
+);
 
 function maskToken(token: string): string {
   if (token.length <= 12) {
@@ -65,6 +70,16 @@ export function App() {
         path="/admin/login"
         element={
           <LoginPage tokens={tokens} onSignedIn={handleSignedIn} onSignOut={handleSignOut} />
+        }
+      />
+      <Route
+        path="/admin/platform/*"
+        element={
+          <ProtectedAdminRoute tokens={tokens} onInvalidSession={handleSignOut}>
+            <LazyAdminSection>
+              <AdminPlatformShell onSignOut={handleSignOut} />
+            </LazyAdminSection>
+          </ProtectedAdminRoute>
         }
       />
       <Route

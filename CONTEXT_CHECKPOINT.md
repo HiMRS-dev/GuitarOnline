@@ -1871,8 +1871,14 @@
     - `app/modules/admin/service.py`,
     - `app/modules/admin/repository.py`,
     - `app/shared/pagination.py`.
+- `ADM-03` completed (`2026-04-25`):
+  - isolated `React-admin` shell added in `web-admin` under route:
+    - `/admin/platform/*`,
+  - existing admin routes preserved (`/admin/*` unchanged),
+  - shell wired with temporary auth/dataProvider stubs for next task handoff (`ADM-04`),
+  - menu entry added (`Platform beta`) for quick access from current admin UI.
 - Next step:
-  - start `ADM-03` (isolated `React-admin` shell in `web-admin` without breaking existing screens).
+  - start `ADM-04` (custom dataProvider adapter for real backend API resources).
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

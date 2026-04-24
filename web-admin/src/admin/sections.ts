@@ -11,5 +11,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { id: "calendar", label: "Календарь", path: "calendar" },
   { id: "audit", label: "Аудит", path: "audit" },
   { id: "students", label: "Студенты", path: "students" },
-  { id: "packages", label: "Пакеты", path: "packages" }
+  { id: "packages", label: "Пакеты", path: "packages" },
+  { id: "platform", label: "Platform beta", path: "platform" }
 ];

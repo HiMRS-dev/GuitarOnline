@@ -775,6 +775,14 @@ button[disabled] {
   gap: 1rem;
 }
 
+.admin-platform-shell {
+  min-height: calc(100vh - 4rem);
+}
+
+.admin-platform-dashboard {
+  max-width: 760px;
+}
+
 .dashboard-status-grid {
   display: grid;
   gap: 0.75rem;

@@ -1877,8 +1877,14 @@
   - existing admin routes preserved (`/admin/*` unchanged),
   - shell wired with temporary auth/dataProvider stubs for next task handoff (`ADM-04`),
   - menu entry added (`Platform beta`) for quick access from current admin UI.
+- `ADM-04` completed (`2026-04-25`):
+  - custom `dataProvider` added for real backend contract (`/api/v1/admin/teachers`):
+    - implemented `getList`, `getOne`, `getMany`, `getManyReference` for resource `teachers`,
+  - `React-admin` resource registered:
+    - `teachers` (`List` + `Show`) with filters `status/q/tag`,
+  - all non-connected resources/mutations remain explicitly blocked for next phase (`ADM-05`).
 - Next step:
-  - start `ADM-04` (custom dataProvider adapter for real backend API resources).
+  - start `ADM-05` (connect additional resources and enable controlled mutations).
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

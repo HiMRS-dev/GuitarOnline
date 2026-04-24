@@ -1,59 +1,13 @@
 import { useMemo } from "react";
-import type { AuthProvider, DataProvider } from "react-admin";
-import { Admin } from "react-admin";
+import type { AuthProvider } from "react-admin";
+import { Admin, Resource } from "react-admin";
 
 import { getCurrentUser } from "../features/auth/api";
+import { adminPlatformDataProvider } from "./dataProvider";
+import { TeachersList, TeachersShow } from "./resources/teachers";
 
 type AdminPlatformShellProps = {
   onSignOut: () => void;
-};
-
-function notImplementedDataProviderError(resource: string): Error {
-  return new Error(
-    `[ADM-04] DataProvider for resource "${resource}" is not connected yet.`
-  );
-}
-
-const adminPlatformDataProvider: DataProvider = {
-  async getList(resource, params) {
-    void resource;
-    void params;
-    return { data: [], total: 0 };
-  },
-  async getOne(resource, params) {
-    void params;
-    throw notImplementedDataProviderError(resource);
-  },
-  async getMany(resource, params) {
-    void resource;
-    void params;
-    return { data: [] };
-  },
-  async getManyReference(resource, params) {
-    void resource;
-    void params;
-    return { data: [], total: 0 };
-  },
-  async create(resource, params) {
-    void params;
-    throw notImplementedDataProviderError(resource);
-  },
-  async update(resource, params) {
-    void params;
-    throw notImplementedDataProviderError(resource);
-  },
-  async updateMany(resource, params) {
-    void params;
-    throw notImplementedDataProviderError(resource);
-  },
-  async delete(resource, params) {
-    void params;
-    throw notImplementedDataProviderError(resource);
-  },
-  async deleteMany(resource, params) {
-    void params;
-    throw notImplementedDataProviderError(resource);
-  }
 };
 
 function resolveStatusCode(error: unknown): number | null {
@@ -81,8 +35,8 @@ function AdminPlatformDashboard() {
       <p className="eyebrow">React-admin Shell</p>
       <h1>Admin Platform (beta)</h1>
       <p className="summary">
-        React-admin shell is mounted on an isolated route. Next step (`ADM-04`) is
-        connecting the dataProvider to real API resources.
+        React-admin dataProvider is now connected for teachers (list/show).
+        Next step (`ADM-05`) is rolling out additional resources and mutations.
       </p>
     </article>
   );
@@ -131,7 +85,9 @@ export function AdminPlatformShell({ onSignOut }: AdminPlatformShellProps) {
         authProvider={authProvider}
         requireAuth
         disableTelemetry
-      />
+      >
+        <Resource name="teachers" list={TeachersList} show={TeachersShow} />
+      </Admin>
     </div>
   );
 }

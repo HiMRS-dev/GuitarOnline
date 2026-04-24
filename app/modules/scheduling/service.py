@@ -133,6 +133,7 @@ class SchedulingService:
 
         timezone_name = await self._resolve_teacher_timezone(teacher_id=teacher_id)
         normalized_windows = self._normalize_weekly_schedule_windows(windows)
+        now_utc = utc_now()
 
         await self.repository.lock_teacher_for_slot_mutation(teacher_id)
         previous_windows = await self.repository.list_teacher_weekly_schedule_windows(teacher_id)
@@ -140,11 +141,16 @@ class SchedulingService:
             teacher_id=teacher_id,
             windows=normalized_windows,
         )
+        removed_open_slots_count = await self.repository.delete_future_open_slots(
+            teacher_id=teacher_id,
+            from_utc=now_utc,
+        )
         generated_slots_count = await self._materialize_open_slots_from_weekly_schedule(
             teacher_id=teacher_id,
             timezone_name=timezone_name,
             windows=normalized_windows,
             created_by_admin_id=actor.id,
+            reference_now_utc=now_utc,
         )
 
         await self.audit_repository.create_audit_log(
@@ -164,6 +170,7 @@ class SchedulingService:
                     }
                     for weekday, start_local_time, end_local_time in normalized_windows
                 ],
+                "removed_open_slots_count": removed_open_slots_count,
                 "generated_open_slots_count": generated_slots_count,
             },
         )
@@ -316,6 +323,7 @@ class SchedulingService:
         timezone_name: str,
         windows: list[tuple[int, time, time]],
         created_by_admin_id: UUID,
+        reference_now_utc: datetime | None = None,
     ) -> int:
         """Generate upcoming OPEN slots from teacher weekly schedule windows."""
         if not windows:
@@ -323,7 +331,7 @@ class SchedulingService:
 
         teacher_zone = self._load_timezone(timezone_name)
         min_duration = timedelta(minutes=settings.slot_min_duration_minutes)
-        now_utc = utc_now()
+        now_utc = reference_now_utc or utc_now()
         local_today = now_utc.astimezone(teacher_zone).date()
 
         generated_slots_count = 0

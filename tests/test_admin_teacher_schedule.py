@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 
 from app.core.config import get_settings
-from app.core.enums import RoleEnum
+from app.core.enums import RoleEnum, SlotStatusEnum
 from app.modules.scheduling.service import SchedulingService
 from app.shared.exceptions import BusinessRuleException, UnauthorizedException
 
@@ -31,6 +31,7 @@ class FakeAvailabilitySlot:
     created_by_admin_id: UUID
     start_at: datetime
     end_at: datetime
+    status: SlotStatusEnum = SlotStatusEnum.OPEN
 
 
 class FakeSchedulingRepository:
@@ -85,9 +86,31 @@ class FakeSchedulingRepository:
         for slot in self.slots:
             if slot.teacher_id != teacher_id:
                 continue
+            if slot.status != SlotStatusEnum.OPEN:
+                continue
             if slot.start_at < end_at and slot.end_at > start_at:
                 return slot
         return None
+
+    async def delete_future_open_slots(
+        self,
+        *,
+        teacher_id: UUID,
+        from_utc: datetime,
+    ) -> int:
+        kept: list[FakeAvailabilitySlot] = []
+        removed = 0
+        for slot in self.slots:
+            if (
+                slot.teacher_id == teacher_id
+                and slot.status == SlotStatusEnum.OPEN
+                and slot.start_at >= from_utc
+            ):
+                removed += 1
+                continue
+            kept.append(slot)
+        self.slots = kept
+        return removed
 
     async def create_slot(
         self,
@@ -173,11 +196,11 @@ async def test_admin_replace_teacher_schedule_materializes_slots_by_window_durat
     service = SchedulingService(repository=repository, audit_repository=audit_repository)  # type: ignore[arg-type]
     admin = make_actor(RoleEnum.ADMIN)
     teacher_id = uuid4()
-    weekday_today = datetime.now(UTC).weekday()
+    weekday_tomorrow = (datetime.now(UTC) + timedelta(days=1)).weekday()
 
     await service.replace_teacher_weekly_schedule(
         teacher_id=teacher_id,
-        windows=[(weekday_today, time(10, 0), time(11, 0))],
+        windows=[(weekday_tomorrow, time(0, 0), time(1, 0))],
         actor=admin,
     )
 
@@ -188,6 +211,36 @@ async def test_admin_replace_teacher_schedule_materializes_slots_by_window_durat
     assert int((first_slot.end_at - first_slot.start_at).total_seconds() // 60) == int(
         expected_duration,
     )
+
+
+@pytest.mark.asyncio
+async def test_admin_replace_teacher_schedule_replaces_future_open_slots() -> None:
+    repository = FakeSchedulingRepository(teacher_timezone="UTC")
+    audit_repository = FakeAuditRepository()
+    service = SchedulingService(repository=repository, audit_repository=audit_repository)  # type: ignore[arg-type]
+    admin = make_actor(RoleEnum.ADMIN)
+    teacher_id = uuid4()
+
+    now_utc = datetime.now(UTC).replace(second=0, microsecond=0)
+    blocking_slot = FakeAvailabilitySlot(
+        id=uuid4(),
+        teacher_id=teacher_id,
+        created_by_admin_id=admin.id,
+        start_at=now_utc + timedelta(minutes=10),
+        end_at=now_utc + timedelta(days=30),
+        status=SlotStatusEnum.OPEN,
+    )
+    repository.slots.append(blocking_slot)
+
+    await service.replace_teacher_weekly_schedule(
+        teacher_id=teacher_id,
+        windows=[(now_utc.weekday(), time(10, 0), time(11, 0))],
+        actor=admin,
+    )
+
+    materialized = [slot for slot in repository.slots if slot.teacher_id == teacher_id]
+    assert materialized
+    assert all(slot.id != blocking_slot.id for slot in materialized)
 
 
 @pytest.mark.asyncio

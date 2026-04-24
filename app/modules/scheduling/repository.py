@@ -107,6 +107,26 @@ class SchedulingRepository:
         )
         return await self.session.scalar(stmt)
 
+    async def delete_future_open_slots(
+        self,
+        *,
+        teacher_id: UUID,
+        from_utc: datetime,
+    ) -> int:
+        """Delete teacher OPEN slots starting from given UTC moment."""
+        deleted_ids = tuple(
+            await self.session.scalars(
+                delete(AvailabilitySlot)
+                .where(
+                    AvailabilitySlot.teacher_id == teacher_id,
+                    AvailabilitySlot.status == SlotStatusEnum.OPEN,
+                    AvailabilitySlot.start_at >= from_utc,
+                )
+                .returning(AvailabilitySlot.id),
+            ),
+        )
+        return len(deleted_ids)
+
     async def list_open_slots(
         self,
         teacher_id: UUID | None,

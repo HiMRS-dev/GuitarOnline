@@ -813,7 +813,7 @@ async def admin_login_redirect() -> RedirectResponse:
 async def unified_auth_redirect_for_admin_login() -> RedirectResponse:
     """Redirect admin login route to shared portal auth page."""
     return RedirectResponse(
-        url="/portal?auth=login&next=/admin/kpi&entry=admin",
+        url="/portal?auth=login&next=/admin/platform&entry=admin",
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
 

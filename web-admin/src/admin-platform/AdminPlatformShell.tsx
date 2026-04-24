@@ -44,8 +44,9 @@ function AdminPlatformDashboard() {
         mutations are enabled with backend role checks.
       </p>
       <p className="summary">
-        Next step (`ADM-06`) is internal SQLAdmin surface for support/debug,
-        while legacy admin flow remains available for rollout safety.
+        Framework-first cutover is active: default admin entry now opens this
+        screen, while legacy admin pages remain available as a fallback path
+        for one release cycle.
       </p>
     </article>
   );

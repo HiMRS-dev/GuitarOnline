@@ -1934,8 +1934,20 @@
     - `py -m poetry run pytest -q tests/test_admin_platform_role_parity_integration.py` -> `1 passed`,
   - report artifact:
     - `docs/admin_platform/ADM_07_ROLE_PARITY_REPORT_2026-04-25.md`.
+- `ADM-08` completed (`2026-04-25`):
+  - framework-first admin cutover enabled:
+    - default admin entry now targets `/admin/platform`,
+  - backend login redirect updated:
+    - `/portal?auth=login&next=/admin/platform&entry=admin`,
+  - frontend default route targets updated:
+    - portal redirect constant in `app/frontend/static/app.js`,
+    - wildcard and index redirects in `web-admin/src/App.tsx`,
+  - one-release fallback retained:
+    - legacy admin routes (`/admin/kpi`, `/admin/users`, `/admin/teachers`, etc.) are preserved,
+  - rollout + rollback notes documented:
+    - `docs/admin_platform/ADM_08_ROLLOUT_PLAN_2026-04-25.md`.
 - Next step:
-  - start `ADM-08` (rollout/cutover to framework-first admin flow with one-cycle fallback path).
+  - run final post-plan verification sweep (targeted lint/tests/build), fix detected issues, and prepare merge-ready branch state.
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

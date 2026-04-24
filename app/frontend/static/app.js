@@ -1,5 +1,5 @@
 const API_PREFIX = "/api/v1";
-const ADMIN_DASHBOARD_PATH = "/admin/kpi";
+const ADMIN_DASHBOARD_PATH = "/admin/platform";
 
 const state = {
   accessToken: null,

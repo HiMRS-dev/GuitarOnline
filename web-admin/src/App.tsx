@@ -90,7 +90,7 @@ export function App() {
           </ProtectedAdminRoute>
         }
       >
-        <Route index element={<Navigate to="kpi" replace />} />
+        <Route index element={<Navigate to="/admin/platform" replace />} />
         <Route path="users" element={<LazyAdminSection><UsersPage /></LazyAdminSection>} />
         <Route path="teachers" element={<LazyAdminSection><TeachersPage /></LazyAdminSection>} />
         <Route path="calendar" element={<LazyAdminSection><CalendarPage /></LazyAdminSection>} />
@@ -99,7 +99,10 @@ export function App() {
         <Route path="packages" element={<LazyAdminSection><PackagesPage /></LazyAdminSection>} />
         <Route path="kpi" element={<LazyAdminSection><KpiPage /></LazyAdminSection>} />
       </Route>
-      <Route path="*" element={<Navigate to={tokens ? "/admin/kpi" : "/admin/login"} replace />} />
+      <Route
+        path="*"
+        element={<Navigate to={tokens ? "/admin/platform" : "/admin/login"} replace />}
+      />
     </Routes>
   );
 }
@@ -212,7 +215,7 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
             <button type="button" onClick={handleLogout}>
               Выйти
             </button>
-            <Link className="link-btn" to="/admin/kpi">
+            <Link className="link-btn" to="/admin/platform">
               Открыть админку
             </Link>
           </div>

@@ -158,7 +158,7 @@ test("admin login and platform teachers page smoke flow", async ({ page }) => {
   await page.locator('a[href="/admin/platform"]').click();
   await expect(page).toHaveURL(/\/admin\/platform$/);
 
-  await page.goto("/admin/platform/teachers");
+  await page.locator('a[href="/admin/platform/teachers"]').first().click();
   await expect(page).toHaveURL(/\/admin\/platform\/teachers(?:\?.*)?$/);
   await expect(page.getByText("Smoke Teacher Full Name")).toBeVisible();
 

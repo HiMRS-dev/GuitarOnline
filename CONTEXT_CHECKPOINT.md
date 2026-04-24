@@ -1958,6 +1958,8 @@
   - root cause of failing `ci`/`deploy` runs `24897874376` / `24897874350`:
     - stale Playwright smoke expectation in `web-admin/e2e/admin-smoke.spec.ts` still required `/admin/kpi` after framework-first cutover to `/admin/platform`,
   - test flow updated to platform-first path (`/admin/platform`, `/admin/platform/teachers`, teacher show page),
+  - additional stabilization for CI parity:
+    - switched teachers navigation in smoke from hard reload (`page.goto`) to in-app link click (`a[href=\"/admin/platform/teachers\"]`) to avoid auth-state reset to `/admin/login` during e2e run,
   - local validation:
     - `cmd /c npm run lint` -> `success`,
     - `cmd /c npm run test:smoke:e2e` -> `1 passed`.

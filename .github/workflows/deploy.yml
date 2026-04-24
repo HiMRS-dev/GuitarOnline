@@ -75,8 +75,26 @@ jobs:
         id: auto_deploy_guard
         run: |
           set -euo pipefail
-          echo "enabled=true" >> "$GITHUB_OUTPUT"
-          echo "Auto deploy is enabled for this run."
+          enabled="true"
+          reason="active"
+
+          if [ "${TRIGGER_SOURCE}" = "push" ]; then
+            branch_name="${GITHUB_REF_NAME:-}"
+            current_sha="$(git rev-parse HEAD)"
+            latest_remote_sha="$(git ls-remote origin "refs/heads/${branch_name}" | awk '{print $1}')"
+            if [ -n "${latest_remote_sha}" ] && [ "${current_sha}" != "${latest_remote_sha}" ]; then
+              enabled="false"
+              reason="outdated_push_run"
+            fi
+          fi
+
+          echo "enabled=${enabled}" >> "$GITHUB_OUTPUT"
+          echo "reason=${reason}" >> "$GITHUB_OUTPUT"
+          if [ "${enabled}" = "true" ]; then
+            echo "Auto deploy is enabled for this run."
+          else
+            echo "Auto deploy is skipped (${reason})."
+          fi
 
       - name: Print deployment context
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}

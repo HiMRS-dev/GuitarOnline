@@ -1890,7 +1890,11 @@
   - second read-only expansion added:
     - resource `slots` (via `/api/v1/admin/slots`) connected in `React-admin`,
     - implemented list flows in dataProvider (`getList/getManyReference`) for `slots`,
-  - mutations are still disabled for this resource in current increment.
+  - first controlled mutation enabled:
+    - `students.update` mapped to admin endpoints:
+      - `POST /api/v1/admin/users/{user_id}/activate`,
+      - `POST /api/v1/admin/users/{user_id}/deactivate`,
+    - action button added in students grid (`Activate`/`Deactivate`).
 - Next step:
   - continue `ADM-05` (connect next key resources and add controlled mutations).
 

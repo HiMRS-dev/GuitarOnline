@@ -121,6 +121,11 @@ type SlotsListQueryParams = {
   filter?: Record<string, unknown>;
 };
 
+type StudentUpdateParams = {
+  id: string | number;
+  data?: Record<string, unknown>;
+};
+
 function buildTeachersListQuery(params: TeachersListQueryParams): string {
   const page = params.pagination?.page ?? 1;
   const perPage = params.pagination?.perPage ?? 20;
@@ -204,9 +209,7 @@ function buildSlotsListQuery(params: SlotsListQueryParams): string {
 }
 
 function unsupportedResourceError(resource: string): Error {
-  return new Error(
-    `[ADM-04] Resource "${resource}" is not connected yet. This will be covered in ADM-05.`
-  );
+  return new Error(`[admin-platform] Resource "${resource}" is not connected yet.`);
 }
 
 async function getTeachersList(params: TeachersListQueryParams) {
@@ -277,6 +280,12 @@ function asStudentGetManyResult<RecordType extends RaRecord>(
   result: GetManyResult<StudentRaRecord>
 ): GetManyResult<RecordType> {
   return result as unknown as GetManyResult<RecordType>;
+}
+
+function asStudentGetOneResult<RecordType extends RaRecord>(
+  result: GetOneResult<StudentRaRecord>
+): GetOneResult<RecordType> {
+  return result as unknown as GetOneResult<RecordType>;
 }
 
 function asStudentGetManyReferenceResult<RecordType extends RaRecord>(
@@ -350,7 +359,20 @@ export const adminPlatformDataProvider: DataProvider = {
     }
     throw unsupportedResourceError(resource);
   },
-  async update(resource) {
+  async update(resource, params) {
+    if (resource === "students") {
+      const typedParams = params as StudentUpdateParams;
+      const nextIsActive = typedParams.data?.is_active;
+      if (typeof nextIsActive !== "boolean") {
+        throw new Error("[admin-platform] students.update requires boolean is_active");
+      }
+
+      const endpoint = nextIsActive
+        ? `/admin/users/${typedParams.id}/activate`
+        : `/admin/users/${typedParams.id}/deactivate`;
+      const updated = await apiClient.request<UserApiRecord>(endpoint, { method: "POST" });
+      return asStudentGetOneResult({ data: toStudentRecord(updated) });
+    }
     throw unsupportedResourceError(resource);
   },
   async updateMany(resource) {

@@ -38,7 +38,8 @@ function AdminPlatformDashboard() {
       <h1>Admin Platform (beta)</h1>
       <p className="summary">
         React-admin dataProvider is connected for teachers, students, and slots in
-        read-only mode. Next step (`ADM-05`) is controlled mutation rollout.
+        read-mostly mode. Student activate/deactivate mutation is enabled with
+        backend role checks.
       </p>
     </article>
   );

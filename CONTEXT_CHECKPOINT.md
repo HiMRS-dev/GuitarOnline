@@ -1823,3 +1823,39 @@
 - Planning recorded.
 - Implementation not started yet.
 
+## 20) Admin Platform Consolidation Plan (Draft 2026-04-24)
+
+### 20.1) Goal
+- Stop rebuilding CRUD/admin primitives manually and migrate admin workflows to framework-based approach:
+  - primary UI: `React-admin` on top of existing backend API,
+  - technical internal surface: `SQLAdmin` for fast operational CRUD/debug.
+
+### 20.2) Branching Strategy
+- Implementation branch:
+  - `feature/admin-platform`.
+- Rules:
+  - keep `main` stable,
+  - merge by small reversible PRs,
+  - preserve existing `web-admin` flows until parity is confirmed.
+
+### 20.3) Execution Tasks (Ordered)
+| Task | Priority | Description | Deliverable |
+|---|---|---|---|
+| `ADM-01` | P0 | Create `feature/admin-platform` and freeze baseline references (current `main` SHA + active deploy/CI run IDs). | Branch pushed + baseline note in checkpoint. |
+| `ADM-02` | P0 | Build API resource map for admin UI (`teachers`, `students`, `slots`, `bookings`, `packages`): endpoints, payloads, pagination, filters, sort, auth constraints. | Mapping table in docs/checkpoint for deterministic integration. |
+| `ADM-03` | P0 | Add `React-admin` shell in `web-admin` behind isolated route/entry (no breaking change to current screens). | Minimal app boot with auth context and layout. |
+| `ADM-04` | P0 | Implement custom `dataProvider` adapter for current backend API contract (no backend contract break). | Working list/read operations for at least one resource. |
+| `ADM-05` | P1 | Connect key resources in read-only mode first, then enable mutations with role checks. | CRUD parity for priority resources with audit-safe actions. |
+| `ADM-06` | P1 | Add `SQLAdmin` internal surface in backend (`/internal-admin`) with strict auth boundary and minimal model set. | Operational admin endpoint for support/debug tasks. |
+| `ADM-07` | P1 | Run parity validation by role (`admin`/`teacher`/`student`) including `schedule -> generated slots -> open slots` chain. | E2E/report proving no regression in critical flows. |
+| `ADM-08` | P1 | Rollout and cleanup: switch default admin flow to framework screens, keep fallback path for one release cycle. | Controlled cutover plan + rollback notes. |
+
+### 20.4) Constraints
+- API contracts must remain backward-compatible unless explicit change plan is approved.
+- DB schema changes are out of scope by default for this migration.
+- Dependency additions require explicit review per repository policy.
+
+### 20.5) Current Status
+- Planning recorded.
+- Branch creation and implementation not started yet.
+

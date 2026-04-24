@@ -1857,5 +1857,13 @@
 
 ### 20.5) Current Status
 - Planning recorded.
-- Branch creation and implementation not started yet.
+- `ADM-01` completed (`2026-04-25`):
+  - implementation branch created and pushed:
+    - `feature/admin-platform`,
+  - baseline `main` reference frozen:
+    - `main` SHA: `16a858cdb397940f2534b57e21c600ba426e6a97`,
+    - latest `ci` run on `main`: `24886675980` (`success`),
+    - latest `deploy` run on `main`: `24886675972` (`success`).
+- Next step:
+  - start `ADM-02` (API resource map for admin UI).
 

@@ -46,6 +46,24 @@ export type StudentRaRecord = UserApiRecord & {
   id: string;
 };
 
+type SlotApiRecord = {
+  slot_id: string;
+  teacher_id: string;
+  created_by_admin_id: string;
+  start_at_utc: string;
+  end_at_utc: string;
+  slot_status: string;
+  booking_id: string | null;
+  booking_status: string | null;
+  aggregated_booking_status: string;
+  created_at_utc: string;
+  updated_at_utc: string;
+};
+
+export type SlotRaRecord = SlotApiRecord & {
+  id: string;
+};
+
 function toTeacherRecord(record: TeacherApiRecord): TeacherRaRecord {
   return {
     ...record,
@@ -57,6 +75,13 @@ function toStudentRecord(record: UserApiRecord): StudentRaRecord {
   return {
     ...record,
     id: record.user_id
+  };
+}
+
+function toSlotRecord(record: SlotApiRecord): SlotRaRecord {
+  return {
+    ...record,
+    id: record.slot_id
   };
 }
 
@@ -86,6 +111,14 @@ type StudentsListQueryParams = {
 
 type TeacherGetOneParams = {
   id: string | number;
+};
+
+type SlotsListQueryParams = {
+  pagination?: {
+    page?: number;
+    perPage?: number;
+  };
+  filter?: Record<string, unknown>;
 };
 
 function buildTeachersListQuery(params: TeachersListQueryParams): string {
@@ -142,6 +175,34 @@ function buildStudentsListQuery(params: StudentsListQueryParams): string {
   return query.toString();
 }
 
+function buildSlotsListQuery(params: SlotsListQueryParams): string {
+  const page = params.pagination?.page ?? 1;
+  const perPage = params.pagination?.perPage ?? 20;
+  const offset = (page - 1) * perPage;
+
+  const query = new URLSearchParams({
+    limit: String(perPage),
+    offset: String(offset)
+  });
+
+  const teacherId = toStringFilterValue(params.filter?.teacher_id);
+  if (teacherId !== null) {
+    query.set("teacher_id", teacherId);
+  }
+
+  const fromUtc = toStringFilterValue(params.filter?.from_utc);
+  if (fromUtc !== null) {
+    query.set("from_utc", fromUtc);
+  }
+
+  const toUtc = toStringFilterValue(params.filter?.to_utc);
+  if (toUtc !== null) {
+    query.set("to_utc", toUtc);
+  }
+
+  return query.toString();
+}
+
 function unsupportedResourceError(resource: string): Error {
   return new Error(
     `[ADM-04] Resource "${resource}" is not connected yet. This will be covered in ADM-05.`
@@ -164,6 +225,15 @@ async function getStudentsList(params: StudentsListQueryParams) {
   const response = await apiClient.request<PageResponse<UserApiRecord>>(`/admin/users?${query}`);
   return {
     data: response.items.map(toStudentRecord),
+    total: response.total
+  };
+}
+
+async function getSlotsList(params: SlotsListQueryParams) {
+  const query = buildSlotsListQuery(params);
+  const response = await apiClient.request<PageResponse<SlotApiRecord>>(`/admin/slots?${query}`);
+  return {
+    data: response.items.map(toSlotRecord),
     total: response.total
   };
 }
@@ -215,6 +285,18 @@ function asStudentGetManyReferenceResult<RecordType extends RaRecord>(
   return result as unknown as GetManyReferenceResult<RecordType>;
 }
 
+function asSlotGetListResult<RecordType extends RaRecord>(
+  result: GetListResult<SlotRaRecord>
+): GetListResult<RecordType> {
+  return result as unknown as GetListResult<RecordType>;
+}
+
+function asSlotGetManyReferenceResult<RecordType extends RaRecord>(
+  result: GetManyReferenceResult<SlotRaRecord>
+): GetManyReferenceResult<RecordType> {
+  return result as unknown as GetManyReferenceResult<RecordType>;
+}
+
 export const adminPlatformDataProvider: DataProvider = {
   async getList(resource, params) {
     if (resource === "teachers") {
@@ -222,6 +304,9 @@ export const adminPlatformDataProvider: DataProvider = {
     }
     if (resource === "students") {
       return asStudentGetListResult(await getStudentsList(params));
+    }
+    if (resource === "slots") {
+      return asSlotGetListResult(await getSlotsList(params));
     }
     throw unsupportedResourceError(resource);
   },
@@ -259,6 +344,9 @@ export const adminPlatformDataProvider: DataProvider = {
     }
     if (resource === "students") {
       return asStudentGetManyReferenceResult(await getStudentsList(params));
+    }
+    if (resource === "slots") {
+      return asSlotGetManyReferenceResult(await getSlotsList(params));
     }
     throw unsupportedResourceError(resource);
   },

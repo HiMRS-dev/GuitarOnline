@@ -4,6 +4,7 @@ import { Admin, Resource } from "react-admin";
 
 import { getCurrentUser } from "../features/auth/api";
 import { adminPlatformDataProvider } from "./dataProvider";
+import { SlotsList } from "./resources/slots";
 import { StudentsList } from "./resources/students";
 import { TeachersList, TeachersShow } from "./resources/teachers";
 
@@ -36,7 +37,7 @@ function AdminPlatformDashboard() {
       <p className="eyebrow">React-admin Shell</p>
       <h1>Admin Platform (beta)</h1>
       <p className="summary">
-        React-admin dataProvider is connected for teachers and students in
+        React-admin dataProvider is connected for teachers, students, and slots in
         read-only mode. Next step (`ADM-05`) is controlled mutation rollout.
       </p>
     </article>
@@ -89,6 +90,7 @@ export function AdminPlatformShell({ onSignOut }: AdminPlatformShellProps) {
       >
         <Resource name="teachers" list={TeachersList} show={TeachersShow} />
         <Resource name="students" list={StudentsList} />
+        <Resource name="slots" list={SlotsList} />
       </Admin>
     </div>
   );

@@ -1887,6 +1887,9 @@
   - first read-only expansion added:
     - resource `students` (via `/api/v1/admin/users?role=student`) connected in `React-admin`,
     - implemented list flows in dataProvider (`getList/getMany/getManyReference`) for `students`,
+  - second read-only expansion added:
+    - resource `slots` (via `/api/v1/admin/slots`) connected in `React-admin`,
+    - implemented list flows in dataProvider (`getList/getManyReference`) for `slots`,
   - mutations are still disabled for this resource in current increment.
 - Next step:
   - continue `ADM-05` (connect next key resources and add controlled mutations).

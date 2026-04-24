@@ -1946,8 +1946,16 @@
     - legacy admin routes (`/admin/kpi`, `/admin/users`, `/admin/teachers`, etc.) are preserved,
   - rollout + rollback notes documented:
     - `docs/admin_platform/ADM_08_ROLLOUT_PLAN_2026-04-25.md`.
+- Admin Platform final verification sweep completed (`2026-04-25`):
+  - backend lint:
+    - `py -m poetry run ruff check app/main.py app/modules/admin/internal_sqladmin.py tests/test_admin_ui_redirects.py tests/test_admin_platform_role_parity_integration.py` -> `All checks passed`,
+  - backend tests:
+    - `py -m poetry run pytest -q tests/test_admin_ui_redirects.py tests/test_security_headers.py tests/test_admin_platform_role_parity_integration.py` -> `6 passed`,
+  - web-admin validation:
+    - `cmd /c npm run lint` -> `success`,
+    - `cmd /c npm run build` -> `success`.
 - Next step:
-  - run final post-plan verification sweep (targeted lint/tests/build), fix detected issues, and prepare merge-ready branch state.
+  - prepare PR from `feature/admin-platform` to `main` with rollout notes and smoke checklist.
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

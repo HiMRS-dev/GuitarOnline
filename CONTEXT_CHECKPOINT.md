@@ -1883,8 +1883,13 @@
   - `React-admin` resource registered:
     - `teachers` (`List` + `Show`) with filters `status/q/tag`,
   - all non-connected resources/mutations remain explicitly blocked for next phase (`ADM-05`).
+- `ADM-05` in progress (`2026-04-25`):
+  - first read-only expansion added:
+    - resource `students` (via `/api/v1/admin/users?role=student`) connected in `React-admin`,
+    - implemented list flows in dataProvider (`getList/getMany/getManyReference`) for `students`,
+  - mutations are still disabled for this resource in current increment.
 - Next step:
-  - start `ADM-05` (connect additional resources and enable controlled mutations).
+  - continue `ADM-05` (connect next key resources and add controlled mutations).
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

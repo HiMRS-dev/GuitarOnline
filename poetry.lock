@@ -484,6 +484,36 @@ files = [
 ]
 
 [[package]]
+name = "itsdangerous"
+version = "2.2.0"
+description = "Safely pass data to untrusted environments and back."
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef"},
+    {file = "itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173"},
+]
+
+[[package]]
+name = "jinja2"
+version = "3.1.6"
+description = "A very fast and expressive template engine."
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67"},
+    {file = "jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d"},
+]
+
+[package.dependencies]
+MarkupSafe = ">=2.0"
+
+[package.extras]
+i18n = ["Babel (>=2.7)"]
+
+[[package]]
 name = "mako"
 version = "1.3.10"
 description = "A super-fast templating language that borrows the best ideas from the existing templating languages."
@@ -1081,6 +1111,28 @@ files = [
 ]
 
 [[package]]
+name = "sqladmin"
+version = "0.24.0"
+description = "SQLAlchemy admin for FastAPI and Starlette"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "sqladmin-0.24.0-py3-none-any.whl", hash = "sha256:ff9b9ad29723bc23334f6f37953250817e9fc2347d4bdcc3a64920dbeb5e742a"},
+    {file = "sqladmin-0.24.0.tar.gz", hash = "sha256:186680182855c30d9b912267bd5a5f66493b15ee2f8ca296d16c420faa6cfb96"},
+]
+
+[package.dependencies]
+jinja2 = "*"
+python-multipart = "*"
+sqlalchemy = ">=2.0"
+starlette = "*"
+wtforms = ">=3.1,<3.2"
+
+[package.extras]
+full = ["itsdangerous"]
+
+[[package]]
 name = "sqlalchemy"
 version = "2.0.46"
 description = "Database Abstraction Library"
@@ -1509,7 +1561,25 @@ files = [
     {file = "websockets-16.0.tar.gz", hash = "sha256:5f6261a5e56e8d5c42a4497b364ea24d94d9563e8fbd44e78ac40879c60179b5"},
 ]
 
+[[package]]
+name = "wtforms"
+version = "3.1.2"
+description = "Form validation and rendering for Python web development."
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "wtforms-3.1.2-py3-none-any.whl", hash = "sha256:bf831c042829c8cdbad74c27575098d541d039b1faa74c771545ecac916f2c07"},
+    {file = "wtforms-3.1.2.tar.gz", hash = "sha256:f8d76180d7239c94c6322f7990ae1216dae3659b7aa1cee94b6318bdffb474b9"},
+]
+
+[package.dependencies]
+markupsafe = "*"
+
+[package.extras]
+email = ["email-validator"]
+
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "8805f6e0dc0a679bbc1dd4c64620010e66a6de6d7ae454a2da9a52b12e300fde"
+content-hash = "a61c8ad679af14d47794f99a5321d9195fdb62f5ccbc1c1c14e18962cdf67928"

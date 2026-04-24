@@ -21,3 +21,14 @@ def test_admin_login_route_redirects_to_shared_portal_auth() -> None:
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 307
         assert response.headers.get("location") == "/portal?auth=login&next=/admin/kpi&entry=admin"
+
+
+def test_internal_admin_redirects_to_internal_login_without_session() -> None:
+    client = TestClient(main_module.app)
+
+    response = client.get("/internal-admin/", follow_redirects=False)
+
+    assert response.status_code in (302, 303, 307)
+    location = response.headers.get("location")
+    assert location is not None
+    assert location.endswith("/internal-admin/login")

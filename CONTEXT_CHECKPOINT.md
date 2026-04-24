@@ -1905,8 +1905,21 @@
   - controlled mutations enabled with backend role checks:
     - `students`: activate/deactivate,
     - `packages`: cancel.
+- `ADM-06` completed (`2026-04-25`):
+  - internal SQLAdmin surface added in backend:
+    - `/internal-admin` (separate from business admin UI `/admin/*`),
+  - strict auth boundary implemented:
+    - login accepts only active `admin` users from existing `users/roles` tables,
+    - session re-validation checks role/activity on each request,
+  - minimal model set connected in read-only operational mode:
+    - `users`, `teacher_profiles`, `availability_slots`, `bookings`, `lesson_packages`,
+  - backend wiring added in app bootstrap:
+    - `app/modules/admin/internal_sqladmin.py`,
+    - `app/main.py` (`configure_internal_sqladmin(...)`),
+  - targeted regression check added:
+    - unauthenticated `/internal-admin/` redirects to internal login page.
 - Next step:
-  - start `ADM-06` (`/internal-admin` SQLAdmin surface with strict auth boundary).
+  - start `ADM-07` (role parity validation report for `admin/teacher/student`, including `schedule -> generated slots -> open slots` chain).
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

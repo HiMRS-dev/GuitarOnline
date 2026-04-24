@@ -18,6 +18,7 @@ from sqlalchemy import text
 from app.core.config import get_settings
 from app.core.database import SessionLocal, close_engine
 from app.core.metrics import build_metrics_response, instrument_http_request
+from app.modules.admin.internal_sqladmin import configure_internal_sqladmin
 from app.modules.admin.router import router as admin_router
 from app.modules.audit.router import router as audit_router
 from app.modules.billing.router import router as billing_router
@@ -613,6 +614,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
+configure_internal_sqladmin(app, secret_key=settings.secret_key)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.frontend_admin_origin),

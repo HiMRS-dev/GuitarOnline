@@ -1918,8 +1918,24 @@
     - `app/main.py` (`configure_internal_sqladmin(...)`),
   - targeted regression check added:
     - unauthenticated `/internal-admin/` redirects to internal login page.
+- `ADM-07` completed (`2026-04-25`):
+  - role parity integration scenario added:
+    - `tests/test_admin_platform_role_parity_integration.py`,
+  - validated chain:
+    - `PUT /api/v1/admin/teachers/{teacher_id}/schedule` ->
+      `GET /api/v1/admin/slots?teacher_id=...` ->
+      `GET /api/v1/scheduling/slots/open?teacher_id=...`,
+    - generated open slots are visible both for `teacher` and `student`,
+  - RBAC validation in same scenario:
+    - `teacher`/`student` cannot access admin schedule endpoints (`403`),
+    - `student` cannot access teacher-only schedule endpoint (`403`),
+    - `teacher` can access own schedule endpoint (`200`),
+  - execution evidence:
+    - `py -m poetry run pytest -q tests/test_admin_platform_role_parity_integration.py` -> `1 passed`,
+  - report artifact:
+    - `docs/admin_platform/ADM_07_ROLE_PARITY_REPORT_2026-04-25.md`.
 - Next step:
-  - start `ADM-07` (role parity validation report for `admin/teacher/student`, including `schedule -> generated slots -> open slots` chain).
+  - start `ADM-08` (rollout/cutover to framework-first admin flow with one-cycle fallback path).
 
 ### 20.6) ADM-02 API Resource Map (`2026-04-25`)
 - Base admin prefix for UI adapter:

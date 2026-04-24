@@ -674,6 +674,12 @@ async function handleProfileSave(event) {
 
 function renderProfile(user, options = {}) {
   const roleName = user.role?.name ?? "";
+  const roleLabelByName = {
+    student: "Ученик",
+    teacher: "Преподаватель",
+    admin: "Администратор",
+  };
+  const roleDisplay = (roleLabelByName[roleName] ?? roleName) || "-";
   const isEditableProfile = roleName === "student" || roleName === "teacher";
   const isEditing = isEditableProfile && options.isEditing === true;
   const adminPanelLink =
@@ -685,6 +691,7 @@ function renderProfile(user, options = {}) {
   const ageValue = user.age === null || user.age === undefined ? "" : String(user.age);
   const ageDisplay = ageValue || "\u043D\u0435 \u0443\u043A\u0430\u0437\u0430\u043D";
   const studentProfileDetails = `
+      <p class="meta"><strong>\u0420\u043E\u043B\u044C:</strong> ${escapeHtml(roleDisplay)}</p>
       <p class="meta"><strong>\u0424\u0418\u041E:</strong> ${escapeHtml(fullNameDisplay)}</p>
       <p class="meta"><strong>\u0412\u043E\u0437\u0440\u0430\u0441\u0442:</strong> ${escapeHtml(ageDisplay)}</p>
   `;
@@ -727,7 +734,7 @@ function renderProfile(user, options = {}) {
   `;
   const nonStudentProfileDetails = `
       <p class="meta"><strong>ID:</strong> ${escapeHtml(user.id ?? "-")}</p>
-      <p class="meta"><strong>\u0420\u043E\u043B\u044C:</strong> ${escapeHtml(roleName || "-")}</p>
+      <p class="meta"><strong>\u0420\u043E\u043B\u044C:</strong> ${escapeHtml(roleDisplay)}</p>
   `;
   const roleSpecificSection = isEditableProfile
     ? isEditing

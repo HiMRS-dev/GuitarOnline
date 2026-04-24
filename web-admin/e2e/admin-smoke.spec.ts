@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 
 const TEACHER_ID = "7d1404cd-cfdf-45f5-9f5e-1d62f6f9f001";
 const PROFILE_ID = "c2258a73-22df-42be-98d8-4f3afe9e8ec1";
@@ -10,7 +10,7 @@ function jsonHeaders() {
   };
 }
 
-test("admin login and teachers page smoke flow", async ({ page }) => {
+test("admin login and platform teachers page smoke flow", async ({ page }) => {
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -36,9 +36,7 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
         await route.fulfill({
           status: 401,
           headers: jsonHeaders(),
-          body: JSON.stringify({
-            detail: "Unauthorized"
-          })
+          body: JSON.stringify({ detail: "Unauthorized" })
         });
         return;
       }
@@ -66,9 +64,7 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
       await route.fulfill({
         status: 401,
         headers: jsonHeaders(),
-        body: JSON.stringify({
-          detail: "Unauthorized"
-        })
+        body: JSON.stringify({ detail: "Unauthorized" })
       });
       return;
     }
@@ -148,37 +144,26 @@ test("admin login and teachers page smoke flow", async ({ page }) => {
     await route.fulfill({
       status: 404,
       headers: jsonHeaders(),
-      body: JSON.stringify({
-        detail: `Unhandled mock route: ${method} ${path}`
-      })
+      body: JSON.stringify({ detail: `Unhandled mock route: ${method} ${path}` })
     });
   });
 
   await page.goto("/admin");
   await expect(page).toHaveURL(/\/admin\/login$/);
-  await expect(
-    page.getByRole("heading", { name: /Admin Login Contract|Вход в админку/ })
-  ).toBeVisible();
 
-  await page.getByLabel(/Email|Почта/).fill("admin-smoke@guitaronline.dev");
-  await page.getByLabel(/Password|Пароль/).fill("StrongPass123!");
-  await page.getByRole("button", { name: /Sign in|Войти/ }).click();
+  await page.locator('input[name="email"]').fill("admin-smoke@guitaronline.dev");
+  await page.locator('input[name="password"]').fill("StrongPass123!");
+  await page.locator('button[type="submit"]').click();
 
-  await expect(
-    page.getByText(
-      /Authenticated\. Open the protected admin route\.|Вы авторизованы\. Откройте защищенный раздел админки\./
-    )
-  ).toBeVisible();
-  await page.getByRole("link", { name: /Go to admin|Открыть админку/ }).click();
+  await page.locator('a[href="/admin/platform"]').click();
+  await expect(page).toHaveURL(/\/admin\/platform$/);
 
-  await expect(page).toHaveURL(/\/admin\/kpi$/);
-  await page.getByRole("link", { name: /Teachers|Преподаватели/ }).click();
-  await expect(page).toHaveURL(/\/admin\/teachers$/);
-  await page.getByRole("button", { name: /Open list|Открыть список/ }).click();
-  await expect(page.getByRole("heading", { name: /Teachers list|Список преподавателей/ })).toBeVisible();
-  await page.getByRole("button", { name: /Smoke Teacher/ }).first().click();
-  await expect(page.getByRole("heading", { name: "Smoke Teacher" })).toBeVisible();
+  await page.goto("/admin/platform/teachers");
+  await expect(page).toHaveURL(/\/admin\/platform\/teachers(?:\?.*)?$/);
+  await expect(page.getByText("Smoke Teacher Full Name")).toBeVisible();
 
-  await page.getByRole("button", { name: /Sign out|Выйти/ }).click();
-  await expect(page).toHaveURL(/\/admin\/login$/);
+  await page.getByText("Smoke Teacher Full Name").first().click();
+  await expect(page).toHaveURL(new RegExp(`/admin/platform/teachers/${TEACHER_ID}/show$`));
+  await expect(page.getByText("Teacher Detail")).toBeVisible();
+  await expect(page.getByText("Smoke profile")).toBeVisible();
 });

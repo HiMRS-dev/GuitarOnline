@@ -1954,6 +1954,13 @@
   - web-admin validation:
     - `cmd /c npm run lint` -> `success`,
     - `cmd /c npm run build` -> `success`.
+- CI/Deploy follow-up fix (`2026-04-25`):
+  - root cause of failing `ci`/`deploy` runs `24897874376` / `24897874350`:
+    - stale Playwright smoke expectation in `web-admin/e2e/admin-smoke.spec.ts` still required `/admin/kpi` after framework-first cutover to `/admin/platform`,
+  - test flow updated to platform-first path (`/admin/platform`, `/admin/platform/teachers`, teacher show page),
+  - local validation:
+    - `cmd /c npm run lint` -> `success`,
+    - `cmd /c npm run test:smoke:e2e` -> `1 passed`.
 - Next step:
   - prepare PR from `feature/admin-platform` to `main` with rollout notes and smoke checklist.
 

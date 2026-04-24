@@ -1864,6 +1864,34 @@
     - `main` SHA: `16a858cdb397940f2534b57e21c600ba426e6a97`,
     - latest `ci` run on `main`: `24886675980` (`success`),
     - latest `deploy` run on `main`: `24886675972` (`success`).
+- `ADM-02` completed (`2026-04-25`):
+  - API resource map collected for admin migration (`teachers`, `students`, `slots`, `bookings`, `packages`),
+  - contract basis confirmed from backend router/service/repository:
+    - `app/modules/admin/router.py`,
+    - `app/modules/admin/service.py`,
+    - `app/modules/admin/repository.py`,
+    - `app/shared/pagination.py`.
 - Next step:
-  - start `ADM-02` (API resource map for admin UI).
+  - start `ADM-03` (isolated `React-admin` shell in `web-admin` without breaking existing screens).
+
+### 20.6) ADM-02 API Resource Map (`2026-04-25`)
+- Base admin prefix for UI adapter:
+  - `/api/v1/admin` (`settings.api_prefix=/api/v1` + admin router prefix `/admin`).
+- Common pagination contract for list endpoints:
+  - request: `limit` (default `20`, range `1..100`), `offset` (default `0`),
+  - response: `{"items": [...], "total": N, "limit": X, "offset": Y}`.
+- Access control baseline:
+  - all endpoints below are admin-only (`require_roles(RoleEnum.ADMIN)`),
+  - service-level guard duplicates this check (`Only admin can ...` exceptions).
+
+| Resource | Endpoints (list/read/mutate) | Filters + sort | Notes for data provider |
+|---|---|---|---|
+| `teachers` | `GET /teachers`, `GET /teachers/{teacher_id}`, `POST /teachers/{teacher_id}/disable`, `GET /teachers/{teacher_id}/schedule`, `PUT /teachers/{teacher_id}/schedule` | `status`, `q`, `tag`, `limit`, `offset`; list sort: `TeacherProfile.created_at DESC`, `id DESC` | Teacher schedule is managed as weekly windows (replace semantics on `PUT`). |
+| `students` (via `users`) | `GET /users?role=student`, `POST /users/{user_id}/activate`, `POST /users/{user_id}/deactivate`, `POST /users/{user_id}/role` | `role`, `is_active`, `q`, `limit`, `offset`; list sort: `User.created_at DESC`, `id DESC` | Separate `/students` endpoint does not exist; student admin grid should use `users` resource with role filter. |
+| `slots` | `GET /slots`, `POST /slots`, `DELETE /slots/{slot_id}`, `POST /slots/{slot_id}/block`, `POST /slots/bulk-create`, `GET /slots/stats` | `teacher_id`, `from_utc`, `to_utc`, `limit`, `offset`; list sort: `AvailabilitySlot.start_at ASC` | Validation: `from_utc <= to_utc`; delete is blocked when slot has bookings (fallback action: block slot). |
+| `bookings` | `GET /bookings`, `POST /bookings/{booking_id}/cancel`, `POST /bookings/{booking_id}/reschedule`, `POST /lessons/{lesson_id}/no-show` | `teacher_id`, `student_id`, `status`, `from_utc`, `to_utc`, `limit`, `offset`; list sort: `slot.start_at ASC`, `booking.created_at ASC` | Validation: `from_utc <= to_utc`; cancel/reschedule/no-show depend on booking/lesson state machine rules. |
+| `packages` | `GET /packages`, `POST /packages`, `POST /packages/{package_id}/cancel` | `student_id`, `status`, `limit`, `offset`; list sort: `LessonPackage.created_at DESC` | Cancel is rejected when `lessons_reserved > 0`; create expects admin package payload with UTC expiration. |
+
+- Integration caveat:
+  - admin role changes (`POST /users/{user_id}/role`) are restricted by privileged admin allowlist (`admin_role_manager_emails`), so UI should surface `403` as explicit permission error.
 

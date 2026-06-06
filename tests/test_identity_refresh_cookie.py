@@ -75,9 +75,8 @@ def test_refresh_uses_cookie_when_request_body_is_missing() -> None:
     assert response.status_code == 200
     assert service.refresh_inputs == ["cookie-refresh-token"]
     assert response.json()["access_token"] == "rotated-access-token"
-    assert (
-        f"{settings.auth_refresh_cookie_name}=rotated-refresh-token"
-        in response.headers.get("set-cookie", "")
+    assert f"{settings.auth_refresh_cookie_name}=rotated-refresh-token" in response.headers.get(
+        "set-cookie", ""
     )
 
 

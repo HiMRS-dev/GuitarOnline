@@ -174,8 +174,7 @@ def _verify_github_secret_access(*, repository: str, secret_name: str) -> None:
         names.add(stripped.split()[0])
     if secret_name not in names:
         raise RuntimeError(
-            "Required repository secret not found: "
-            f"{secret_name} (repo={repository})",
+            f"Required repository secret not found: {secret_name} (repo={repository})",
         )
 
 

@@ -39,14 +39,13 @@ function AdminPlatformDashboard() {
       <p className="eyebrow">React-admin Shell</p>
       <h1>Admin Platform (beta)</h1>
       <p className="summary">
-        React-admin dataProvider is connected for teachers, students, slots,
-        bookings, and packages. Student activate/deactivate and package cancel
-        mutations are enabled with backend role checks.
+        React-admin dataProvider is connected for teachers, students, slots, bookings, and packages.
+        Student activate/deactivate and package cancel mutations are enabled with backend role
+        checks.
       </p>
       <p className="summary">
-        Framework-first cutover is active: default admin entry now opens this
-        screen, while legacy admin pages remain available as a fallback path
-        for one release cycle.
+        Framework-first cutover is active: default admin entry now opens this screen, while legacy
+        admin pages remain available as a fallback path for one release cycle.
       </p>
     </article>
   );

@@ -1,11 +1,7 @@
 import { apiClient } from "../../shared/api/client";
 import type { PageResponse } from "../../shared/api/types";
 
-import type {
-  AdminBooking,
-  BookingCancelPayload,
-  BookingReschedulePayload
-} from "./types";
+import type { AdminBooking, BookingCancelPayload, BookingReschedulePayload } from "./types";
 
 type BookingListParams = {
   teacherId?: string;

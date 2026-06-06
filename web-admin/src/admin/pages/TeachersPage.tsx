@@ -133,9 +133,7 @@ export function TeachersPage() {
       const limit = 100;
       while (true) {
         const page = await listTeachers(
-          statusFilter === "all"
-            ? { limit, offset }
-            : { status: statusFilter, limit, offset }
+          statusFilter === "all" ? { limit, offset } : { status: statusFilter, limit, offset }
         );
         items.push(...page.items);
         offset += page.items.length;
@@ -146,10 +144,7 @@ export function TeachersPage() {
       }
       setPickerTeachers(items);
     } catch (requestError) {
-      if (
-        requestError instanceof ApiClientError &&
-        UNAVAILABLE_STATUSES.has(requestError.status)
-      ) {
+      if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
         setPickerUnavailable(true);
       } else {
         setPickerError(
@@ -344,9 +339,7 @@ export function TeachersPage() {
       }
     } catch (requestError) {
       setActionError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Не удалось отключить преподавателя"
+        requestError instanceof Error ? requestError.message : "Не удалось отключить преподавателя"
       );
     } finally {
       setActionPending(null);
@@ -450,11 +443,13 @@ export function TeachersPage() {
     setScheduleError(null);
     setScheduleSaveSuccess(null);
     try {
-      const payload: TeacherScheduleWindowWrite[] = sortScheduleDraft(scheduleDraft).map((item) => ({
-        weekday: item.weekday,
-        start_local_time: toApiTime(toInputTime(item.start_local_time)),
-        end_local_time: toApiTime(toInputTime(item.end_local_time))
-      }));
+      const payload: TeacherScheduleWindowWrite[] = sortScheduleDraft(scheduleDraft).map(
+        (item) => ({
+          weekday: item.weekday,
+          start_local_time: toApiTime(toInputTime(item.start_local_time)),
+          end_local_time: toApiTime(toInputTime(item.end_local_time))
+        })
+      );
       const updated = await updateTeacherSchedule(selectedTeacherId, { windows: payload });
       setTeacherSchedule(updated);
       setScheduleDraft(
@@ -559,7 +554,10 @@ export function TeachersPage() {
         </div>
 
         <p className="summary">
-          Выбран: <strong>{teacherDetail?.display_name ?? selectedTeacherFromPicker?.display_name ?? "не выбран"}</strong>
+          Выбран:{" "}
+          <strong>
+            {teacherDetail?.display_name ?? selectedTeacherFromPicker?.display_name ?? "не выбран"}
+          </strong>
         </p>
 
         {pickerUnavailable ? (
@@ -572,12 +570,18 @@ export function TeachersPage() {
         <p className="eyebrow">Карточка преподавателя</p>
         {teacherDetail ? <h1>{teacherDetail.display_name}</h1> : <h1>Не выбрано</h1>}
 
-        <div className="quick-filter-group" role="group" aria-label="Действия по аккаунту преподавателя">
+        <div
+          className="quick-filter-group"
+          role="group"
+          aria-label="Действия по аккаунту преподавателя"
+        >
           {statusFilter !== "disabled" ? (
             <button
               type="button"
               className="quick-filter"
-              disabled={!teacherDetail || actionPending !== null || teacherDetail.status === "disabled"}
+              disabled={
+                !teacherDetail || actionPending !== null || teacherDetail.status === "disabled"
+              }
               onClick={() => void handleDisableAction()}
             >
               {actionPending === "disable" ? "Отключение..." : "Отключить"}
@@ -587,7 +591,9 @@ export function TeachersPage() {
             <button
               type="button"
               className="quick-filter"
-              disabled={!teacherDetail || actionPending !== null || teacherDetail.status === "active"}
+              disabled={
+                !teacherDetail || actionPending !== null || teacherDetail.status === "active"
+              }
               onClick={() => void handleActivateAction()}
             >
               {actionPending === "activate" ? "Активируем..." : "Активировать"}
@@ -621,7 +627,8 @@ export function TeachersPage() {
               <strong>Таймзона:</strong> {teacherDetail.timezone}
             </p>
             <p>
-              <strong>Теги:</strong> {teacherDetail.tags.length ? teacherDetail.tags.join(", ") : "нет"}
+              <strong>Теги:</strong>{" "}
+              {teacherDetail.tags.length ? teacherDetail.tags.join(", ") : "нет"}
             </p>
             <p>
               <strong>О себе:</strong> {teacherDetail.bio}
@@ -635,7 +642,8 @@ export function TeachersPage() {
           <h2>Постоянный график преподавателя</h2>
           {teacherSchedule ? (
             <p className="summary">
-              Локальная зона: <code>{teacherSchedule.timezone}</code>, вторая зона: <code>Europe/Moscow</code>.
+              Локальная зона: <code>{teacherSchedule.timezone}</code>, вторая зона:{" "}
+              <code>Europe/Moscow</code>.
             </p>
           ) : null}
           {scheduleLoading ? <p className="summary">Загрузка графика...</p> : null}
@@ -699,10 +707,13 @@ export function TeachersPage() {
                     </thead>
                     <tbody>
                       {sortScheduleDraft(scheduleDraft).map((item, index) => (
-                        <tr key={`${item.weekday}-${item.start_local_time}-${item.end_local_time}-${index}`}>
+                        <tr
+                          key={`${item.weekday}-${item.start_local_time}-${item.end_local_time}-${index}`}
+                        >
                           <td>{formatWeekday(item.weekday)}</td>
                           <td>
-                            {toInputTime(item.start_local_time)} - {toInputTime(item.end_local_time)}
+                            {toInputTime(item.start_local_time)} -{" "}
+                            {toInputTime(item.end_local_time)}
                           </td>
                           <td>
                             <button
@@ -723,7 +734,11 @@ export function TeachersPage() {
                 <p className="summary">В черновике графика пока нет интервалов.</p>
               )}
 
-              <div className="quick-filter-group" role="group" aria-label="Действия графика преподавателя">
+              <div
+                className="quick-filter-group"
+                role="group"
+                aria-label="Действия графика преподавателя"
+              >
                 <button
                   type="button"
                   className="quick-filter"
@@ -762,8 +777,10 @@ export function TeachersPage() {
                           {toInputTime(item.end_local_time)}
                         </td>
                         <td>
-                          {formatWeekday(item.moscow_start_weekday)} {toInputTime(item.moscow_start_time)} -{" "}
-                          {formatWeekday(item.moscow_end_weekday)} {toInputTime(item.moscow_end_time)}
+                          {formatWeekday(item.moscow_start_weekday)}{" "}
+                          {toInputTime(item.moscow_start_time)} -{" "}
+                          {formatWeekday(item.moscow_end_weekday)}{" "}
+                          {toInputTime(item.moscow_end_time)}
                         </td>
                       </tr>
                     ))}
@@ -795,7 +812,9 @@ export function TeachersPage() {
             {pickerLoading ? <p className="summary">Загрузка списка...</p> : null}
             {pickerError ? <p className="error-text">{pickerError}</p> : null}
             {pickerUnavailable ? (
-              <p className="summary">`GET /admin/teachers` недоступен в текущем backend-контракте.</p>
+              <p className="summary">
+                `GET /admin/teachers` недоступен в текущем backend-контракте.
+              </p>
             ) : null}
 
             {!pickerLoading && !pickerUnavailable ? (
@@ -806,7 +825,9 @@ export function TeachersPage() {
                       key={teacher.teacher_id}
                       type="button"
                       className={
-                        teacher.teacher_id === selectedTeacherId ? "teacher-item active" : "teacher-item"
+                        teacher.teacher_id === selectedTeacherId
+                          ? "teacher-item active"
+                          : "teacher-item"
                       }
                       onClick={() => {
                         setSelectedTeacherId(teacher.teacher_id);

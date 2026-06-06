@@ -91,13 +91,62 @@ export function App() {
         }
       >
         <Route index element={<Navigate to="/admin/platform" replace />} />
-        <Route path="users" element={<LazyAdminSection><UsersPage /></LazyAdminSection>} />
-        <Route path="teachers" element={<LazyAdminSection><TeachersPage /></LazyAdminSection>} />
-        <Route path="calendar" element={<LazyAdminSection><CalendarPage /></LazyAdminSection>} />
-        <Route path="audit" element={<LazyAdminSection><AuditPage /></LazyAdminSection>} />
-        <Route path="students" element={<LazyAdminSection><StudentsPage /></LazyAdminSection>} />
-        <Route path="packages" element={<LazyAdminSection><PackagesPage /></LazyAdminSection>} />
-        <Route path="kpi" element={<LazyAdminSection><KpiPage /></LazyAdminSection>} />
+        <Route
+          path="users"
+          element={
+            <LazyAdminSection>
+              <UsersPage />
+            </LazyAdminSection>
+          }
+        />
+        <Route
+          path="teachers"
+          element={
+            <LazyAdminSection>
+              <TeachersPage />
+            </LazyAdminSection>
+          }
+        />
+        <Route
+          path="calendar"
+          element={
+            <LazyAdminSection>
+              <CalendarPage />
+            </LazyAdminSection>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <LazyAdminSection>
+              <AuditPage />
+            </LazyAdminSection>
+          }
+        />
+        <Route
+          path="students"
+          element={
+            <LazyAdminSection>
+              <StudentsPage />
+            </LazyAdminSection>
+          }
+        />
+        <Route
+          path="packages"
+          element={
+            <LazyAdminSection>
+              <PackagesPage />
+            </LazyAdminSection>
+          }
+        />
+        <Route
+          path="kpi"
+          element={
+            <LazyAdminSection>
+              <KpiPage />
+            </LazyAdminSection>
+          }
+        />
       </Route>
       <Route
         path="*"
@@ -164,8 +213,8 @@ function LoginPage({ tokens, onSignedIn, onSignOut }: LoginPageProps) {
         <p className="eyebrow">GuitarOnline</p>
         <h1>Вход в админку</h1>
         <p className="summary">
-          Авторизуйтесь для доступа к защищенным разделам админки. При отсутствии или
-          невалидности сессии произойдет редирект сюда.
+          Авторизуйтесь для доступа к защищенным разделам админки. При отсутствии или невалидности
+          сессии произойдет редирект сюда.
         </p>
       </section>
 

@@ -28,9 +28,8 @@ class TeachersService:
     async def create_profile(self, payload: TeacherProfileCreate, actor: User) -> TeacherProfile:
         """Create teacher profile."""
         is_admin = actor.role.name == RoleEnum.ADMIN
-        is_teacher_owner = (
-            actor.role.name == RoleEnum.TEACHER
-            and str(actor.id) == str(payload.user_id)
+        is_teacher_owner = actor.role.name == RoleEnum.TEACHER and str(actor.id) == str(
+            payload.user_id
         )
         if not (is_admin or is_teacher_owner):
             raise UnauthorizedException("Only admin or teacher-owner can create profile")
@@ -59,9 +58,8 @@ class TeachersService:
             raise NotFoundException("Teacher profile not found")
 
         is_admin = actor.role.name == RoleEnum.ADMIN
-        is_teacher_owner = (
-            actor.role.name == RoleEnum.TEACHER
-            and str(actor.id) == str(profile.user_id)
+        is_teacher_owner = actor.role.name == RoleEnum.TEACHER and str(actor.id) == str(
+            profile.user_id
         )
         if not (is_admin or is_teacher_owner):
             raise UnauthorizedException("Only admin or teacher-owner can update profile")

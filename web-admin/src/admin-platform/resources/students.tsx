@@ -44,7 +44,10 @@ export function StudentsList() {
         <TextField source="timezone" label="Timezone" />
         <TextField source="role" label="Role" />
         <BooleanField source="is_active" label="Active" />
-        <FunctionField<StudentRaRecord> label="Action" render={() => <StudentActiveToggleButton />} />
+        <FunctionField<StudentRaRecord>
+          label="Action"
+          render={() => <StudentActiveToggleButton />}
+        />
         <DateField source="created_at_utc" label="Created" showTime />
         <DateField source="updated_at_utc" label="Updated" showTime />
       </Datagrid>

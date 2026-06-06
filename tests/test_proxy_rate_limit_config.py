@@ -66,7 +66,7 @@ def test_test_compose_stack_is_isolated_from_live_defaults() -> None:
     env_example = Path(".env.example").read_text(encoding="utf-8")
 
     assert "name: guitaronline-test" in test_compose
-    assert 'APP_ENV: ${TEST_APP_ENV:-test}' in test_compose
+    assert "APP_ENV: ${TEST_APP_ENV:-test}" in test_compose
     assert "${TEST_APP_HOST_PORT:-18000}:8000" in test_compose
     assert "${TEST_POSTGRES_HOST_PORT:-15432}:5432" in test_compose
     assert "${TEST_REDIS_HOST_PORT:-16379}:6379" in test_compose
@@ -133,11 +133,11 @@ def test_perf_and_load_scripts_fail_closed_outside_test_by_default() -> None:
 def test_synthetic_ops_remote_runner_supports_test_contour_smoke_pool() -> None:
     runner_script = Path("scripts/run_synthetic_ops_remote.sh").read_text(encoding="utf-8")
 
-    assert 'SYNTHETIC_OPS_CONTOUR:-live' in runner_script
-    assert 'resolve_alert_on_failure()' in runner_script
-    assert 'SYNTHETIC_OPS_ALERT_ON_FAILURE:-auto' in runner_script
-    assert 'must be auto, true or false' in runner_script
-    assert 'SYNTHETIC_OPS_AUTO_START_TEST_STACK' in runner_script
+    assert "SYNTHETIC_OPS_CONTOUR:-live" in runner_script
+    assert "resolve_alert_on_failure()" in runner_script
+    assert "SYNTHETIC_OPS_ALERT_ON_FAILURE:-auto" in runner_script
+    assert "must be auto, true or false" in runner_script
+    assert "SYNTHETIC_OPS_AUTO_START_TEST_STACK" in runner_script
     assert 'compose_file="${COMPOSE_FILE:-docker-compose.test.yml}"' in runner_script
     assert (
         'admin_email="${SYNTHETIC_OPS_ADMIN_EMAIL:-smoke-admin-1@guitaronline.dev}"'
@@ -151,12 +151,11 @@ def test_synthetic_ops_remote_runner_supports_test_contour_smoke_pool() -> None:
         'student_email="${SYNTHETIC_OPS_STUDENT_EMAIL:-smoke-student-1@guitaronline.dev}"'
         in runner_script
     )
-    assert 'scripts/reset_test_smoke_pool.py' in runner_script
+    assert "scripts/reset_test_smoke_pool.py" in runner_script
     assert 'log "Resetting reusable smoke pool in test contour"' in runner_script
-    assert 'python - < scripts/reset_test_smoke_pool.py' in runner_script
+    assert "python - < scripts/reset_test_smoke_pool.py" in runner_script
     assert (
-        'log "Test contour app container is not reachable; starting app service"'
-        in runner_script
+        'log "Test contour app container is not reachable; starting app service"' in runner_script
     )
     assert 'log "Test contour db container is not reachable; starting db service"' in runner_script
     assert 'log "Synced test contour app database env from running db service"' in runner_script
@@ -170,8 +169,9 @@ def test_synthetic_ops_remote_runner_supports_test_contour_smoke_pool() -> None:
     assert "alembic upgrade head" in runner_script
 
 
-def test_synthetic_ops_check_uses_existing_elevated_accounts_and_registers_student_without_role(
-) -> None:
+def test_synthetic_ops_check_uses_existing_elevated_accounts_and_registers_student_without_role() -> (  # noqa: E501
+    None
+):
     synthetic_script = Path("scripts/synthetic_ops_check.py").read_text(encoding="utf-8")
 
     assert "Expected pre-provisioned {role} account for synthetic ops check" in synthetic_script

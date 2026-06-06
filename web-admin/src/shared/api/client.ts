@@ -1,9 +1,5 @@
 import { API_BASE_URL } from "../../config";
-import {
-  clearAccessSession,
-  loadAccessSession,
-  saveTokenPair
-} from "../../features/auth/storage";
+import { clearAccessSession, loadAccessSession, saveTokenPair } from "../../features/auth/storage";
 import type { TokenPair } from "../../features/auth/types";
 
 type ApiRequestOptions = {

@@ -117,12 +117,10 @@ async function fetchProbe(kind: ProbeKind): Promise<ProbeSnapshot> {
     const response = await fetch(resolvePlatformUrl(path), {
       credentials: "include"
     });
-    const payload = (await response.json().catch(() => null)) as
-      | {
-          status?: string;
-          detail?: string;
-        }
-      | null;
+    const payload = (await response.json().catch(() => null)) as {
+      status?: string;
+      detail?: string;
+    } | null;
 
     if (response.ok) {
       return {
@@ -265,7 +263,9 @@ export function KpiPage() {
           setUnavailable(true);
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить дашборд");
+        setError(
+          requestError instanceof Error ? requestError.message : "Не удалось загрузить дашборд"
+        );
       })
       .finally(() => {
         if (active) {
@@ -284,7 +284,8 @@ export function KpiPage() {
         <p className="eyebrow">Дашборд</p>
         <h1>Эндпоинты недоступны</h1>
         <p className="summary">
-          Для дашборда нужны <code>GET /admin/kpi/overview</code> и <code>GET /admin/kpi/sales</code>.
+          Для дашборда нужны <code>GET /admin/kpi/overview</code> и{" "}
+          <code>GET /admin/kpi/sales</code>.
         </p>
       </article>
     );
@@ -427,7 +428,10 @@ export function KpiPage() {
         {alerts.length > 0 ? (
           <ul className="alerts-list">
             {alerts.map((alert) => (
-              <li key={`${alert.severity}-${alert.title}`} className={`alert-item ${alert.severity}`}>
+              <li
+                key={`${alert.severity}-${alert.title}`}
+                className={`alert-item ${alert.severity}`}
+              >
                 <strong>{alert.title}:</strong> {alert.value}
               </li>
             ))}

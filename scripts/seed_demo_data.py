@@ -128,9 +128,7 @@ async def _ensure_teacher_profile(
     profile = await session.scalar(
         select(TeacherProfile).where(TeacherProfile.user_id == teacher_user.id),
     )
-    bio = (
-        f"{display_name}. Demo teacher profile for scheduling, booking and reporting flows."
-    )
+    bio = f"{display_name}. Demo teacher profile for scheduling, booking and reporting flows."
     if profile is None:
         profile = TeacherProfile(
             user_id=teacher_user.id,

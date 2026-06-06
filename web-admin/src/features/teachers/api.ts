@@ -189,10 +189,13 @@ export async function updateTeacherSchedule(
   teacherId: string,
   payload: TeacherScheduleUpsertPayload
 ): Promise<TeacherSchedule> {
-  const schedule = await apiClient.request<TeacherSchedule>(`/admin/teachers/${teacherId}/schedule`, {
-    method: "PUT",
-    body: payload
-  });
+  const schedule = await apiClient.request<TeacherSchedule>(
+    `/admin/teachers/${teacherId}/schedule`,
+    {
+      method: "PUT",
+      body: payload
+    }
+  );
   teacherScheduleCache.set(teacherId, {
     schedule,
     expiresAt: Date.now() + TEACHER_SCHEDULE_CACHE_TTL_MS

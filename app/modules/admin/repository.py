@@ -143,11 +143,13 @@ class AdminRepository:
         user.role_id = role.id
         user.role = role
 
-        previous_profile, previous_profile_status, teacher_profile_created = (
-            await self._sync_teacher_profile_state(
-                user=user,
-                create_if_missing=True,
-            )
+        (
+            previous_profile,
+            previous_profile_status,
+            teacher_profile_created,
+        ) = await self._sync_teacher_profile_state(
+            user=user,
+            create_if_missing=True,
         )
 
         self.session.add(
@@ -540,18 +542,16 @@ class AdminRepository:
         offset: int,
     ) -> tuple[list[dict[str, object]], int]:
         """List slots with booking relation snapshot for admin views."""
-        base_stmt: Select[tuple[AvailabilitySlot, UUID | None, BookingStatusEnum | None]] = (
-            select(
-                AvailabilitySlot,
-                Booking.id.label("booking_id"),
-                Booking.status.label("booking_status"),
-            ).outerjoin(
-                Booking,
-                and_(
-                    Booking.slot_id == AvailabilitySlot.id,
-                    Booking.status.in_(ACTIVE_BOOKING_STATUSES),
-                ),
-            )
+        base_stmt: Select[tuple[AvailabilitySlot, UUID | None, BookingStatusEnum | None]] = select(
+            AvailabilitySlot,
+            Booking.id.label("booking_id"),
+            Booking.status.label("booking_status"),
+        ).outerjoin(
+            Booking,
+            and_(
+                Booking.slot_id == AvailabilitySlot.id,
+                Booking.status.in_(ACTIVE_BOOKING_STATUSES),
+            ),
         )
 
         if teacher_id is not None:
@@ -597,15 +597,13 @@ class AdminRepository:
         offset: int,
     ) -> tuple[list[dict[str, object]], int]:
         """List bookings with admin filters and slot-time range constraints."""
-        base_stmt: Select[tuple[Booking, datetime, datetime]] = (
-            select(
-                Booking,
-                AvailabilitySlot.start_at.label("slot_start_at_utc"),
-                AvailabilitySlot.end_at.label("slot_end_at_utc"),
-            ).join(
-                AvailabilitySlot,
-                AvailabilitySlot.id == Booking.slot_id,
-            )
+        base_stmt: Select[tuple[Booking, datetime, datetime]] = select(
+            Booking,
+            AvailabilitySlot.start_at.label("slot_start_at_utc"),
+            AvailabilitySlot.end_at.label("slot_end_at_utc"),
+        ).join(
+            AvailabilitySlot,
+            AvailabilitySlot.id == Booking.slot_id,
         )
 
         if teacher_id is not None:
@@ -935,25 +933,31 @@ class AdminRepository:
         )
         non_synthetic_package_owner_filter = self._non_synthetic_email_filters(User.email)
 
-        payments_aggregate_stmt = select(
-            func.count(Payment.id)
-            .filter(Payment.status == PaymentStatusEnum.SUCCEEDED)
-            .label("payments_succeeded_count"),
-            func.count(Payment.id)
-            .filter(Payment.status == PaymentStatusEnum.REFUNDED)
-            .label("payments_refunded_count"),
-            func.coalesce(
-                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.SUCCEEDED),
-                0,
-            ).label("payments_succeeded_amount"),
-            func.coalesce(
-                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
-                0,
-            ).label("payments_refunded_amount"),
-        ).select_from(Payment).join(LessonPackage, LessonPackage.id == Payment.package_id).join(
-            User,
-            User.id == LessonPackage.student_id,
-        ).where(*payments_window_filter, *non_synthetic_package_owner_filter)
+        payments_aggregate_stmt = (
+            select(
+                func.count(Payment.id)
+                .filter(Payment.status == PaymentStatusEnum.SUCCEEDED)
+                .label("payments_succeeded_count"),
+                func.count(Payment.id)
+                .filter(Payment.status == PaymentStatusEnum.REFUNDED)
+                .label("payments_refunded_count"),
+                func.coalesce(
+                    func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.SUCCEEDED),
+                    0,
+                ).label("payments_succeeded_amount"),
+                func.coalesce(
+                    func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
+                    0,
+                ).label("payments_refunded_amount"),
+            )
+            .select_from(Payment)
+            .join(LessonPackage, LessonPackage.id == Payment.package_id)
+            .join(
+                User,
+                User.id == LessonPackage.student_id,
+            )
+            .where(*payments_window_filter, *non_synthetic_package_owner_filter)
+        )
         payments_aggregate = (await self.session.execute(payments_aggregate_stmt)).one()
 
         payments_succeeded_count = int(payments_aggregate.payments_succeeded_count or 0)
@@ -1084,31 +1088,37 @@ class AdminRepository:
         return Decimal(value)
 
     async def _get_payments_overview_snapshot(self) -> dict[str, int | Decimal]:
-        stmt = select(
-            func.count(Payment.id)
-            .filter(Payment.status == PaymentStatusEnum.PENDING)
-            .label("pending"),
-            func.count(Payment.id)
-            .filter(Payment.status == PaymentStatusEnum.SUCCEEDED)
-            .label("succeeded"),
-            func.count(Payment.id)
-            .filter(Payment.status == PaymentStatusEnum.FAILED)
-            .label("failed"),
-            func.count(Payment.id)
-            .filter(Payment.status == PaymentStatusEnum.REFUNDED)
-            .label("refunded"),
-            func.coalesce(
-                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.SUCCEEDED),
-                0,
-            ).label("succeeded_amount"),
-            func.coalesce(
-                func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
-                0,
-            ).label("refunded_amount"),
-        ).select_from(Payment).join(LessonPackage, LessonPackage.id == Payment.package_id).join(
-            User,
-            User.id == LessonPackage.student_id,
-        ).where(*self._non_synthetic_email_filters(User.email))
+        stmt = (
+            select(
+                func.count(Payment.id)
+                .filter(Payment.status == PaymentStatusEnum.PENDING)
+                .label("pending"),
+                func.count(Payment.id)
+                .filter(Payment.status == PaymentStatusEnum.SUCCEEDED)
+                .label("succeeded"),
+                func.count(Payment.id)
+                .filter(Payment.status == PaymentStatusEnum.FAILED)
+                .label("failed"),
+                func.count(Payment.id)
+                .filter(Payment.status == PaymentStatusEnum.REFUNDED)
+                .label("refunded"),
+                func.coalesce(
+                    func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.SUCCEEDED),
+                    0,
+                ).label("succeeded_amount"),
+                func.coalesce(
+                    func.sum(Payment.amount).filter(Payment.status == PaymentStatusEnum.REFUNDED),
+                    0,
+                ).label("refunded_amount"),
+            )
+            .select_from(Payment)
+            .join(LessonPackage, LessonPackage.id == Payment.package_id)
+            .join(
+                User,
+                User.id == LessonPackage.student_id,
+            )
+            .where(*self._non_synthetic_email_filters(User.email))
+        )
         row = (await self.session.execute(stmt)).one()
         return {
             "pending": int(row.pending or 0),
@@ -1159,9 +1169,7 @@ class AdminRepository:
 
     async def _count_failed_outbox(self, *, retryable: bool, max_retries: int) -> int:
         comparison = (
-            OutboxEvent.retries < max_retries
-            if retryable
-            else OutboxEvent.retries >= max_retries
+            OutboxEvent.retries < max_retries if retryable else OutboxEvent.retries >= max_retries
         )
         stmt = select(func.count(OutboxEvent.id)).where(
             OutboxEvent.status == OutboxStatusEnum.FAILED,

@@ -152,8 +152,7 @@ class NotificationsOutboxWorker:
                         None,
                     )
                     logger.warning(
-                        "Notification delivery failed: notification_id=%s channel=%s "
-                        "error=%s",
+                        "Notification delivery failed: notification_id=%s channel=%s error=%s",
                         notification.id,
                         message.channel,
                         error_message,

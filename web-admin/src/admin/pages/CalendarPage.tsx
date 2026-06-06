@@ -132,7 +132,9 @@ export function CalendarPage() {
           return;
         }
         setError(
-          requestError instanceof Error ? requestError.message : "Не удалось загрузить преподавателей"
+          requestError instanceof Error
+            ? requestError.message
+            : "Не удалось загрузить преподавателей"
         );
       });
     return () => {
@@ -172,7 +174,9 @@ export function CalendarPage() {
           setSlotsUnavailable(true);
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить слоты");
+        setError(
+          requestError instanceof Error ? requestError.message : "Не удалось загрузить слоты"
+        );
       })
       .finally(() => {
         setLoading(false);
@@ -364,8 +368,7 @@ export function CalendarPage() {
         <h1>Эндпоинт недоступен</h1>
         <p className="summary">
           Для работы со слотами требуются
-          <code>GET /admin/slots</code>,
-          <code>POST /admin/slots</code>,
+          <code>GET /admin/slots</code>,<code>POST /admin/slots</code>,
           <code>POST /admin/slots/{`{slot_id}`}/block</code> и
           <code>POST /admin/slots/bulk-create</code>.
         </p>

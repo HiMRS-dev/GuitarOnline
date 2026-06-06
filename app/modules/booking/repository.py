@@ -177,10 +177,14 @@ class BookingRepository:
         return items, total
 
     async def find_expired_holds(self, now: datetime) -> list[Booking]:
-        stmt = select(Booking).options(selectinload(Booking.slot)).where(
-            Booking.status == BookingStatusEnum.HOLD,
-            Booking.hold_expires_at.is_not(None),
-            Booking.hold_expires_at <= now,
+        stmt = (
+            select(Booking)
+            .options(selectinload(Booking.slot))
+            .where(
+                Booking.status == BookingStatusEnum.HOLD,
+                Booking.hold_expires_at.is_not(None),
+                Booking.hold_expires_at <= now,
+            )
         )
         return (await self.session.scalars(stmt)).all()
 

@@ -100,9 +100,13 @@ def _snapshot(base_url: str, integrations: list[str]) -> dict[str, dict[str, flo
 
 def _post_synthetic_alerts(base_url: str, duration_minutes: int, run_id: str) -> None:
     starts_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-    ends_at = (datetime.now(UTC) + timedelta(minutes=duration_minutes)).isoformat().replace(
-        "+00:00",
-        "Z",
+    ends_at = (
+        (datetime.now(UTC) + timedelta(minutes=duration_minutes))
+        .isoformat()
+        .replace(
+            "+00:00",
+            "Z",
+        )
     )
     payload = [
         {

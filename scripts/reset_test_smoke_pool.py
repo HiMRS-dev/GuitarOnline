@@ -15,11 +15,7 @@ from sqlalchemy import delete, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-_repo_root = (
-    Path(__file__).resolve().parents[1]
-    if "__file__" in globals()
-    else Path.cwd()
-)
+_repo_root = Path(__file__).resolve().parents[1] if "__file__" in globals() else Path.cwd()
 sys.path.insert(0, str(_repo_root))
 
 from app.core.config import get_settings
@@ -311,9 +307,7 @@ async def _delete_artifacts(
             await session.scalars(
                 delete(Payment)
                 .where(
-                    Payment.package_id.in_(package_ids)
-                    if package_ids
-                    else false(),
+                    Payment.package_id.in_(package_ids) if package_ids else false(),
                 )
                 .returning(Payment.id),
             ),
@@ -415,14 +409,10 @@ async def _run_reset(*, allow_non_test: bool) -> SmokePoolResetStats:
                 await _remove_teacher_profile(session, user_id=users_by_key[config.key].id)
 
             student_user_ids = tuple(
-                users_by_key[config.key].id
-                for config in configs
-                if config.role is RoleEnum.STUDENT
+                users_by_key[config.key].id for config in configs if config.role is RoleEnum.STUDENT
             )
             teacher_user_ids = tuple(
-                users_by_key[config.key].id
-                for config in configs
-                if config.key != "admin"
+                users_by_key[config.key].id for config in configs if config.key != "admin"
             )
 
             stats = await _delete_artifacts(

@@ -375,7 +375,9 @@ async function getSlotsList(params: SlotsListQueryParams) {
 
 async function getBookingsList(params: BookingsListQueryParams) {
   const query = buildBookingsListQuery(params);
-  const response = await apiClient.request<PageResponse<BookingApiRecord>>(`/admin/bookings?${query}`);
+  const response = await apiClient.request<PageResponse<BookingApiRecord>>(
+    `/admin/bookings?${query}`
+  );
   return {
     data: response.items.map(toBookingRecord),
     total: response.total
@@ -384,7 +386,9 @@ async function getBookingsList(params: BookingsListQueryParams) {
 
 async function getPackagesList(params: PackagesListQueryParams) {
   const query = buildPackagesListQuery(params);
-  const response = await apiClient.request<PageResponse<PackageApiRecord>>(`/admin/packages?${query}`);
+  const response = await apiClient.request<PageResponse<PackageApiRecord>>(
+    `/admin/packages?${query}`
+  );
   return {
     data: response.items.map(toPackageRecord),
     total: response.total
@@ -532,9 +536,7 @@ export const adminPlatformDataProvider: DataProvider = {
         `/admin/users?role=student&limit=100&offset=0`
       );
       const idSet = new Set(params.ids.map((id) => String(id)));
-      const rows = response.items
-        .filter((item) => idSet.has(item.user_id))
-        .map(toStudentRecord);
+      const rows = response.items.filter((item) => idSet.has(item.user_id)).map(toStudentRecord);
       return asStudentGetManyResult({ data: rows });
     }
     if (resource === "packages") {
@@ -542,9 +544,7 @@ export const adminPlatformDataProvider: DataProvider = {
         `/admin/packages?limit=100&offset=0`
       );
       const idSet = new Set(params.ids.map((id) => String(id)));
-      const rows = response.items
-        .filter((item) => idSet.has(item.package_id))
-        .map(toPackageRecord);
+      const rows = response.items.filter((item) => idSet.has(item.package_id)).map(toPackageRecord);
       return asPackageGetManyResult({ data: rows });
     }
     throw unsupportedResourceError(resource);
@@ -585,7 +585,9 @@ export const adminPlatformDataProvider: DataProvider = {
       const typedParams = params as PackageUpdateParams;
       const nextStatus = typedParams.data?.status;
       if (nextStatus !== "canceled") {
-        throw new Error('[admin-platform] packages.update currently supports only status="canceled"');
+        throw new Error(
+          '[admin-platform] packages.update currently supports only status="canceled"'
+        );
       }
       const updated = await apiClient.request<PackageApiRecord>(
         `/admin/packages/${typedParams.id}/cancel`,

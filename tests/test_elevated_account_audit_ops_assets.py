@@ -35,11 +35,11 @@ def test_deploy_smoke_check_uses_role_reassignment_flow() -> None:
 def test_deploy_smoke_check_supports_fixed_smoke_pool_in_test_env() -> None:
     script = Path("scripts/deploy_smoke_check.py").read_text(encoding="utf-8")
     assert 'os.getenv("APP_ENV", "").strip().lower() == "test"' in script
-    assert 'TEST_SMOKE_ADMIN_EMAIL' in script
-    assert 'TEST_SMOKE_STUDENT_EMAIL' in script
-    assert 'TEST_SMOKE_STUDENT_TWO_EMAIL' in script
-    assert 'Smoke: fixed test-contour identities' in script
-    assert 'student_login = request_json(' in script
+    assert "TEST_SMOKE_ADMIN_EMAIL" in script
+    assert "TEST_SMOKE_STUDENT_EMAIL" in script
+    assert "TEST_SMOKE_STUDENT_TWO_EMAIL" in script
+    assert "Smoke: fixed test-contour identities" in script
+    assert "student_login = request_json(" in script
 
 
 def test_deploy_smoke_check_limits_live_contour_to_ops_only() -> None:
@@ -53,14 +53,14 @@ def test_deploy_smoke_check_limits_live_contour_to_ops_only() -> None:
 def test_test_contour_deploy_smoke_remote_runner_uses_reset_and_stdin_scripts() -> None:
     script = Path("scripts/run_deploy_smoke_remote.sh").read_text(encoding="utf-8")
     assert "test contour only" in script
-    assert 'docker-compose.test.yml' in script
-    assert 'DEPLOY_SMOKE_AUTO_START_TEST_STACK' in script
-    assert 'Applying test contour database migrations' in script
-    assert 'alembic upgrade head' in script
-    assert 'scripts/reset_test_smoke_pool.py' in script
-    assert 'python - < scripts/reset_test_smoke_pool.py' in script
-    assert 'python - < scripts/deploy_smoke_check.py' in script
-    assert 'starting app service' in script
+    assert "docker-compose.test.yml" in script
+    assert "DEPLOY_SMOKE_AUTO_START_TEST_STACK" in script
+    assert "Applying test contour database migrations" in script
+    assert "alembic upgrade head" in script
+    assert "scripts/reset_test_smoke_pool.py" in script
+    assert "python - < scripts/reset_test_smoke_pool.py" in script
+    assert "python - < scripts/deploy_smoke_check.py" in script
+    assert "starting app service" in script
 
 
 def test_deploy_workflow_supports_manual_test_smoke_operation() -> None:
@@ -83,4 +83,4 @@ def test_deploy_live_smoke_markers_accept_ops_only_or_legacy_role_gate() -> None
     assert "Role-based release gate passed." in deploy_script
     assert "live_ops_marker=" in workflow
     assert "role_gate_marker=" in workflow
-    assert 'live_ops_marker=${live_ops_marker}' in workflow
+    assert "live_ops_marker=${live_ops_marker}" in workflow

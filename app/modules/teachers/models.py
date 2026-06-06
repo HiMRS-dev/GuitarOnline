@@ -51,9 +51,7 @@ class TeacherProfile(BaseModelMixin, Base):
     """Teacher profile linked to user account."""
 
     __tablename__ = "teacher_profiles"
-    __table_args__ = (
-        Index("ix_teacher_profiles_created_at", "created_at"),
-    )
+    __table_args__ = (Index("ix_teacher_profiles_created_at", "created_at"),)
 
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),

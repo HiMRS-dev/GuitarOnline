@@ -230,10 +230,7 @@ class AdminService:
             not self._can_manage_admin_roles(actor)
         ):
             raise UnauthorizedException("Only privileged admin can manage admin roles")
-        if (
-            target_user.role.name == payload.role
-            and payload.role != RoleEnum.TEACHER
-        ):
+        if target_user.role.name == payload.role and payload.role != RoleEnum.TEACHER:
             return self._serialize_admin_user(target_user)
         if (
             target_user.role.name == payload.role

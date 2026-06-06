@@ -10,8 +10,7 @@ import {
 import type { AdminPackage } from "../../features/packages/types";
 
 const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const PACKAGE_STATUSES = ["", "active", "expired", "depleted"];
 const PACKAGE_STATUS_LABELS: Record<string, string> = {
@@ -108,59 +107,58 @@ export function PackagesPage() {
         setUnavailable(true);
         return;
       }
-      setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить пакеты");
+      setError(
+        requestError instanceof Error ? requestError.message : "Не удалось загрузить пакеты"
+      );
     } finally {
       setLoading(false);
     }
   }, [statusFilter]);
 
-  const searchStudents = useCallback(
-    async (query: string): Promise<AdminStudentLookupItem[]> => {
-      const requestId = ++studentLookupRequestIdRef.current;
-      setStudentsLookupLoading(true);
-      setStudentsLookupError(null);
-      setStudentsLookupUnavailable(false);
+  const searchStudents = useCallback(async (query: string): Promise<AdminStudentLookupItem[]> => {
+    const requestId = ++studentLookupRequestIdRef.current;
+    setStudentsLookupLoading(true);
+    setStudentsLookupError(null);
+    setStudentsLookupUnavailable(false);
 
-      try {
-        const params = new URLSearchParams({
-          role: "student",
-          limit: "20",
-          offset: "0",
-          q: query
-        });
-        const page = await apiClient.request<PageResponse<AdminStudentLookupItem>>(
-          `/admin/users?${params.toString()}`
-        );
+    try {
+      const params = new URLSearchParams({
+        role: "student",
+        limit: "20",
+        offset: "0",
+        q: query
+      });
+      const page = await apiClient.request<PageResponse<AdminStudentLookupItem>>(
+        `/admin/users?${params.toString()}`
+      );
 
+      if (requestId === studentLookupRequestIdRef.current) {
+        setStudentSuggestions(page.items);
+      }
+      return page.items;
+    } catch (requestError) {
+      if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
         if (requestId === studentLookupRequestIdRef.current) {
-          setStudentSuggestions(page.items);
-        }
-        return page.items;
-      } catch (requestError) {
-        if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
-          if (requestId === studentLookupRequestIdRef.current) {
-            setStudentsLookupUnavailable(true);
-            setStudentSuggestions([]);
-          }
-          return [];
-        }
-        if (requestId === studentLookupRequestIdRef.current) {
-          setStudentsLookupError(
-            requestError instanceof Error
-              ? requestError.message
-              : "Не удалось загрузить список студентов"
-          );
+          setStudentsLookupUnavailable(true);
           setStudentSuggestions([]);
         }
         return [];
-      } finally {
-        if (requestId === studentLookupRequestIdRef.current) {
-          setStudentsLookupLoading(false);
-        }
       }
-    },
-    []
-  );
+      if (requestId === studentLookupRequestIdRef.current) {
+        setStudentsLookupError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Не удалось загрузить список студентов"
+        );
+        setStudentSuggestions([]);
+      }
+      return [];
+    } finally {
+      if (requestId === studentLookupRequestIdRef.current) {
+        setStudentsLookupLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     void loadPackages();
@@ -322,7 +320,9 @@ export function PackagesPage() {
       setCreateSuccess(`Пакет создан: ${createdPackage.package_id}`);
       await loadPackages();
     } catch (requestError) {
-      setCreateError(requestError instanceof Error ? requestError.message : "Не удалось создать пакет");
+      setCreateError(
+        requestError instanceof Error ? requestError.message : "Не удалось создать пакет"
+      );
     } finally {
       setCreatePending(false);
     }
@@ -348,7 +348,9 @@ export function PackagesPage() {
       setActionSuccess(`Пакет удален: ${canceledPackage.package_id}`);
       setPackages((current) => current.filter((item) => item.package_id !== pkg.package_id));
     } catch (requestError) {
-      setActionError(requestError instanceof Error ? requestError.message : "Не удалось удалить пакет");
+      setActionError(
+        requestError instanceof Error ? requestError.message : "Не удалось удалить пакет"
+      );
     } finally {
       setCancelPendingPackageId(null);
     }
@@ -426,7 +428,9 @@ export function PackagesPage() {
           </p>
         ) : null}
         {studentsLookupUnavailable ? (
-          <p className="summary">Поиск по ФИО недоступен. Можно создать пакет только по `student_id`.</p>
+          <p className="summary">
+            Поиск по ФИО недоступен. Можно создать пакет только по `student_id`.
+          </p>
         ) : null}
         {studentsLookupError ? <p className="error-text">{studentsLookupError}</p> : null}
 
@@ -534,7 +538,9 @@ export function PackagesPage() {
                       <td>{formatPackageStatus(pkg.status)}</td>
                       <td>{pkg.lessons_left}</td>
                       <td>{pkg.lessons_reserved}</td>
-                      <td>{pkg.price_amount ? `${pkg.price_amount} ${pkg.price_currency ?? ""}` : "-"}</td>
+                      <td>
+                        {pkg.price_amount ? `${pkg.price_amount} ${pkg.price_currency ?? ""}` : "-"}
+                      </td>
                       <td>{new Date(pkg.expires_at_utc).toISOString()}</td>
                     </tr>
                   );

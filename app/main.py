@@ -1,4 +1,4 @@
-﻿"""FastAPI application entrypoint."""
+"""FastAPI application entrypoint."""
 
 from __future__ import annotations
 
@@ -52,9 +52,7 @@ _ADMIN_UI_DIST_DIR = next(
     ),
     None,
 )
-_ADMIN_UI_ASSETS_DIR = (
-    _ADMIN_UI_DIST_DIR / "assets" if _ADMIN_UI_DIST_DIR is not None else None
-)
+_ADMIN_UI_ASSETS_DIR = _ADMIN_UI_DIST_DIR / "assets" if _ADMIN_UI_DIST_DIR is not None else None
 _OPENAPI_TAGS = [
     {"name": "identity", "description": "Authentication and current-user identity endpoints."},
     {"name": "teachers", "description": "Teacher profile management endpoints."},
@@ -151,9 +149,7 @@ _OPENAPI_DESCRIPTION_RU: dict[str, str] = {
     "Lesson package and payment endpoints.": "Эндпоинты пакетов уроков и платежей.",
     "Lesson lifecycle endpoints.": "Эндпоинты жизненного цикла уроков.",
     "Notification delivery endpoints.": "Эндпоинты доставки уведомлений.",
-    "Admin-only KPI and operational endpoints.": (
-        "Админ-эндпоинты KPI и операционного контроля."
-    ),
+    "Admin-only KPI and operational endpoints.": ("Админ-эндпоинты KPI и операционного контроля."),
     "Audit log and outbox administration endpoints.": (
         "Эндпоинты журнала аудита и администрирования outbox."
     ),
@@ -172,9 +168,7 @@ _OPENAPI_DESCRIPTION_RU: dict[str, str] = {
     "Cancel booking via admin-only flow with explicit reason.": (
         "Отменяет бронирование через админ-процесс с обязательной причиной."
     ),
-    "Confirm booking from HOLD to CONFIRMED.": (
-        "Подтверждает бронирование из HOLD в CONFIRMED."
-    ),
+    "Confirm booking from HOLD to CONFIRMED.": ("Подтверждает бронирование из HOLD в CONFIRMED."),
     "Create a lesson package (admin only).": "Создает пакет уроков (только admin).",
     "Create admin action log.": "Создает запись журнала админ-действий.",
     "Create audit log entry.": "Создает запись аудита.",
@@ -835,10 +829,6 @@ async def portal_page() -> FileResponse:
     return FileResponse(_FRONTEND_DIR / "index.html")
 
 
-
-
-
-
 @app.get("/portal/login", include_in_schema=False)
 async def portal_login_page() -> RedirectResponse:
     """Redirect to portal with login auth mode."""
@@ -861,6 +851,7 @@ async def portal_register_page() -> RedirectResponse:
 async def public_home_page() -> FileResponse:
     """Serve public website homepage."""
     return FileResponse(_PUBLIC_HOME_PAGE)
+
 
 @app.get("/health")
 async def healthcheck() -> dict[str, str]:

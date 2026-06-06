@@ -102,10 +102,7 @@ def main() -> None:
         raise RuntimeError("LOAD_SANITY_TARGET_SLOTS must be > 0")
 
     workday_minutes = (
-        WORKDAY_END.hour * 60
-        + WORKDAY_END.minute
-        - WORKDAY_START.hour * 60
-        - WORKDAY_START.minute
+        WORKDAY_END.hour * 60 + WORKDAY_END.minute - WORKDAY_START.hour * 60 - WORKDAY_START.minute
     )
     slots_per_day = int(workday_minutes / SLOT_DURATION_MINUTES)
     if slots_per_day <= 0:

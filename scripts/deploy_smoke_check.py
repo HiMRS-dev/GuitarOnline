@@ -119,10 +119,13 @@ def main() -> None:
     configured_admin_email = os.getenv("DEPLOY_SMOKE_ADMIN_EMAIL", "").strip()
     configured_admin_password = os.getenv("DEPLOY_SMOKE_ADMIN_PASSWORD", "")
 
-    admin_email = configured_admin_email or os.getenv(
-        "TEST_SMOKE_ADMIN_EMAIL",
-        DEFAULT_TEST_SMOKE_ADMIN_EMAIL,
-    ).strip()
+    admin_email = (
+        configured_admin_email
+        or os.getenv(
+            "TEST_SMOKE_ADMIN_EMAIL",
+            DEFAULT_TEST_SMOKE_ADMIN_EMAIL,
+        ).strip()
+    )
     admin_password = configured_admin_password or os.getenv(
         "TEST_SMOKE_POOL_PASSWORD",
         shared_credential,

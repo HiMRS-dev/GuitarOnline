@@ -208,9 +208,7 @@ export function UsersPage() {
       if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
         setUsersUnavailable(true);
       } else {
-        setUsersError(
-          toLocalizedError(requestError, "Не удалось загрузить список пользователей")
-        );
+        setUsersError(toLocalizedError(requestError, "Не удалось загрузить список пользователей"));
       }
     } finally {
       setLoading(false);
@@ -503,8 +501,8 @@ export function UsersPage() {
         <p className="eyebrow">Пользователи</p>
         <h1>Управление пользователями</h1>
         <p className="summary">
-          Публичная регистрация всегда создаёт аккаунт `student`. Повышенные роли назначаются
-          только админом для уже существующих аккаунтов через `POST /admin/users/&lt;user_id&gt;/role`.
+          Публичная регистрация всегда создаёт аккаунт `student`. Повышенные роли назначаются только
+          админом для уже существующих аккаунтов через `POST /admin/users/&lt;user_id&gt;/role`.
         </p>
         <p className="summary">
           При переводе пользователя в `teacher` backend автоматически создаёт или возвращает его
@@ -602,12 +600,18 @@ export function UsersPage() {
             ))}
           </div>
 
-          <div className="quick-filter-group" role="group" aria-label="Фильтры статуса пользователей">
+          <div
+            className="quick-filter-group"
+            role="group"
+            aria-label="Фильтры статуса пользователей"
+          >
             {ACTIVE_FILTER_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                className={userActiveFilter === option.value ? "quick-filter active" : "quick-filter"}
+                className={
+                  userActiveFilter === option.value ? "quick-filter active" : "quick-filter"
+                }
                 onClick={() => setUserActiveFilter(option.value)}
               >
                 {option.label}
@@ -672,7 +676,9 @@ export function UsersPage() {
                   return (
                     <tr
                       key={user.user_id}
-                      className={selectedUserId === user.user_id ? "users-table-row-active" : undefined}
+                      className={
+                        selectedUserId === user.user_id ? "users-table-row-active" : undefined
+                      }
                     >
                       <td className="users-table-cell-compact">
                         {renderRevealableValue(user.email, "почту", `email:${user.user_id}`, {
@@ -703,7 +709,11 @@ export function UsersPage() {
                         })}
                       </td>
                       <td className="users-table-cell-compact">
-                        {renderRevealableValue(formatRole(user.role), "роль", `role:${user.user_id}`)}
+                        {renderRevealableValue(
+                          formatRole(user.role),
+                          "роль",
+                          `role:${user.user_id}`
+                        )}
                       </td>
                       <td className="users-table-cell-compact">
                         {renderRevealableValue(
@@ -713,7 +723,11 @@ export function UsersPage() {
                         )}
                       </td>
                       <td className="users-table-cell-compact">
-                        {renderRevealableValue(user.timezone, "таймзону", `timezone:${user.user_id}`)}
+                        {renderRevealableValue(
+                          user.timezone,
+                          "таймзону",
+                          `timezone:${user.user_id}`
+                        )}
                       </td>
                       <td className="users-table-cell-compact">
                         {renderRevealableValue(
@@ -750,7 +764,9 @@ export function UsersPage() {
 
                           <button
                             type="button"
-                            disabled={!roleChanged || roleInProgress || toggleInProgress || !canEditRole}
+                            disabled={
+                              !roleChanged || roleInProgress || toggleInProgress || !canEditRole
+                            }
                             onClick={() => void handleChangeUserRole(user)}
                           >
                             {roleInProgress ? "Сохраняю..." : "Сменить роль"}
@@ -781,7 +797,9 @@ export function UsersPage() {
       <article className="card">
         <h2>Преподаватели (последние обновления)</h2>
         {teachersUnavailable ? (
-          <p className="summary">`GET /admin/teachers` пока недоступен в текущем backend-контракте.</p>
+          <p className="summary">
+            `GET /admin/teachers` пока недоступен в текущем backend-контракте.
+          </p>
         ) : teachersLoading ? (
           <p className="summary">Загружаем последние обновления...</p>
         ) : latestTeachers.length === 0 ? (

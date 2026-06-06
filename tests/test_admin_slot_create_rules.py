@@ -62,8 +62,7 @@ class FakeSchedulingRepository:
         if self.overlapping_slot.teacher_id != teacher_id:
             return None
         overlaps = (
-            self.overlapping_slot.start_at < end_at
-            and self.overlapping_slot.end_at > start_at
+            self.overlapping_slot.start_at < end_at and self.overlapping_slot.end_at > start_at
         )
         return self.overlapping_slot if overlaps else None
 

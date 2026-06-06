@@ -23,9 +23,7 @@ class Booking(BaseModelMixin, Base):
     """Lesson booking model."""
 
     __tablename__ = "bookings"
-    __table_args__ = (
-        Index("ix_bookings_slot_status", "slot_id", "status"),
-    )
+    __table_args__ = (Index("ix_bookings_slot_status", "slot_id", "status"),)
 
     slot_id: Mapped[UUID] = mapped_column(
         ForeignKey("availability_slots.id", ondelete="RESTRICT"),

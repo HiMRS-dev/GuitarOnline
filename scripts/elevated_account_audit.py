@@ -68,9 +68,7 @@ class ElevatedAccountEntry:
             "access_source": self.access_source,
             "access_assigned_at_utc": _iso(self.access_assigned_at),
             "access_assigned_by_admin_id": (
-                str(self.access_assigned_by_admin_id)
-                if self.access_assigned_by_admin_id
-                else None
+                str(self.access_assigned_by_admin_id) if self.access_assigned_by_admin_id else None
             ),
         }
 
@@ -128,10 +126,7 @@ def render_markdown(
         f"- Admins: `{summary['admins_total']}`",
         f"- Active: `{summary['active_accounts']}`",
         f"- Inactive: `{summary['inactive_accounts']}`",
-        (
-            "- Assigned via `admin.user.role.change`: "
-            f"`{summary['assigned_via_admin_role_change']}`"
-        ),
+        (f"- Assigned via `admin.user.role.change`: `{summary['assigned_via_admin_role_change']}`"),
         f"- Legacy/unknown source: `{summary['legacy_or_unknown_source']}`",
         "",
         "## Teacher Status",

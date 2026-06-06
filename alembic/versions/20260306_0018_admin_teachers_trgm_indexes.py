@@ -29,8 +29,7 @@ def upgrade() -> None:
         "ON teacher_profiles USING gin (display_name gin_trgm_ops)",
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_users_email_trgm "
-        "ON users USING gin (email gin_trgm_ops)",
+        "CREATE INDEX IF NOT EXISTS ix_users_email_trgm ON users USING gin (email gin_trgm_ops)",
     )
 
 

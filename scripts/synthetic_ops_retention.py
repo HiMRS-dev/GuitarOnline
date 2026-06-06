@@ -241,12 +241,14 @@ async def run_retention(
     async with SessionLocal() as session:
         try:
             scope = await _load_synthetic_scope(session, email_prefixes=email_prefixes)
-            bookings_candidates, slots_candidates, packages_candidates = (
-                await _count_retention_candidates(
-                    session,
-                    scope=scope,
-                    cutoff_utc=cutoff_utc,
-                )
+            (
+                bookings_candidates,
+                slots_candidates,
+                packages_candidates,
+            ) = await _count_retention_candidates(
+                session,
+                scope=scope,
+                cutoff_utc=cutoff_utc,
             )
 
             bookings_deleted = 0

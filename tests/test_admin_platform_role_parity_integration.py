@@ -156,9 +156,7 @@ async def test_schedule_generation_and_open_slots_parity_by_role(
     _assert_status(admin_slots_response, 200)
     admin_slot_items = admin_slots_response.json().get("items", [])
     generated_admin_open_slot_ids = {
-        str(item.get("slot_id"))
-        for item in admin_slot_items
-        if item.get("slot_status") == "open"
+        str(item.get("slot_id")) for item in admin_slot_items if item.get("slot_status") == "open"
     }
     assert generated_admin_open_slot_ids
 

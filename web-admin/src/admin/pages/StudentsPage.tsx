@@ -13,8 +13,7 @@ const UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
 const ADMIN_STUDENT_FILTER_STORAGE_KEY = "go_admin_students_selected_id";
 const ADMIN_STUDENT_PROFILE_STORAGE_KEY = "go_admin_students_selected_profile";
 const ACTIVE_BOOKING_STATUSES = new Set<AdminBooking["status"]>(["hold", "confirmed"]);
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const PACKAGE_STATUS_LABELS: Record<AdminPackage["status"], string> = {
   active: "активен",
@@ -206,8 +205,8 @@ function summarizePackages(packages: AdminPackage[]): StudentPackageSummary {
 
 export function StudentsPage() {
   const [students, setStudents] = useState<AdminStudentListItem[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(
-    () => loadStoredSelectedStudentId()
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(() =>
+    loadStoredSelectedStudentId()
   );
   const [selectedStudentProfile, setSelectedStudentProfile] = useState<AdminStudentListItem | null>(
     () => loadStoredSelectedStudent()
@@ -261,10 +260,7 @@ export function StudentsPage() {
 
       setStudents(items);
     } catch (requestError) {
-      if (
-        requestError instanceof ApiClientError &&
-        UNAVAILABLE_STATUSES.has(requestError.status)
-      ) {
+      if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
         setStudentsUnavailable(true);
       } else {
         setStudentsError(
@@ -316,10 +312,7 @@ export function StudentsPage() {
 
       setTeachers(items);
     } catch (requestError) {
-      if (
-        requestError instanceof ApiClientError &&
-        UNAVAILABLE_STATUSES.has(requestError.status)
-      ) {
+      if (requestError instanceof ApiClientError && UNAVAILABLE_STATUSES.has(requestError.status)) {
         setTeachersUnavailable(true);
         setTeachers([]);
       } else {
@@ -818,7 +811,9 @@ export function StudentsPage() {
         </p>
 
         {studentsUnavailable ? (
-          <p className="summary">`GET /admin/users?role=student` недоступен в текущем backend-контракте.</p>
+          <p className="summary">
+            `GET /admin/users?role=student` недоступен в текущем backend-контракте.
+          </p>
         ) : null}
         {studentsError ? <p className="error-text">{studentsError}</p> : null}
       </article>
@@ -923,7 +918,9 @@ export function StudentsPage() {
                         <td>{pkg.lessons_left}</td>
                         <td>{pkg.lessons_reserved}</td>
                         <td>
-                          {pkg.price_amount ? `${pkg.price_amount} ${pkg.price_currency ?? ""}` : "-"}
+                          {pkg.price_amount
+                            ? `${pkg.price_amount} ${pkg.price_currency ?? ""}`
+                            : "-"}
                         </td>
                         <td>{formatDateTime(pkg.expires_at_utc)}</td>
                       </tr>
@@ -957,7 +954,8 @@ export function StudentsPage() {
                       <p>{teacher?.email ?? "-"}</p>
                       <p>Уроков с учеником: {item.bookingsTotal}</p>
                       <p>
-                        Последний слот: {item.lastLessonUtc ? formatDateTime(item.lastLessonUtc) : "-"}
+                        Последний слот:{" "}
+                        {item.lastLessonUtc ? formatDateTime(item.lastLessonUtc) : "-"}
                       </p>
                     </article>
                   );
@@ -995,7 +993,11 @@ export function StudentsPage() {
                         {item.startTime} - {item.endTime}
                       </td>
                       <td>{item.count}</td>
-                      <td>{item.nextAtUtc ? formatDateTime(item.nextAtUtc, selectedStudent?.timezone) : "-"}</td>
+                      <td>
+                        {item.nextAtUtc
+                          ? formatDateTime(item.nextAtUtc, selectedStudent?.timezone)
+                          : "-"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1021,8 +1023,15 @@ export function StudentsPage() {
                     return (
                       <tr key={booking.booking_id}>
                         <td>
-                          {formatWeekday(booking.slot_start_at_utc, selectedStudent?.timezone ?? "UTC")}{" "}
-                          {formatTime(booking.slot_start_at_utc, selectedStudent?.timezone ?? "UTC")} -{" "}
+                          {formatWeekday(
+                            booking.slot_start_at_utc,
+                            selectedStudent?.timezone ?? "UTC"
+                          )}{" "}
+                          {formatTime(
+                            booking.slot_start_at_utc,
+                            selectedStudent?.timezone ?? "UTC"
+                          )}{" "}
+                          -{" "}
                           {formatTime(booking.slot_end_at_utc, selectedStudent?.timezone ?? "UTC")}
                         </td>
                         <td>{teacher?.display_name ?? booking.teacher_id}</td>
@@ -1055,7 +1064,9 @@ export function StudentsPage() {
             {studentsLoading ? <p className="summary">Загрузка списка...</p> : null}
             {studentsError ? <p className="error-text">{studentsError}</p> : null}
             {studentsUnavailable ? (
-              <p className="summary">`GET /admin/users?role=student` недоступен в текущем backend-контракте.</p>
+              <p className="summary">
+                `GET /admin/users?role=student` недоступен в текущем backend-контракте.
+              </p>
             ) : null}
 
             {!studentsLoading && !studentsUnavailable ? (
@@ -1066,7 +1077,9 @@ export function StudentsPage() {
                       key={student.user_id}
                       type="button"
                       className={
-                        student.user_id === selectedStudentId ? "teacher-item active" : "teacher-item"
+                        student.user_id === selectedStudentId
+                          ? "teacher-item active"
+                          : "teacher-item"
                       }
                       onClick={() => {
                         setSelectedStudentId(student.user_id);

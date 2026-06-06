@@ -47,10 +47,7 @@ class FakeAdminRepository:
         users: list[FakeUser] | None = None,
         role_names: tuple[RoleEnum, ...] = (RoleEnum.STUDENT, RoleEnum.TEACHER, RoleEnum.ADMIN),
     ) -> None:
-        self.roles = {
-            role_name: FakeRole(id=uuid4(), name=role_name)
-            for role_name in role_names
-        }
+        self.roles = {role_name: FakeRole(id=uuid4(), name=role_name) for role_name in role_names}
         self.users_by_id = {user.id: user for user in (users or [])}
         self.set_role_calls: list[dict[str, object]] = []
         self.set_active_calls: list[dict[str, object]] = []

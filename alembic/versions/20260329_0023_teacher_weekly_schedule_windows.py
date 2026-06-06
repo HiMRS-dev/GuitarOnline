@@ -33,11 +33,15 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "weekday >= 0 AND weekday <= 6",
-            name=op.f("ck_teacher_weekly_schedule_windows_teacher_weekly_schedule_windows_weekday_range"),
+            name=op.f(
+                "ck_teacher_weekly_schedule_windows_teacher_weekly_schedule_windows_weekday_range"
+            ),
         ),
         sa.CheckConstraint(
             "end_local_time > start_local_time",
-            name=op.f("ck_teacher_weekly_schedule_windows_teacher_weekly_schedule_windows_time_range"),
+            name=op.f(
+                "ck_teacher_weekly_schedule_windows_teacher_weekly_schedule_windows_time_range"
+            ),
         ),
         sa.ForeignKeyConstraint(
             ["teacher_id"],

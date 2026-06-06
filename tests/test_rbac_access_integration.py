@@ -41,7 +41,7 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
 
     if _INTEGRATION_STACK_HEALTHY is None:
         probe_timeout_seconds = min(REQUEST_TIMEOUT_SECONDS, 3.0)
-        async with httpx.AsyncClient(timeout=probe_timeout_seconds) as probe:
+        async with httpx.AsyncClient(timeout=probe_timeout_seconds, trust_env=False) as probe:
             try:
                 health_response = await probe.get(HEALTHCHECK_URL)
             except httpx.HTTPError as exc:
@@ -64,7 +64,11 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
         pytest.skip(_INTEGRATION_STACK_ERROR or "Integration stack is unavailable")
         return
 
-    async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(
+        base_url=API_BASE_URL,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        trust_env=False,
+    ) as client:
         yield client
 
 
@@ -774,9 +778,7 @@ async def test_admin_lesson_no_show_endpoint_returns_401_403_and_200_by_role(
     )
     _assert_status(teacher_lessons_response, 200)
     lesson_items = teacher_lessons_response.json()["items"]
-    lesson_id = next(
-        item["id"] for item in lesson_items if item.get("booking_id") == booking_id
-    )
+    lesson_id = next(item["id"] for item in lesson_items if item.get("booking_id") == booking_id)
 
     no_token_response = await api_client.post(f"/admin/lessons/{lesson_id}/no-show")
     _assert_status(no_token_response, 401)
@@ -853,9 +855,7 @@ async def test_lesson_complete_endpoint_returns_401_403_and_200_by_role(
     )
     _assert_status(teacher_lessons_response, 200)
     lesson_items = teacher_lessons_response.json()["items"]
-    lesson_id = next(
-        item["id"] for item in lesson_items if item.get("booking_id") == booking_id
-    )
+    lesson_id = next(item["id"] for item in lesson_items if item.get("booking_id") == booking_id)
 
     no_token_response = await api_client.post(f"/lessons/{lesson_id}/complete")
     _assert_status(no_token_response, 401)
@@ -933,9 +933,7 @@ async def test_teacher_lesson_report_endpoint_returns_401_403_and_200_by_role(
     )
     _assert_status(teacher_lessons_response, 200)
     lesson_items = teacher_lessons_response.json()["items"]
-    lesson_id = next(
-        item["id"] for item in lesson_items if item.get("booking_id") == booking_id
-    )
+    lesson_id = next(item["id"] for item in lesson_items if item.get("booking_id") == booking_id)
 
     payload = {
         "notes": "Progress report",
@@ -1255,9 +1253,7 @@ async def test_teacher_profile_create_forbidden_for_student_and_update_allowed_f
     )
     _assert_status(profiles_response, 200)
     teacher_profile = next(
-        item
-        for item in profiles_response.json()["items"]
-        if item["user_id"] == str(teacher.id)
+        item for item in profiles_response.json()["items"] if item["user_id"] == str(teacher.id)
     )
 
     update_response = await api_client.patch(

@@ -58,6 +58,7 @@ def _future_range(hours_from_now: int, duration_minutes: int = 60) -> tuple[str,
     _SLOT_WINDOWS.append((start_at, end_at))
     return start_at.isoformat(), end_at.isoformat()
 
+
 async def _create_package(
     client: httpx.AsyncClient,
     admin: AuthUser,
@@ -195,9 +196,7 @@ async def _force_hold_expired(booking_id: UUID) -> None:
 
     try:
         result = await connection.execute(
-            "UPDATE bookings "
-            "SET hold_expires_at = NOW() - INTERVAL '2 minutes' "
-            "WHERE id = $1",
+            "UPDATE bookings SET hold_expires_at = NOW() - INTERVAL '2 minutes' WHERE id = $1",
             booking_id,
         )
     finally:
@@ -235,7 +234,7 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
 
     if _INTEGRATION_STACK_HEALTHY is None:
         probe_timeout_seconds = min(REQUEST_TIMEOUT_SECONDS, 3.0)
-        async with httpx.AsyncClient(timeout=probe_timeout_seconds) as probe:
+        async with httpx.AsyncClient(timeout=probe_timeout_seconds, trust_env=False) as probe:
             try:
                 health_response = await probe.get(HEALTHCHECK_URL)
             except httpx.HTTPError as exc:
@@ -258,7 +257,11 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
         pytest.skip(_INTEGRATION_STACK_ERROR or "Integration stack is unavailable")
         return
 
-    async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(
+        base_url=API_BASE_URL,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        trust_env=False,
+    ) as client:
         yield client
 
 

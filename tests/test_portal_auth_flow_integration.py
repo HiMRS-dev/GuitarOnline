@@ -70,7 +70,7 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
 
     if _INTEGRATION_STACK_HEALTHY is None:
         probe_timeout_seconds = min(REQUEST_TIMEOUT_SECONDS, 3.0)
-        async with httpx.AsyncClient(timeout=probe_timeout_seconds) as probe:
+        async with httpx.AsyncClient(timeout=probe_timeout_seconds, trust_env=False) as probe:
             try:
                 health_response = await probe.get(HEALTHCHECK_URL)
             except httpx.HTTPError as exc:
@@ -93,7 +93,11 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
         pytest.skip(_INTEGRATION_STACK_ERROR or "Integration stack is unavailable")
         return
 
-    async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(
+        base_url=API_BASE_URL,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        trust_env=False,
+    ) as client:
         yield client
 
 

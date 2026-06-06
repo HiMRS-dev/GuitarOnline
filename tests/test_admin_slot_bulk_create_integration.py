@@ -85,7 +85,7 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
 
     if _INTEGRATION_STACK_HEALTHY is None:
         probe_timeout_seconds = min(REQUEST_TIMEOUT_SECONDS, 3.0)
-        async with httpx.AsyncClient(timeout=probe_timeout_seconds) as probe:
+        async with httpx.AsyncClient(timeout=probe_timeout_seconds, trust_env=False) as probe:
             try:
                 health_response = await probe.get(HEALTHCHECK_URL)
             except httpx.HTTPError as exc:
@@ -108,7 +108,11 @@ async def api_client() -> AsyncIterator[httpx.AsyncClient]:
         pytest.skip(_INTEGRATION_STACK_ERROR or "Integration stack is unavailable")
         return
 
-    async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=REQUEST_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(
+        base_url=API_BASE_URL,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        trust_env=False,
+    ) as client:
         yield client
 
 
@@ -157,10 +161,7 @@ async def test_admin_bulk_create_keeps_teacher_slots_non_overlapping_in_db(
     payload = bulk_create_response.json()
     assert payload["created_count"] >= 1
     assert payload["skipped_count"] >= 1
-    assert any(
-        "overlaps with an existing slot" in item["reason"]
-        for item in payload["skipped"]
-    )
+    assert any("overlaps with an existing slot" in item["reason"] for item in payload["skipped"])
 
     overlaps = await _count_teacher_overlaps(
         teacher.id,

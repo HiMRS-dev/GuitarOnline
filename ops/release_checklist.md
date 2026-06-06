@@ -5,6 +5,18 @@ Use this checklist before promoting a build to a target environment.
 ## 1) Pre-Deploy
 
 - Confirm target commit/tag and change log.
+- Confirm shared-server isolation before any production operation:
+  - target project: GuitarOnline only.
+  - target IP: `144.31.77.239`.
+  - target server path: `/opt/guitaronline`.
+  - OrpheusOnline path `/opt/orpheusOnline` is out of scope.
+  - OrpheusOnline IP `2.27.44.200` is out of scope.
+  - do not change OrpheusOnline firewall, Nginx, compose, containers, volumes, networks, or database.
+  - do not run broad Docker cleanup commands such as `docker system prune`, `docker volume prune`, or `docker network prune`.
+  - use explicit GuitarOnline compose files, for example:
+    - `docker compose -f docker-compose.prod.yml ps`
+    - `docker compose -f docker-compose.prod.yml -f docker-compose.proxy.yml ps`
+  - if using Nginx/proxy changes, verify they bind or route only GuitarOnline traffic and do not create a default server for OrpheusOnline.
 - Confirm environment variables are prepared (preferred: `PROD_ENV_FILE_B64` GitHub secret for deploy workflow; fallback: manual `.env`).
 - Verify runtime env + CI/CD secrets against `README.md` section `Production Config Matrix`.
 - Confirm auth rate-limiter prod policy in `.env`:
@@ -177,6 +189,9 @@ Use this checklist before promoting a build to a target environment.
 ## 6) Post-Deploy Monitoring
 
 - Confirm app container health in compose output.
+- Confirm OrpheusOnline was not affected:
+  - `curl -I http://2.27.44.200` should still reach the expected OrpheusOnline endpoint or placeholder.
+  - do not restart or alter OrpheusOnline while checking.
 - Confirm Prometheus target for `app` is UP.
 - Confirm Grafana dashboard loads and reflects request traffic.
 - Confirm Alertmanager config is loaded and no route errors are present.

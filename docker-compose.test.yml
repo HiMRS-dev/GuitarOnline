@@ -21,7 +21,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "${TEST_POSTGRES_HOST_PORT:-15432}:5432"
+      - "${TEST_BIND_IP:-127.0.0.1}:${TEST_POSTGRES_HOST_PORT:-15432}:5432"
 
   redis:
     image: redis:7-alpine
@@ -34,7 +34,7 @@ services:
       timeout: 5s
       retries: 5
     ports:
-      - "${TEST_REDIS_HOST_PORT:-16379}:6379"
+      - "${TEST_BIND_IP:-127.0.0.1}:${TEST_REDIS_HOST_PORT:-16379}:6379"
 
   app:
     build:
@@ -72,7 +72,7 @@ services:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
-      - "${TEST_APP_HOST_PORT:-18000}:8000"
+      - "${TEST_BIND_IP:-127.0.0.1}:${TEST_APP_HOST_PORT:-18000}:8000"
     healthcheck:
       test:
         [

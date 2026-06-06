@@ -32,8 +32,8 @@ services:
       - ./ops/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ${PROXY_TLS_CERTS_PATH:-./ops/nginx/certs}:/etc/nginx/certs:ro
     ports:
-      - "${PROXY_PUBLIC_PORT:-8080}:80"
-      - "${PROXY_TLS_PUBLIC_PORT:-8443}:443"
+      - "${GUITAR_PUBLIC_IP:-144.31.77.239}:${PROXY_PUBLIC_PORT:-8080}:80"
+      - "${GUITAR_PUBLIC_IP:-144.31.77.239}:${PROXY_TLS_PUBLIC_PORT:-8443}:443"
     healthcheck:
       test:
         [

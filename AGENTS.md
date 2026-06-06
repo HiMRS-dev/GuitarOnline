@@ -185,6 +185,62 @@ rollback plan
 
 ---
 
+# 7A. Shared Server Isolation Hard Lock
+
+GuitarOnline is planned to run on the same physical server as OrpheusOnline.
+
+This is a high-risk operational boundary.
+
+Known separation:
+
+- GuitarOnline IP: `144.31.77.239`
+- OrpheusOnline IP: `2.27.44.200`
+- GuitarOnline server path: `/opt/guitaronline`
+- OrpheusOnline server path: `/opt/orpheusOnline`
+- GuitarOnline app port: `8000`
+- OrpheusOnline app port: `8001`
+- OrpheusOnline DB host port: `5433`
+- GuitarOnline production compose files: `docker-compose.prod.yml`, `docker-compose.proxy.yml`, `docker-compose.alerting.yml`
+- OrpheusOnline compose file: `/opt/orpheusOnline/docker-compose.yml`
+
+Default rule:
+
+the agent must treat OrpheusOnline infrastructure, data, containers, networks, volumes, Nginx configs, and database as read-only and out of scope.
+
+Without explicit permission in the current task, the agent must not:
+
+- edit files under `/opt/orpheusOnline`
+- run migrations against OrpheusOnline
+- connect to or modify the OrpheusOnline database
+- stop, restart, rebuild, remove, prune, or recreate OrpheusOnline containers
+- remove Docker images, volumes, or networks that may be shared or unknown
+- edit OrpheusOnline Nginx site configs
+- change firewall rules for `2.27.44.200`
+- change ports used by OrpheusOnline
+- run broad commands such as `docker system prune`, `docker volume prune`, `docker network prune`, `docker stop $(docker ps -q)`, or unscoped `docker compose down`
+
+For GuitarOnline server work, the agent must:
+
+- target only `/opt/guitaronline`
+- use explicit compose files such as `docker compose -f docker-compose.prod.yml ...`
+- include `docker-compose.proxy.yml` or `docker-compose.alerting.yml` only when that profile is intentionally in scope
+- bind or route GuitarOnline ingress only for `144.31.77.239` or the approved GuitarOnline domain
+- not make GuitarOnline the default server for OrpheusOnline traffic
+- run `nginx -t` before any Nginx reload
+- verify both projects after infrastructure work when possible
+
+Before any server-side infrastructure command, the agent must state:
+
+- target project
+- target path
+- target IP
+- target compose file or service
+- expected impact on OrpheusOnline
+
+If there is any uncertainty about whether a command can affect OrpheusOnline, stop and ask.
+
+---
+
 # 8. Frontend Rules (web-admin)
 
 Frontend changes must stay small and local.

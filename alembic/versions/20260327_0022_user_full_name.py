@@ -7,8 +7,8 @@ Create Date: 2026-03-27 12:30:00
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 import re
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql

@@ -76,7 +76,11 @@ def _run_pip_audit(*, output_file: Path, ignore_ids: list[str]) -> None:
         command.extend(["--ignore-vuln", vuln_id])
     result = _run(command)
     if result.returncode != 0:
-        if ignore_ids and result.returncode == 1 and _count_reported_pip_audit_vulns(output_file) == 0:
+        if (
+            ignore_ids
+            and result.returncode == 1
+            and _count_reported_pip_audit_vulns(output_file) == 0
+        ):
             return
         raise RuntimeError(f"pip-audit failed with exit code {result.returncode}")
 

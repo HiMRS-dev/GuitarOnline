@@ -5,27 +5,42 @@ Revises:
 Create Date: 2026-02-19 22:10:00
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
 revision: str = "20260219_0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 role_enum = sa.Enum("student", "teacher", "admin", name="role_enum", native_enum=False)
-slot_status_enum = sa.Enum("open", "hold", "booked", "canceled", name="slot_status_enum", native_enum=False)
-booking_status_enum = sa.Enum("hold", "confirmed", "canceled", "expired", name="booking_status_enum", native_enum=False)
-package_status_enum = sa.Enum("active", "expired", "canceled", name="package_status_enum", native_enum=False)
-payment_status_enum = sa.Enum("pending", "succeeded", "failed", "refunded", name="payment_status_enum", native_enum=False)
-lesson_status_enum = sa.Enum("scheduled", "completed", "canceled", name="lesson_status_enum", native_enum=False)
-notification_status_enum = sa.Enum("pending", "sent", "failed", name="notification_status_enum", native_enum=False)
-outbox_status_enum = sa.Enum("pending", "processed", "failed", name="outbox_status_enum", native_enum=False)
+slot_status_enum = sa.Enum(
+    "open", "hold", "booked", "canceled", name="slot_status_enum", native_enum=False
+)
+booking_status_enum = sa.Enum(
+    "hold", "confirmed", "canceled", "expired", name="booking_status_enum", native_enum=False
+)
+package_status_enum = sa.Enum(
+    "active", "expired", "canceled", name="package_status_enum", native_enum=False
+)
+payment_status_enum = sa.Enum(
+    "pending", "succeeded", "failed", "refunded", name="payment_status_enum", native_enum=False
+)
+lesson_status_enum = sa.Enum(
+    "scheduled", "completed", "canceled", name="lesson_status_enum", native_enum=False
+)
+notification_status_enum = sa.Enum(
+    "pending", "sent", "failed", name="notification_status_enum", native_enum=False
+)
+outbox_status_enum = sa.Enum(
+    "pending", "processed", "failed", name="outbox_status_enum", native_enum=False
+)
 
 
 def _id_col() -> sa.Column:
@@ -60,7 +75,9 @@ def upgrade() -> None:
         sa.Column("timezone", sa.String(length=64), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("role_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.ForeignKeyConstraint(["role_id"], ["roles.id"], name="fk_users_role_id_roles", ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(
+            ["role_id"], ["roles.id"], name="fk_users_role_id_roles", ondelete="RESTRICT"
+        ),
         sa.UniqueConstraint("email", name="uq_users_email"),
     )
     op.create_index("ix_users_email", "users", ["email"], unique=False)
@@ -74,7 +91,9 @@ def upgrade() -> None:
         sa.Column("token_id", sa.String(length=64), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], name="fk_refresh_tokens_user_id_users", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["user_id"], ["users.id"], name="fk_refresh_tokens_user_id_users", ondelete="CASCADE"
+        ),
         sa.UniqueConstraint("token_id", name="uq_refresh_tokens_token_id"),
     )
     op.create_index("ix_refresh_tokens_token_id", "refresh_tokens", ["token_id"], unique=False)
@@ -89,7 +108,9 @@ def upgrade() -> None:
         sa.Column("bio", sa.Text(), nullable=False),
         sa.Column("experience_years", sa.Integer(), nullable=False),
         sa.Column("is_approved", sa.Boolean(), nullable=False),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], name="fk_teacher_profiles_user_id_users", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["user_id"], ["users.id"], name="fk_teacher_profiles_user_id_users", ondelete="CASCADE"
+        ),
         sa.UniqueConstraint("user_id", name="uq_teacher_profiles_user_id"),
     )
 
@@ -103,7 +124,12 @@ def upgrade() -> None:
         sa.Column("start_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("status", slot_status_enum, nullable=False),
-        sa.ForeignKeyConstraint(["teacher_id"], ["users.id"], name="fk_availability_slots_teacher_id_users", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["teacher_id"],
+            ["users.id"],
+            name="fk_availability_slots_teacher_id_users",
+            ondelete="CASCADE",
+        ),
         sa.ForeignKeyConstraint(
             ["created_by_admin_id"],
             ["users.id"],
@@ -111,9 +137,18 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
     )
-    op.create_index("ix_availability_slots_teacher_id", "availability_slots", ["teacher_id"], unique=False)
-    op.create_index("ix_availability_slots_created_by_admin_id", "availability_slots", ["created_by_admin_id"], unique=False)
-    op.create_index("ix_availability_slots_start_at", "availability_slots", ["start_at"], unique=False)
+    op.create_index(
+        "ix_availability_slots_teacher_id", "availability_slots", ["teacher_id"], unique=False
+    )
+    op.create_index(
+        "ix_availability_slots_created_by_admin_id",
+        "availability_slots",
+        ["created_by_admin_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_availability_slots_start_at", "availability_slots", ["start_at"], unique=False
+    )
     op.create_index("ix_availability_slots_status", "availability_slots", ["status"], unique=False)
 
     op.create_table(
@@ -126,9 +161,16 @@ def upgrade() -> None:
         sa.Column("lessons_left", sa.Integer(), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("status", package_status_enum, nullable=False),
-        sa.ForeignKeyConstraint(["student_id"], ["users.id"], name="fk_lesson_packages_student_id_users", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["student_id"],
+            ["users.id"],
+            name="fk_lesson_packages_student_id_users",
+            ondelete="CASCADE",
+        ),
     )
-    op.create_index("ix_lesson_packages_student_id", "lesson_packages", ["student_id"], unique=False)
+    op.create_index(
+        "ix_lesson_packages_student_id", "lesson_packages", ["student_id"], unique=False
+    )
 
     op.create_table(
         "bookings",
@@ -146,11 +188,30 @@ def upgrade() -> None:
         sa.Column("cancellation_reason", sa.String(length=512), nullable=True),
         sa.Column("refund_returned", sa.Boolean(), nullable=False),
         sa.Column("rescheduled_from_booking_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.ForeignKeyConstraint(["slot_id"], ["availability_slots.id"], name="fk_bookings_slot_id_availability_slots", ondelete="RESTRICT"),
-        sa.ForeignKeyConstraint(["student_id"], ["users.id"], name="fk_bookings_student_id_users", ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["teacher_id"], ["users.id"], name="fk_bookings_teacher_id_users", ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["package_id"], ["lesson_packages.id"], name="fk_bookings_package_id_lesson_packages", ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["rescheduled_from_booking_id"], ["bookings.id"], name="fk_bookings_rescheduled_from_booking_id_bookings", ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["slot_id"],
+            ["availability_slots.id"],
+            name="fk_bookings_slot_id_availability_slots",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["student_id"], ["users.id"], name="fk_bookings_student_id_users", ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["teacher_id"], ["users.id"], name="fk_bookings_teacher_id_users", ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["package_id"],
+            ["lesson_packages.id"],
+            name="fk_bookings_package_id_lesson_packages",
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["rescheduled_from_booking_id"],
+            ["bookings.id"],
+            name="fk_bookings_rescheduled_from_booking_id_bookings",
+            ondelete="SET NULL",
+        ),
         sa.UniqueConstraint("slot_id", name="uq_bookings_slot_id"),
     )
     op.create_index("ix_bookings_student_id", "bookings", ["student_id"], unique=False)
@@ -170,9 +231,18 @@ def upgrade() -> None:
         sa.Column("status", lesson_status_enum, nullable=False),
         sa.Column("topic", sa.String(length=255), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.ForeignKeyConstraint(["booking_id"], ["bookings.id"], name="fk_lessons_booking_id_bookings", ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["student_id"], ["users.id"], name="fk_lessons_student_id_users", ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["teacher_id"], ["users.id"], name="fk_lessons_teacher_id_users", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["booking_id"],
+            ["bookings.id"],
+            name="fk_lessons_booking_id_bookings",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["student_id"], ["users.id"], name="fk_lessons_student_id_users", ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["teacher_id"], ["users.id"], name="fk_lessons_teacher_id_users", ondelete="CASCADE"
+        ),
         sa.UniqueConstraint("booking_id", name="uq_lessons_booking_id"),
     )
     op.create_index("ix_lessons_booking_id", "lessons", ["booking_id"], unique=False)
@@ -191,7 +261,12 @@ def upgrade() -> None:
         sa.Column("status", payment_status_enum, nullable=False),
         sa.Column("external_reference", sa.String(length=128), nullable=True),
         sa.Column("paid_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["package_id"], ["lesson_packages.id"], name="fk_payments_package_id_lesson_packages", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["package_id"],
+            ["lesson_packages.id"],
+            name="fk_payments_package_id_lesson_packages",
+            ondelete="CASCADE",
+        ),
     )
 
     op.create_table(
@@ -205,7 +280,9 @@ def upgrade() -> None:
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column("status", notification_status_enum, nullable=False),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], name="fk_notifications_user_id_users", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["user_id"], ["users.id"], name="fk_notifications_user_id_users", ondelete="CASCADE"
+        ),
     )
     op.create_index("ix_notifications_user_id", "notifications", ["user_id"], unique=False)
     op.create_index("ix_notifications_status", "notifications", ["status"], unique=False)
@@ -220,7 +297,9 @@ def upgrade() -> None:
         sa.Column("target_type", sa.String(length=128), nullable=False),
         sa.Column("target_id", sa.String(length=128), nullable=True),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.ForeignKeyConstraint(["admin_id"], ["users.id"], name="fk_admin_actions_admin_id_users", ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["admin_id"], ["users.id"], name="fk_admin_actions_admin_id_users", ondelete="CASCADE"
+        ),
     )
     op.create_index("ix_admin_actions_admin_id", "admin_actions", ["admin_id"], unique=False)
 
@@ -234,7 +313,9 @@ def upgrade() -> None:
         sa.Column("entity_type", sa.String(length=128), nullable=False),
         sa.Column("entity_id", sa.String(length=128), nullable=True),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.ForeignKeyConstraint(["actor_id"], ["users.id"], name="fk_audit_logs_actor_id_users", ondelete="SET NULL"),
+        sa.ForeignKeyConstraint(
+            ["actor_id"], ["users.id"], name="fk_audit_logs_actor_id_users", ondelete="SET NULL"
+        ),
     )
     op.create_index("ix_audit_logs_actor_id", "audit_logs", ["actor_id"], unique=False)
     op.create_index("ix_audit_logs_action", "audit_logs", ["action"], unique=False)
@@ -254,8 +335,12 @@ def upgrade() -> None:
         sa.Column("retries", sa.Integer(), nullable=False),
         sa.Column("error_message", sa.Text(), nullable=True),
     )
-    op.create_index("ix_outbox_events_aggregate_type", "outbox_events", ["aggregate_type"], unique=False)
-    op.create_index("ix_outbox_events_aggregate_id", "outbox_events", ["aggregate_id"], unique=False)
+    op.create_index(
+        "ix_outbox_events_aggregate_type", "outbox_events", ["aggregate_type"], unique=False
+    )
+    op.create_index(
+        "ix_outbox_events_aggregate_id", "outbox_events", ["aggregate_id"], unique=False
+    )
     op.create_index("ix_outbox_events_event_type", "outbox_events", ["event_type"], unique=False)
     op.create_index("ix_outbox_events_status", "outbox_events", ["status"], unique=False)
 

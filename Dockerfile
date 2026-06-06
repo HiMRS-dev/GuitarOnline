@@ -1,9 +1,9 @@
-FROM node:20-alpine AS admin-ui-build
+FROM node:22-alpine AS admin-ui-build
 
 WORKDIR /admin-ui
 
-COPY web-admin/package.json ./
-RUN npm install
+COPY web-admin/package.json web-admin/package-lock.json ./
+RUN npm ci
 
 COPY web-admin/ ./
 
@@ -18,13 +18,13 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV POETRY_VERSION=1.8.4
+ENV POETRY_VERSION=2.3.4
 
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml poetry.lock README.md ./
 RUN poetry config virtualenvs.create false \
     && poetry install --no-interaction --no-ansi --only main --no-root
 

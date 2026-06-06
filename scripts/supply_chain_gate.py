@@ -42,6 +42,15 @@ def _run(
     )
 
 
+def _npm_executable() -> str:
+    candidates = ["npm.cmd", "npm"] if sys.platform == "win32" else ["npm"]
+    for candidate in candidates:
+        resolved = shutil.which(candidate)
+        if resolved is not None:
+            return resolved
+    raise RuntimeError("npm is not available in PATH; install Node.js/npm or run with --skip-npm")
+
+
 def _read_pip_audit_ignore_ids(path: Path) -> list[str]:
     if not path.exists():
         raise RuntimeError(f"pip-audit ignore file not found: {path}")
@@ -105,10 +114,7 @@ def _run_npm_audit(
     output_file: Path,
     audit_level: str,
 ) -> None:
-    if shutil.which("npm") is None:
-        raise RuntimeError(
-            "npm is not available in PATH; install Node.js/npm or run with --skip-npm",
-        )
+    npm = _npm_executable()
     if not web_admin_dir.exists():
         raise RuntimeError(f"web-admin directory not found: {web_admin_dir}")
 
@@ -119,7 +125,7 @@ def _run_npm_audit(
         if not lockfile_preexisting:
             lock_result = _run(
                 [
-                    "npm",
+                    npm,
                     "install",
                     "--package-lock-only",
                     "--ignore-scripts",
@@ -135,7 +141,7 @@ def _run_npm_audit(
 
         result = _run(
             [
-                "npm",
+                npm,
                 "audit",
                 "--omit=dev",
                 f"--audit-level={audit_level}",

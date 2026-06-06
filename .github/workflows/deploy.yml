@@ -120,7 +120,7 @@ jobs:
       - name: Install web-admin dependencies
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
         working-directory: web-admin
-        run: npm install
+        run: npm ci
 
       - name: Build web-admin bundle
         if: ${{ steps.auto_deploy_guard.outputs.enabled == 'true' }}
